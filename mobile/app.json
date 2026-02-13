@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Bibliothèque Numérique",
+    "slug": "bibliotheque-num",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#B5651D"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bibliothequenumerique.app"
+    },
+    "android": {
+      "package": "com.bibliothequenumerique.app"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bibliotheque Numerique — Design Directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #B5651D;
+    --primary-dark: #7A3B10;
+    --primary-light: #D4A574;
+    --secondary: #D4A017;
+    --secondary-light: #F0D68A;
+    --accent: #2E4057;
+    --bg: #FBF7F2;
+    --surface: #FFFFFF;
+    --surface-variant: #F5EDE4;
+    --on-bg: #2C1810;
+    --on-surface: #3D2B1F;
+    --success: #4A7C59;
+    --error: #C25450;
+    --bg-dark: #1A1A1A;
+    --surface-dark: #2D2D2D;
+    --surface-variant-dark: #3A3A3A;
+    --on-bg-dark: #F5EDE4;
+    --on-surface-dark: #E8DDD0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #1A1A1A; color: #E8DDD0; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #2D2D2D; border-bottom: 1px solid #3A3A3A; padding: 16px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .nav h1 { font-family: 'Playfair Display', serif; font-size: 18px; color: #D4A574; white-space: nowrap; }
+  .nav-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-tab { padding: 8px 16px; border-radius: 24px; border: 1px solid #3A3A3A; background: transparent; color: #E8DDD0; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 13px; transition: all 0.2s; }
+  .nav-tab:hover { border-color: #D4A574; }
+  .nav-tab.active { background: #B5651D; border-color: #B5651D; color: #FBF7F2; }
+
+  /* Sections */
+  .direction { display: none; padding: 80px 0 40px; min-height: 100vh; }
+  .direction.active { display: block; }
+  .direction-header { text-align: center; padding: 40px 24px 32px; }
+  .direction-header h2 { font-family: 'Playfair Display', serif; font-size: 28px; color: #D4A574; margin-bottom: 8px; }
+  .direction-header p { color: #A89888; font-size: 15px; max-width: 600px; margin: 0 auto; }
+
+  /* Phone mockup */
+  .phone-row { display: flex; justify-content: center; gap: 32px; padding: 0 24px; flex-wrap: wrap; }
+  .phone { width: 375px; min-height: 700px; border-radius: 32px; overflow: hidden; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+  .phone-label { text-align: center; font-size: 13px; color: #A89888; margin-top: 12px; margin-bottom: 24px; }
+
+  /* === DIRECTION A: Immersive Chaleureuse === */
+  .dir-a { background: var(--bg); color: var(--on-bg); }
+  .dir-a .status-bar { height: 44px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--on-surface); font-weight: 600; }
+  .dir-a .hero-resume { padding: 16px; }
+  .dir-a .hero-resume h3 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--on-bg); margin-bottom: 16px; }
+  .dir-a .resume-card { display: flex; gap: 16px; background: var(--surface); border-radius: 12px; padding: 16px; box-shadow: 0 2px 12px rgba(181,101,29,0.08); }
+  .dir-a .resume-cover { width: 80px; height: 120px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; text-align: center; padding: 8px; font-weight: 600; }
+  .dir-a .resume-info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .dir-a .resume-info h4 { font-size: 16px; font-weight: 600; color: var(--on-bg); margin-bottom: 4px; }
+  .dir-a .resume-info .author { font-size: 13px; color: #8B7355; margin-bottom: 12px; }
+  .dir-a .progress-bar { height: 4px; background: var(--surface-variant); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .dir-a .progress-fill { height: 100%; background: var(--primary); border-radius: 2px; }
+  .dir-a .progress-text { font-size: 12px; color: #8B7355; }
+  .dir-a .btn-resume { background: var(--primary); color: white; border: none; padding: 10px 24px; border-radius: 24px; font-size: 14px; font-weight: 600; margin-top: 8px; cursor: pointer; }
+  .dir-a .section-title { font-family: 'Playfair Display', serif; font-size: 18px; padding: 24px 16px 12px; color: var(--on-bg); }
+  .dir-a .book-row { display: flex; gap: 12px; padding: 0 16px; overflow-x: auto; }
+  .dir-a .book-card { min-width: 120px; }
+  .dir-a .book-cover { width: 120px; height: 180px; border-radius: 8px; display: flex; align-items: flex-end; justify-content: center; padding: 8px; color: white; font-size: 11px; font-weight: 600; text-align: center; }
+  .dir-a .book-title-small { font-size: 13px; font-weight: 600; margin-top: 8px; color: var(--on-bg); }
+  .dir-a .book-author-small { font-size: 11px; color: #8B7355; }
+  .dir-a .mini-player { position: absolute; bottom: 56px; left: 0; right: 0; background: var(--accent); padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+  .dir-a .mini-player .mp-cover { width: 40px; height: 40px; background: var(--primary); border-radius: 6px; }
+  .dir-a .mini-player .mp-info { flex: 1; color: white; }
+  .dir-a .mini-player .mp-title { font-size: 13px; font-weight: 600; }
+  .dir-a .mini-player .mp-author { font-size: 11px; opacity: 0.7; }
+  .dir-a .mini-player .mp-controls { display: flex; gap: 12px; color: white; font-size: 18px; }
+  .dir-a .tab-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; background: var(--surface); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid var(--surface-variant); }
+  .dir-a .tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: #8B7355; }
+  .dir-a .tab-item.active { color: var(--primary); }
+  .dir-a .tab-icon { font-size: 20px; }
+
+  /* === DIRECTION B: Epuree Moderne === */
+  .dir-b { background: #FAFAFA; color: #1A1A1A; }
+  .dir-b .status-bar { height: 44px; background: #FAFAFA; }
+  .dir-b .greeting { padding: 24px 20px 8px; }
+  .dir-b .greeting h3 { font-size: 14px; color: #888; font-weight: 400; }
+  .dir-b .greeting h2 { font-family: 'Playfair Display', serif; font-size: 26px; color: #1A1A1A; margin-top: 4px; }
+  .dir-b .resume-minimal { margin: 20px; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .dir-b .resume-minimal .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #B5651D; font-weight: 600; margin-bottom: 16px; }
+  .dir-b .rm-row { display: flex; gap: 16px; align-items: center; }
+  .dir-b .rm-cover { width: 60px; height: 90px; background: linear-gradient(135deg, #2E4057, #1a2a3a); border-radius: 6px; }
+  .dir-b .rm-info h4 { font-size: 16px; font-weight: 600; }
+  .dir-b .rm-info .sub { font-size: 13px; color: #888; margin-top: 2px; }
+  .dir-b .rm-progress { margin-top: 12px; }
+  .dir-b .rm-bar { height: 3px; background: #EEEEEE; border-radius: 2px; overflow: hidden; }
+  .dir-b .rm-fill { height: 100%; background: #B5651D; }
+  .dir-b .rm-pct { font-size: 12px; color: #888; margin-top: 4px; text-align: right; }
+  .dir-b .cat-chips { display: flex; gap: 8px; padding: 16px 20px; overflow-x: auto; }
+  .dir-b .chip { padding: 8px 16px; border-radius: 20px; border: 1px solid #E0E0E0; font-size: 13px; color: #555; background: white; white-space: nowrap; }
+  .dir-b .chip.active { background: #2E4057; color: white; border-color: #2E4057; }
+  .dir-b .grid-section { padding: 8px 20px; }
+  .dir-b .grid-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+  .dir-b .book-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .dir-b .bg-cover { aspect-ratio: 2/3; border-radius: 8px; display: flex; align-items: flex-end; padding: 8px; color: white; font-size: 10px; font-weight: 600; }
+  .dir-b .tab-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; background: white; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #F0F0F0; }
+  .dir-b .tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: #AAA; }
+  .dir-b .tab-item.active { color: #B5651D; }
+
+  /* === DIRECTION C: Immersive Sombre === */
+  .dir-c { background: var(--bg-dark); color: var(--on-bg-dark); }
+  .dir-c .status-bar { height: 44px; background: var(--bg-dark); }
+  .dir-c .hero-banner { height: 220px; background: linear-gradient(180deg, #B5651D33 0%, var(--bg-dark) 100%); position: relative; padding: 20px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .dir-c .hero-banner h2 { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--on-bg-dark); }
+  .dir-c .hero-banner p { font-size: 13px; color: #A89888; margin-top: 4px; }
+  .dir-c .resume-dark { margin: 16px; display: flex; gap: 12px; background: var(--surface-dark); border-radius: 16px; padding: 16px; border: 1px solid var(--surface-variant-dark); }
+  .dir-c .rd-cover { width: 70px; height: 105px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 8px; }
+  .dir-c .rd-info { flex: 1; }
+  .dir-c .rd-info .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; background: var(--primary); color: white; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+  .dir-c .rd-info h4 { font-size: 15px; font-weight: 600; }
+  .dir-c .rd-info .sub { font-size: 12px; color: #A89888; margin-top: 2px; }
+  .dir-c .rd-bar { height: 3px; background: var(--surface-variant-dark); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+  .dir-c .rd-fill { height: 100%; background: var(--secondary); }
+  .dir-c .section-header { display: flex; justify-content: space-between; align-items: center; padding: 24px 16px 12px; }
+  .dir-c .section-header h3 { font-family: 'Playfair Display', serif; font-size: 18px; }
+  .dir-c .section-header a { font-size: 13px; color: var(--primary-light); text-decoration: none; }
+  .dir-c .scroll-row { display: flex; gap: 12px; padding: 0 16px; overflow-x: auto; }
+  .dir-c .scroll-card { min-width: 140px; }
+  .dir-c .sc-cover { width: 140px; height: 200px; border-radius: 10px; position: relative; }
+  .dir-c .sc-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); border-radius: 0 0 10px 10px; }
+  .dir-c .sc-title { font-size: 12px; font-weight: 600; color: white; }
+  .dir-c .mini-player-dark { position: absolute; bottom: 56px; left: 0; right: 0; background: linear-gradient(90deg, var(--primary-dark), var(--accent)); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .dir-c .mpd-cover { width: 36px; height: 36px; border-radius: 6px; background: rgba(255,255,255,0.15); }
+  .dir-c .mpd-info { flex: 1; }
+  .dir-c .mpd-title { font-size: 13px; font-weight: 600; color: white; }
+  .dir-c .mpd-time { font-size: 11px; color: rgba(255,255,255,0.6); }
+  .dir-c .tab-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; background: var(--surface-dark); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid var(--surface-variant-dark); }
+  .dir-c .tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: #666; }
+  .dir-c .tab-item.active { color: var(--secondary); }
+
+  /* === DIRECTION D: Card-Centric === */
+  .dir-d { background: var(--surface-variant); color: var(--on-bg); }
+  .dir-d .status-bar { height: 44px; }
+  .dir-d .top-bar { padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .dir-d .top-bar h2 { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--on-bg); }
+  .dir-d .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--primary-light); }
+  .dir-d .big-card { margin: 12px 16px; background: var(--surface); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(181,101,29,0.1); }
+  .dir-d .bc-image { height: 160px; background: linear-gradient(135deg, var(--primary), var(--accent)); display: flex; align-items: center; justify-content: center; position: relative; }
+  .dir-d .bc-badge { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.5); color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .dir-d .bc-play { width: 56px; height: 56px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; }
+  .dir-d .bc-content { padding: 16px; }
+  .dir-d .bc-content h3 { font-size: 18px; font-weight: 600; }
+  .dir-d .bc-content .sub { font-size: 13px; color: #8B7355; margin-top: 2px; }
+  .dir-d .bc-progress { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+  .dir-d .bc-bar { flex: 1; height: 4px; background: var(--surface-variant); border-radius: 2px; overflow: hidden; }
+  .dir-d .bc-fill { height: 100%; background: var(--primary); }
+  .dir-d .bc-pct { font-size: 12px; color: #8B7355; font-weight: 600; }
+  .dir-d .list-section { padding: 16px; }
+  .dir-d .list-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--on-bg); }
+  .dir-d .list-item { display: flex; gap: 12px; padding: 12px; background: var(--surface); border-radius: 12px; margin-bottom: 8px; align-items: center; }
+  .dir-d .li-num { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-variant); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--primary); }
+  .dir-d .li-cover { width: 48px; height: 72px; border-radius: 6px; }
+  .dir-d .li-info { flex: 1; }
+  .dir-d .li-info h4 { font-size: 14px; font-weight: 600; }
+  .dir-d .li-info .sub { font-size: 12px; color: #8B7355; }
+  .dir-d .tab-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 56px; background: var(--surface); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid var(--surface-variant); }
+  .dir-d .tab-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: #8B7355; }
+  .dir-d .tab-item.active { color: var(--primary); }
+
+  /* Comparison section */
+  .comparison { padding: 40px 24px; max-width: 900px; margin: 0 auto; }
+  .comparison h2 { font-family: 'Playfair Display', serif; font-size: 24px; color: #D4A574; margin-bottom: 24px; text-align: center; }
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .comp-table th { text-align: left; padding: 12px 16px; border-bottom: 2px solid #3A3A3A; color: #D4A574; font-weight: 600; }
+  .comp-table td { padding: 12px 16px; border-bottom: 1px solid #2D2D2D; }
+  .comp-table tr:hover { background: #2D2D2D; }
+  .badge-fit { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-best { background: #4A7C5933; color: #4A7C59; }
+  .badge-good { background: #D4A01733; color: #D4A017; }
+  .badge-ok { background: #3A3A3A; color: #A89888; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <h1>Bibliotheque Numerique — Design Directions</h1>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showDir('a')">A. Chaleureuse</button>
+    <button class="nav-tab" onclick="showDir('b')">B. Epuree</button>
+    <button class="nav-tab" onclick="showDir('c')">C. Sombre</button>
+    <button class="nav-tab" onclick="showDir('d')">D. Card-Centric</button>
+    <button class="nav-tab" onclick="showDir('compare')">Comparaison</button>
+  </div>
+</nav>
+
+<!-- DIRECTION A: Immersive Chaleureuse -->
+<section id="dir-a" class="direction active">
+  <div class="direction-header">
+    <h2>Direction A — Immersive Chaleureuse</h2>
+    <p>Fond creme chaud, "Reprendre" dominant avec grande couverture, palette terre/ocre omnipresente. Sensation : comme ouvrir un beau livre dans un salon confortable.</p>
+  </div>
+  <div class="phone-row">
+    <div>
+      <div class="phone dir-a">
+        <div class="status-bar">9:41</div>
+        <div class="hero-resume">
+          <h3>Reprendre</h3>
+          <div class="resume-card">
+            <div class="resume-cover">Le monde s'effondre</div>
+            <div class="resume-info">
+              <h4>Le monde s'effondre</h4>
+              <div class="author">Chinua Achebe</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:42%"></div></div>
+              <div class="progress-text">Chapitre 3 · 42%</div>
+              <button class="btn-resume">Reprendre</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-title">Nouveautes</div>
+        <div class="book-row">
+          <div class="book-card">
+            <div class="book-cover" style="background:linear-gradient(135deg,#D4A017,#B5651D)">Petit pays</div>
+            <div class="book-title-small">Petit pays</div>
+            <div class="book-author-small">G. Faye</div>
+          </div>
+          <div class="book-card">
+            <div class="book-cover" style="background:linear-gradient(135deg,#2E4057,#4A7C59)">Une si longue lettre</div>
+            <div class="book-title-small">Une si longue lettre</div>
+            <div class="book-author-small">M. Ba</div>
+          </div>
+          <div class="book-card">
+            <div class="book-cover" style="background:linear-gradient(135deg,#7A3B10,#C25450)">L'aventure ambigue</div>
+            <div class="book-title-small">L'aventure ambigue</div>
+            <div class="book-author-small">C.H. Kane</div>
+          </div>
+        </div>
+        <div class="section-title">Populaires</div>
+        <div class="book-row">
+          <div class="book-card">
+            <div class="book-cover" style="background:linear-gradient(135deg,#4A7C59,#2E4057)">Americanah</div>
+            <div class="book-title-small">Americanah</div>
+            <div class="book-author-small">C.N. Adichie</div>
+          </div>
+          <div class="book-card">
+            <div class="book-cover" style="background:linear-gradient(135deg,#B5651D,#D4A017)">Terre ceinte</div>
+            <div class="book-title-small">Terre ceinte</div>
+            <div class="book-author-small">M.M. Sarr</div>
+          </div>
+        </div>
+        <div class="mini-player">
+          <div class="mp-cover"></div>
+          <div class="mp-info">
+            <div class="mp-title">L'Afrique en marche</div>
+            <div class="mp-author">K. Mabanckou · 47:12</div>
+          </div>
+          <div class="mp-controls">⏸ ⏭</div>
+        </div>
+        <div class="tab-bar">
+          <div class="tab-item active"><span class="tab-icon">🏠</span>Accueil</div>
+          <div class="tab-item"><span class="tab-icon">📚</span>Catalogue</div>
+          <div class="tab-item"><span class="tab-icon">🔍</span>Recherche</div>
+          <div class="tab-item"><span class="tab-icon">⬇️</span>Hors-ligne</div>
+          <div class="tab-item"><span class="tab-icon">👤</span>Profil</div>
+        </div>
+      </div>
+      <div class="phone-label">Accueil — Mode clair</div>
+    </div>
+  </div>
+</section>
+
+<!-- DIRECTION B: Epuree Moderne -->
+<section id="dir-b" class="direction">
+  <div class="direction-header">
+    <h2>Direction B — Epuree Moderne</h2>
+    <p>Fond blanc pur, densite reduite, beaucoup de blanc. Approche minimaliste avec salutation personnalisee. Sensation : application premium type Headspace/Calm.</p>
+  </div>
+  <div class="phone-row">
+    <div>
+      <div class="phone dir-b">
+        <div class="status-bar"></div>
+        <div class="greeting">
+          <h3>Bonjour,</h3>
+          <h2>Awa</h2>
+        </div>
+        <div class="resume-minimal">
+          <div class="label">Reprendre</div>
+          <div class="rm-row">
+            <div class="rm-cover"></div>
+            <div class="rm-info">
+              <h4>Le monde s'effondre</h4>
+              <div class="sub">Chinua Achebe · Chapitre 3</div>
+            </div>
+          </div>
+          <div class="rm-progress">
+            <div class="rm-bar"><div class="rm-fill" style="width:42%"></div></div>
+            <div class="rm-pct">42%</div>
+          </div>
+        </div>
+        <div class="cat-chips">
+          <div class="chip active">Tous</div>
+          <div class="chip">Romans</div>
+          <div class="chip">Essais</div>
+          <div class="chip">Audio</div>
+          <div class="chip">Dev. perso</div>
+        </div>
+        <div class="grid-section">
+          <h3>Nouveautes</h3>
+          <div class="book-grid">
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#D4A017,#B5651D)">Petit pays</div></div>
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#2E4057,#4A7C59)">Une si longue lettre</div></div>
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#7A3B10,#C25450)">L'aventure ambigue</div></div>
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#4A7C59,#2E4057)">Americanah</div></div>
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#B5651D,#D4A017)">Terre ceinte</div></div>
+            <div><div class="bg-cover" style="background:linear-gradient(135deg,#2E4057,#7A3B10)">Frere d'ame</div></div>
+          </div>
+        </div>
+        <div class="tab-bar">
+          <div class="tab-item active"><span class="tab-icon">🏠</span>Accueil</div>
+          <div class="tab-item"><span class="tab-icon">📚</span>Catalogue</div>
+          <div class="tab-item"><span class="tab-icon">🔍</span>Recherche</div>
+          <div class="tab-item"><span class="tab-icon">⬇️</span>Hors-ligne</div>
+          <div class="tab-item"><span class="tab-icon">👤</span>Profil</div>
+        </div>
+      </div>
+      <div class="phone-label">Accueil — Epuree</div>
+    </div>
+  </div>
+</section>
+
+<!-- DIRECTION C: Immersive Sombre -->
+<section id="dir-c" class="direction">
+  <div class="direction-header">
+    <h2>Direction C — Immersive Sombre</h2>
+    <p>Mode sombre par defaut, hero gradient, couvertures large. Sensation : cinema/streaming premium type Netflix. Ideal pour sessions nocturnes et audio.</p>
+  </div>
+  <div class="phone-row">
+    <div>
+      <div class="phone dir-c">
+        <div class="status-bar"></div>
+        <div class="hero-banner">
+          <h2>Bonsoir, Franck</h2>
+          <p>Tu en etais a 47:12 de L'Afrique en marche</p>
+        </div>
+        <div class="resume-dark">
+          <div class="rd-cover"></div>
+          <div class="rd-info">
+            <div class="badge">Reprendre</div>
+            <h4>L'Afrique en marche</h4>
+            <div class="sub">K. Mabanckou · 1h23 restant</div>
+            <div class="rd-bar"><div class="rd-fill" style="width:58%"></div></div>
+          </div>
+        </div>
+        <div class="section-header">
+          <h3>Nouveautes</h3>
+          <a href="#">Voir tout →</a>
+        </div>
+        <div class="scroll-row">
+          <div class="scroll-card">
+            <div class="sc-cover" style="background:linear-gradient(135deg,#D4A017,#B5651D)">
+              <div class="sc-overlay"><div class="sc-title">Petit pays — G. Faye</div></div>
+            </div>
+          </div>
+          <div class="scroll-card">
+            <div class="sc-cover" style="background:linear-gradient(135deg,#2E4057,#4A7C59)">
+              <div class="sc-overlay"><div class="sc-title">Une si longue lettre — M. Ba</div></div>
+            </div>
+          </div>
+          <div class="scroll-card">
+            <div class="sc-cover" style="background:linear-gradient(135deg,#7A3B10,#C25450)">
+              <div class="sc-overlay"><div class="sc-title">L'aventure ambigue</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="section-header">
+          <h3>Populaires</h3>
+          <a href="#">Voir tout →</a>
+        </div>
+        <div class="scroll-row">
+          <div class="scroll-card">
+            <div class="sc-cover" style="background:linear-gradient(135deg,#4A7C59,#2E4057)">
+              <div class="sc-overlay"><div class="sc-title">Americanah</div></div>
+            </div>
+          </div>
+          <div class="scroll-card">
+            <div class="sc-cover" style="background:linear-gradient(135deg,#B5651D,#D4A017)">
+              <div class="sc-overlay"><div class="sc-title">Terre ceinte</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="mini-player-dark">
+          <div class="mpd-cover"></div>
+          <div class="mpd-info">
+            <div class="mpd-title">L'Afrique en marche</div>
+            <div class="mpd-time">47:12 / 2:05:30</div>
+          </div>
+          <div class="mp-controls" style="color:white;font-size:18px">⏸ ⏭</div>
+        </div>
+        <div class="tab-bar">
+          <div class="tab-item active"><span class="tab-icon">🏠</span>Accueil</div>
+          <div class="tab-item"><span class="tab-icon">📚</span>Catalogue</div>
+          <div class="tab-item"><span class="tab-icon">🔍</span>Recherche</div>
+          <div class="tab-item"><span class="tab-icon">⬇️</span>Hors-ligne</div>
+          <div class="tab-item"><span class="tab-icon">👤</span>Profil</div>
+        </div>
+      </div>
+      <div class="phone-label">Accueil — Mode sombre</div>
+    </div>
+  </div>
+</section>
+
+<!-- DIRECTION D: Card-Centric -->
+<section id="dir-d" class="direction">
+  <div class="direction-header">
+    <h2>Direction D — Card-Centric</h2>
+    <p>Grande card hero pour "Reprendre" avec image plein bord, liste ordonnee pour le catalogue. Sensation : contenu editorial haut de gamme type Medium/Apple Books.</p>
+  </div>
+  <div class="phone-row">
+    <div>
+      <div class="phone dir-d">
+        <div class="status-bar"></div>
+        <div class="top-bar">
+          <h2>Bibliotheque</h2>
+          <div class="avatar"></div>
+        </div>
+        <div class="big-card">
+          <div class="bc-image">
+            <div class="bc-badge">Reprendre · 42%</div>
+            <div class="bc-play">▶</div>
+          </div>
+          <div class="bc-content">
+            <h3>Le monde s'effondre</h3>
+            <div class="sub">Chinua Achebe · Roman · Chapitre 3</div>
+            <div class="bc-progress">
+              <div class="bc-bar"><div class="bc-fill" style="width:42%"></div></div>
+              <div class="bc-pct">42%</div>
+            </div>
+          </div>
+        </div>
+        <div class="list-section">
+          <h3>Populaires cette semaine</h3>
+          <div class="list-item">
+            <div class="li-num">1</div>
+            <div class="li-cover" style="background:linear-gradient(135deg,#D4A017,#B5651D);border-radius:6px"></div>
+            <div class="li-info">
+              <h4>Petit pays</h4>
+              <div class="sub">Gael Faye · Roman</div>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="li-num">2</div>
+            <div class="li-cover" style="background:linear-gradient(135deg,#2E4057,#4A7C59);border-radius:6px"></div>
+            <div class="li-info">
+              <h4>Une si longue lettre</h4>
+              <div class="sub">Mariama Ba · Roman</div>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="li-num">3</div>
+            <div class="li-cover" style="background:linear-gradient(135deg,#4A7C59,#2E4057);border-radius:6px"></div>
+            <div class="li-info">
+              <h4>Americanah</h4>
+              <div class="sub">C.N. Adichie · Roman</div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-bar">
+          <div class="tab-item active"><span class="tab-icon">🏠</span>Accueil</div>
+          <div class="tab-item"><span class="tab-icon">📚</span>Catalogue</div>
+          <div class="tab-item"><span class="tab-icon">🔍</span>Recherche</div>
+          <div class="tab-item"><span class="tab-icon">⬇️</span>Hors-ligne</div>
+          <div class="tab-item"><span class="tab-icon">👤</span>Profil</div>
+        </div>
+      </div>
+      <div class="phone-label">Accueil — Card-Centric</div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section id="dir-compare" class="direction">
+  <div class="comparison">
+    <h2>Comparaison des directions</h2>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Critere</th>
+          <th>A. Chaleureuse</th>
+          <th>B. Epuree</th>
+          <th>C. Sombre</th>
+          <th>D. Card-Centric</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Awa (simplicite)</td>
+          <td><span class="badge-fit badge-best">Excellent</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-best">Excellent</span></td>
+        </tr>
+        <tr>
+          <td>Franck (premium)</td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-best">Excellent</span></td>
+          <td><span class="badge-fit badge-best">Excellent</span></td>
+        </tr>
+        <tr>
+          <td>Mariame (confort)</td>
+          <td><span class="badge-fit badge-best">Excellent</span></td>
+          <td><span class="badge-fit badge-ok">Moyen</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+        </tr>
+        <tr>
+          <td>"Reprendre" en #1</td>
+          <td><span class="badge-fit badge-best">Dominant</span></td>
+          <td><span class="badge-fit badge-good">Present</span></td>
+          <td><span class="badge-fit badge-best">Dominant</span></td>
+          <td><span class="badge-fit badge-best">Hero</span></td>
+        </tr>
+        <tr>
+          <td>Mini-player audio</td>
+          <td><span class="badge-fit badge-best">Integre</span></td>
+          <td><span class="badge-fit badge-ok">Absent</span></td>
+          <td><span class="badge-fit badge-best">Integre</span></td>
+          <td><span class="badge-fit badge-ok">Absent</span></td>
+        </tr>
+        <tr>
+          <td>Identite culturelle</td>
+          <td><span class="badge-fit badge-best">Forte</span></td>
+          <td><span class="badge-fit badge-ok">Faible</span></td>
+          <td><span class="badge-fit badge-good">Moyenne</span></td>
+          <td><span class="badge-fit badge-good">Moyenne</span></td>
+        </tr>
+        <tr>
+          <td>Performance reseau faible</td>
+          <td><span class="badge-fit badge-best">Optimal</span></td>
+          <td><span class="badge-fit badge-best">Optimal</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+          <td><span class="badge-fit badge-good">Bon</span></td>
+        </tr>
+        <tr>
+          <td>Mode nuit natif</td>
+          <td><span class="badge-fit badge-ok">A switcher</span></td>
+          <td><span class="badge-fit badge-ok">A switcher</span></td>
+          <td><span class="badge-fit badge-best">Par defaut</span></td>
+          <td><span class="badge-fit badge-ok">A switcher</span></td>
+        </tr>
+        <tr>
+          <td><strong>Recommandation</strong></td>
+          <td><span class="badge-fit badge-best">BASE</span></td>
+          <td><span class="badge-fit badge-ok">Elements</span></td>
+          <td><span class="badge-fit badge-best">MODE NUIT</span></td>
+          <td><span class="badge-fit badge-good">Elements</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+function showDir(id) {
+  document.querySelectorAll('.direction').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('dir-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

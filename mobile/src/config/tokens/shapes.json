@@ -1,0 +1,10 @@
+{
+  "borderRadius": {
+    "buttons": "24px",
+    "cards": "12px",
+    "inputs": "8px",
+    "avatars": "50%",
+    "miniPlayer": "0px",
+    "bottomSheet": "16px"
+  }
+}

@@ -1,0 +1,322 @@
+/**
+ * Contents Service
+ * Gestion du catalogue de contenus (ebooks et audiobooks)
+ */
+
+const { supabase, supabaseAdmin } = require('../config/database');
+
+/**
+ * Get all contents with pagination and filters
+ * @param {Object} options - Query options
+ * @param {number} options.page - Page number (default: 1)
+ * @param {number} options.limit - Items per page (default: 20)
+ * @param {string} options.type - Filter by type (ebook/audiobook)
+ * @param {string} options.language - Filter by language
+ * @param {string} options.category - Filter by category slug
+ * @param {string} options.sort - Sort by (newest/popular/title)
+ * @returns {Promise<{contents, total, page, totalPages}>}
+ */
+async function getContents(options = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    type,
+    language,
+    category,
+    sort = 'newest',
+  } = options;
+
+  const offset = (page - 1) * limit;
+
+  // Base query
+  let query = supabase
+    .from('contents')
+    .select(`
+      *,
+      categories:content_categories(
+        category:categories(id, name, slug)
+      ),
+      rights_holder:rights_holders(id, name)
+    `, { count: 'exact' })
+    .is('deleted_at', null)
+    .eq('is_published', true);
+
+  // Filters
+  if (type) {
+    query = query.eq('content_type', type);
+  }
+
+  if (language) {
+    query = query.eq('language', language);
+  }
+
+  // Category filter (needs join)
+  if (category) {
+    // Get category ID first
+    const { data: categoryData } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('slug', category)
+      .single();
+
+    if (categoryData) {
+      // Get content IDs for this category
+      const { data: contentIds } = await supabase
+        .from('content_categories')
+        .select('content_id')
+        .eq('category_id', categoryData.id);
+
+      if (contentIds && contentIds.length > 0) {
+        const ids = contentIds.map(item => item.content_id);
+        query = query.in('id', ids);
+      } else {
+        // No contents in this category
+        return { contents: [], total: 0, page, totalPages: 0 };
+      }
+    }
+  }
+
+  // Sorting
+  switch (sort) {
+    case 'newest':
+      query = query.order('published_at', { ascending: false });
+      break;
+    case 'title':
+      query = query.order('title', { ascending: true });
+      break;
+    case 'popular':
+      // TODO: Implement popularity based on reading_history
+      query = query.order('published_at', { ascending: false });
+      break;
+    default:
+      query = query.order('created_at', { ascending: false });
+  }
+
+  // Pagination
+  query = query.range(offset, offset + limit - 1);
+
+  const { data: contents, error, count } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  // Transform categories array
+  const transformedContents = contents.map(content => ({
+    ...content,
+    categories: content.categories?.map(cc => cc.category).filter(Boolean) || [],
+  }));
+
+  return {
+    contents: transformedContents,
+    total: count || 0,
+    page,
+    totalPages: Math.ceil((count || 0) / limit),
+  };
+}
+
+/**
+ * Get single content by ID
+ * @param {string} contentId - Content UUID
+ * @returns {Promise<Object>} Content with categories and rights holder
+ */
+async function getContentById(contentId) {
+  const { data, error } = await supabase
+    .from('contents')
+    .select(`
+      *,
+      categories:content_categories(
+        category:categories(id, name, slug, description)
+      ),
+      rights_holder:rights_holders(id, name, email, website)
+    `)
+    .eq('id', contentId)
+    .is('deleted_at', null)
+    .eq('is_published', true)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('CONTENT_NOT_FOUND');
+    }
+    throw error;
+  }
+
+  // Transform categories array
+  return {
+    ...data,
+    categories: data.categories?.map(cc => cc.category).filter(Boolean) || [],
+  };
+}
+
+/**
+ * Get all categories
+ * @returns {Promise<Array>} List of categories
+ */
+async function getCategories() {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, slug, description, parent_id, sort_order')
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Get category by slug
+ * @param {string} slug - Category slug
+ * @returns {Promise<Object>} Category with content count
+ */
+async function getCategoryBySlug(slug) {
+  const { data: category, error } = await supabase
+    .from('categories')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('CATEGORY_NOT_FOUND');
+    }
+    throw error;
+  }
+
+  // Get content count for this category
+  const { count } = await supabase
+    .from('content_categories')
+    .select('content_id', { count: 'exact', head: true })
+    .eq('category_id', category.id);
+
+  return {
+    ...category,
+    content_count: count || 0,
+  };
+}
+
+/**
+ * Generate signed URL for content file
+ * @param {string} fileKey - R2/S3 file key
+ * @param {number} expiresIn - Expiration in seconds (default: 900 = 15min)
+ * @returns {Promise<string>} Signed URL
+ */
+async function generateSignedUrl(fileKey, expiresIn = 900) {
+  // TODO: Implement R2/S3 signed URL generation
+  // For now, return placeholder
+  return `https://cdn.bibliotheque-num.com/${fileKey}?expires=${Date.now() + expiresIn * 1000}`;
+}
+
+/**
+ * Create new content (admin only)
+ * @param {Object} contentData - Content data
+ * @returns {Promise<Object>} Created content
+ */
+async function createContent(contentData) {
+  const { categories, ...content } = contentData;
+
+  // Insert content
+  const { data: newContent, error: contentError } = await supabaseAdmin
+    .from('contents')
+    .insert(content)
+    .select()
+    .single();
+
+  if (contentError) {
+    throw contentError;
+  }
+
+  // Insert categories if provided
+  if (categories && categories.length > 0) {
+    const categoryLinks = categories.map(categoryId => ({
+      content_id: newContent.id,
+      category_id: categoryId,
+    }));
+
+    const { error: categoryError } = await supabaseAdmin
+      .from('content_categories')
+      .insert(categoryLinks);
+
+    if (categoryError) {
+      // Rollback content creation
+      await supabaseAdmin.from('contents').delete().eq('id', newContent.id);
+      throw categoryError;
+    }
+  }
+
+  return newContent;
+}
+
+/**
+ * Update content (admin only)
+ * @param {string} contentId - Content UUID
+ * @param {Object} updates - Fields to update
+ * @returns {Promise<Object>} Updated content
+ */
+async function updateContent(contentId, updates) {
+  const { categories, ...contentUpdates } = updates;
+
+  // Update content
+  const { data, error } = await supabaseAdmin
+    .from('contents')
+    .update({ ...contentUpdates, updated_at: new Date().toISOString() })
+    .eq('id', contentId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  // Update categories if provided
+  if (categories !== undefined) {
+    // Delete existing categories
+    await supabaseAdmin
+      .from('content_categories')
+      .delete()
+      .eq('content_id', contentId);
+
+    // Insert new categories
+    if (categories.length > 0) {
+      const categoryLinks = categories.map(categoryId => ({
+        content_id: contentId,
+        category_id: categoryId,
+      }));
+
+      await supabaseAdmin
+        .from('content_categories')
+        .insert(categoryLinks);
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Delete content (soft delete, admin only)
+ * @param {string} contentId - Content UUID
+ * @returns {Promise<void>}
+ */
+async function deleteContent(contentId) {
+  const { error } = await supabaseAdmin
+    .from('contents')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', contentId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+module.exports = {
+  getContents,
+  getContentById,
+  getCategories,
+  getCategoryBySlug,
+  generateSignedUrl,
+  createContent,
+  updateContent,
+  deleteContent,
+};
