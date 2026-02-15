@@ -1,0 +1,19 @@
+TITRE: L'Histoire de Papyri
+AUTEUR: Test Author
+DATE: 2026
+
+Chapitre 1: Introduction
+
+Ceci est un fichier de test pour la bibliothèque numérique Papyri.
+Ce contenu permet de tester le système d'upload et de génération
+de signed URLs avec Cloudflare R2.
+
+Chapitre 2: Le Test
+
+Le test consiste à:
+1. Uploader ce fichier vers R2
+2. Créer un enregistrement dans Supabase
+3. Générer une URL signée temporaire
+4. Télécharger le fichier via cette URL
+
+Fin du test.

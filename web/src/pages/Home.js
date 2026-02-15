@@ -1,9 +1,26 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Typography, Container, Button } from '@mui/material';
 import * as authService from '../services/auth.service';
 
 const Home = () => {
-  const user = authService.getUser();
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadUser = async () => {
+      const nextUser = await authService.getUser();
+      if (active) {
+        setUser(nextUser);
+      }
+    };
+
+    loadUser();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogout = () => {
     authService.logout();

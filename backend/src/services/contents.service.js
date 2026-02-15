@@ -4,6 +4,7 @@
  */
 
 const { supabase, supabaseAdmin } = require('../config/database');
+const r2Service = require('./r2.service');
 
 /**
  * Get all contents with pagination and filters
@@ -149,6 +150,57 @@ async function getContentById(contentId) {
   };
 }
 
+async function getContentByIdForUnlock(contentId) {
+  const { data, error } = await supabaseAdmin
+    .from('contents')
+    .select(`
+      *,
+      categories:content_categories(
+        category:categories(id, name, slug, description)
+      ),
+      rights_holder:rights_holders(id, name, email, website)
+    `)
+    .eq('id', contentId)
+    .is('deleted_at', null)
+    .eq('is_published', true)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('CONTENT_NOT_FOUND');
+    }
+    throw error;
+  }
+
+  return {
+    ...data,
+    categories: data.categories?.map((cc) => cc.category).filter(Boolean) || [],
+  };
+}
+
+async function getUserContentUnlock(userId, contentId) {
+  const { data, error } = await supabaseAdmin
+    .from('content_unlocks')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('content_id', contentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+async function createContentUnlock(unlockData) {
+  const { data, error } = await supabaseAdmin
+    .from('content_unlocks')
+    .insert(unlockData)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 /**
  * Get all categories
  * @returns {Promise<Array>} List of categories
@@ -201,12 +253,18 @@ async function getCategoryBySlug(slug) {
  * Generate signed URL for content file
  * @param {string} fileKey - R2/S3 file key
  * @param {number} expiresIn - Expiration in seconds (default: 900 = 15min)
+ * @param {string} contentType - Content type (ebook/audiobook)
  * @returns {Promise<string>} Signed URL
  */
-async function generateSignedUrl(fileKey, expiresIn = 900) {
-  // TODO: Implement R2/S3 signed URL generation
-  // For now, return placeholder
-  return `https://cdn.bibliotheque-num.com/${fileKey}?expires=${Date.now() + expiresIn * 1000}`;
+async function generateSignedUrl(fileKey, expiresIn = 900, contentType = 'ebook') {
+  // Use appropriate TTL based on content type
+  // Ebook (EPUB/PDF): 15 minutes (900s)
+  // Audio (MP3/M4A): 60 minutes (3600s)
+  const ttl = contentType === 'audiobook' ? 3600 : 900;
+  const actualExpiry = expiresIn || ttl;
+
+  // Generate presigned URL via R2 service
+  return await r2Service.generatePresignedUrl(fileKey, actualExpiry);
 }
 
 /**
@@ -313,9 +371,12 @@ async function deleteContent(contentId) {
 module.exports = {
   getContents,
   getContentById,
+  getContentByIdForUnlock,
   getCategories,
   getCategoryBySlug,
   generateSignedUrl,
+  getUserContentUnlock,
+  createContentUnlock,
   createContent,
   updateContent,
   deleteContent,

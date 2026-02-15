@@ -5,17 +5,18 @@ module.exports = {
   supabase: {
     url: process.env.SUPABASE_URL,
     anonKey: process.env.SUPABASE_ANON_KEY,
-    serviceKey: process.env.SUPABASE_SERVICE_KEY
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
   },
 
   // Cloudflare R2 (S3-compatible)
   r2: {
+    accountId: process.env.R2_ACCOUNT_ID,
     endpoint: process.env.R2_ENDPOINT,
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
     bucketContent: process.env.R2_BUCKET_CONTENT || 'biblio-content-private',
     bucketCovers: process.env.R2_BUCKET_COVERS || 'biblio-covers-public',
-    cdnDomain: process.env.CLOUDFLARE_CDN_DOMAIN
+    cdnDomain: process.env.R2_PUBLIC_URL || process.env.CLOUDFLARE_CDN_DOMAIN
   },
 
   // Stripe
@@ -26,6 +27,7 @@ module.exports = {
 
   // Flutterwave
   flutterwave: {
+    publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
     secretKey: process.env.FLUTTERWAVE_SECRET_KEY,
     webhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH
   },

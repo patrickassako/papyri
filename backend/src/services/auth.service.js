@@ -5,6 +5,12 @@
 
 const { supabase, supabaseAdmin } = require('../config/database');
 
+function makeError(code, message = code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 /**
  * Register a new user with Supabase Auth
  * @param {string} email
@@ -16,11 +22,11 @@ const { supabase, supabaseAdmin } = require('../config/database');
 async function register(email, password, full_name, language = 'fr') {
   // Validation
   if (!email || !password || !full_name) {
-    throw new Error('MISSING_FIELDS');
+    throw makeError('MISSING_FIELDS');
   }
 
   if (password.length < 8) {
-    throw new Error('PASSWORD_TOO_SHORT');
+    throw makeError('PASSWORD_TOO_SHORT');
   }
 
   // Sign up with Supabase Auth
@@ -32,7 +38,7 @@ async function register(email, password, full_name, language = 'fr') {
   if (error) {
     // Map Supabase errors to our error codes
     if (error.message.includes('already registered')) {
-      throw new Error('EMAIL_ALREADY_EXISTS');
+      throw makeError('EMAIL_ALREADY_EXISTS');
     }
     throw error;
   }
@@ -68,7 +74,7 @@ async function register(email, password, full_name, language = 'fr') {
  */
 async function login(email, password) {
   if (!email || !password) {
-    throw new Error('MISSING_FIELDS');
+    throw makeError('MISSING_FIELDS');
   }
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -77,7 +83,7 @@ async function login(email, password) {
   });
 
   if (error) {
-    throw new Error('INVALID_CREDENTIALS');
+    throw makeError('INVALID_CREDENTIALS');
   }
 
   // Get profile data
@@ -130,7 +136,7 @@ async function refreshToken(refreshToken) {
   });
 
   if (error) {
-    throw new Error('TOKEN_EXPIRED');
+    throw makeError('TOKEN_EXPIRED');
   }
 
   return {
@@ -147,7 +153,7 @@ async function getUserFromToken(accessToken) {
   const { data, error } = await supabase.auth.getUser(accessToken);
 
   if (error) {
-    throw new Error('INVALID_TOKEN');
+    throw makeError('INVALID_TOKEN');
   }
 
   // Get profile
@@ -196,7 +202,7 @@ async function forgotPassword(email) {
  */
 async function resetPassword(accessToken, newPassword) {
   if (newPassword.length < 8) {
-    throw new Error('PASSWORD_TOO_SHORT');
+    throw makeError('PASSWORD_TOO_SHORT');
   }
 
   // Set session with reset token
@@ -211,9 +217,9 @@ async function resetPassword(accessToken, newPassword) {
 
   if (error) {
     if (error.message.includes('expired')) {
-      throw new Error('TOKEN_EXPIRED');
+      throw makeError('TOKEN_EXPIRED');
     }
-    throw new Error('INVALID_TOKEN');
+    throw makeError('INVALID_TOKEN');
   }
 
   return { success: true };
@@ -232,6 +238,7 @@ module.exports = {
   register,
   login,
   logout,
+  refresh: refreshToken,
   refreshToken,
   getUserFromToken,
   forgotPassword,

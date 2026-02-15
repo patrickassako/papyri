@@ -1,9 +1,70 @@
 /**
  * Authentication Service (Web)
- * Migrated to Supabase Auth - Secure client-side authentication
+ * Uses backend auth endpoints + Supabase client session
  */
 
 import { supabase } from '../config/supabase';
+import {
+  clearTokens,
+  getAccessToken as getStoredAccessToken,
+  getRefreshToken as getStoredRefreshToken,
+  setTokens,
+} from '../config/storage';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+function toErrorMessage(code, fallback = 'Une erreur est survenue.') {
+  if (code === 'EMAIL_ALREADY_EXISTS') return 'Un compte existe déjà avec cette adresse email.';
+  if (code === 'INVALID_CREDENTIALS') return 'Email ou mot de passe incorrect.';
+  if (code === 'PASSWORD_TOO_SHORT') return 'Le mot de passe doit contenir au moins 8 caractères.';
+  if (code === 'MISSING_FIELDS') return 'Veuillez remplir tous les champs obligatoires.';
+  return fallback;
+}
+
+async function parseAuthResponse(response) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.success) {
+    const code = payload?.error?.code;
+    throw new Error(toErrorMessage(code, payload?.error?.message || 'Erreur de connexion.'));
+  }
+  return payload.data;
+}
+
+async function syncClientSession(session) {
+  if (!session?.access_token || !session?.refresh_token) {
+    return;
+  }
+  setTokens(session.access_token, session.refresh_token);
+  await supabase.auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+}
+
+async function restoreSupabaseSessionFromStoredTokens() {
+  const accessToken = getStoredAccessToken();
+  const refreshToken = getStoredRefreshToken();
+  if (!accessToken || !refreshToken) {
+    return null;
+  }
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  if (error || !data?.session) {
+    clearTokens();
+    return null;
+  }
+
+  // Keep local storage aligned in case tokens are rotated by Supabase.
+  if (data.session.access_token && data.session.refresh_token) {
+    setTokens(data.session.access_token, data.session.refresh_token);
+  }
+
+  return data.session;
+}
 
 /**
  * Register a new user
@@ -23,43 +84,22 @@ export async function register(email, password, full_name, language = 'fr') {
     throw new Error('PASSWORD_TOO_SHORT');
   }
 
-  // Sign up with Supabase Auth
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-
-  if (error) {
-    if (error.message.includes('already registered')) {
-      throw new Error('EMAIL_ALREADY_EXISTS');
-    }
-    throw error;
-  }
-
-  // Update profile with real values using RPC function
-  if (data.user) {
-    const { error: profileError } = await supabase.rpc('update_user_profile', {
-      user_id: data.user.id,
-      new_full_name: full_name,
-      new_language: language,
-    });
-
-    if (profileError) {
-      console.error('Profile update error:', profileError);
-      // Don't throw - user is created, profile update can be retried
-    }
-  }
-
-  return {
-    user: {
-      id: data.user.id,
-      email: data.user.email,
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
       full_name,
       language,
-      role: 'user',
-    },
-    session: data.session,
-  };
+    }),
+  });
+  const data = await parseAuthResponse(response);
+  await syncClientSession(data.session);
+
+  return data;
 }
 
 /**
@@ -73,46 +113,47 @@ export async function login(email, password) {
     throw new Error('MISSING_FIELDS');
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    throw new Error('INVALID_CREDENTIALS');
-  }
-
-  // Get profile data
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', data.user.id)
-    .single();
-
-  return {
-    user: {
-      id: data.user.id,
-      email: data.user.email,
-      full_name: profile?.full_name,
-      language: profile?.language,
-      avatar_url: profile?.avatar_url,
-      onboarding_completed: profile?.onboarding_completed,
-      role: data.user.user_metadata?.role || 'user',
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
-    session: data.session,
-  };
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+  const data = await parseAuthResponse(response);
+  await syncClientSession(data.session);
+
+  return data;
 }
 
 /**
  * Logout current user
  */
 export async function logout() {
+  const accessToken = await getAccessToken();
+  if (accessToken) {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+    } catch (error) {
+      console.error('Backend logout error:', error);
+    }
+  }
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {
     console.error('Logout error:', error);
     // Don't throw - logout should always succeed client-side
   }
+  clearTokens();
 
   // Redirect to login
   window.location.href = '/login';
@@ -125,10 +166,16 @@ export async function logout() {
  * @returns {Promise<{session, user}|null>}
  */
 export async function getSession() {
-  const { data, error } = await supabase.auth.getSession();
-
+  let { data, error } = await supabase.auth.getSession();
   if (error || !data.session) {
-    return null;
+    const restoredSession = await restoreSupabaseSessionFromStoredTokens();
+    if (!restoredSession) {
+      return null;
+    }
+    ({ data, error } = await supabase.auth.getSession());
+    if (error || !data.session) {
+      return null;
+    }
   }
 
   // Get profile data
@@ -166,6 +213,10 @@ export async function getUser() {
  * @returns {Promise<boolean>}
  */
 export async function isAuthenticated() {
+  const token = getStoredAccessToken();
+  if (token) {
+    return true;
+  }
   const sessionData = await getSession();
   return !!sessionData?.session;
 }
@@ -175,6 +226,11 @@ export async function isAuthenticated() {
  * @returns {Promise<string|null>}
  */
 export async function getAccessToken() {
+  const storedToken = getStoredAccessToken();
+  if (storedToken) {
+    return storedToken;
+  }
+
   const sessionData = await getSession();
   return sessionData?.session?.access_token || null;
 }

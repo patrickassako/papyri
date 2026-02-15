@@ -11,9 +11,11 @@ import {
   Link
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import * as authService from '../services/auth.service';
 
 const Register = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -121,8 +123,8 @@ const Register = () => {
     try {
       await authService.register(formData.email, formData.password, formData.full_name);
 
-      // Success - redirect to home (will be changed to subscription page in Epic 2)
-      window.location.href = '/';
+      // Success - redirect to pricing selection
+      navigate('/pricing');
     } catch (error) {
       console.error('Registration error:', error);
       setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');

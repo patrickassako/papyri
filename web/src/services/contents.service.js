@@ -1,5 +1,8 @@
 // Service API pour les contenus et catégories
 import { apiClient } from './api.client';
+import { authFetch } from './auth.service';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Service de gestion des contenus (catalogue)
@@ -36,7 +39,82 @@ export const contentsService = {
    */
   async getContentById(id) {
     const response = await apiClient.get(`/api/contents/${id}`);
-    return response.data;
+    return response.data.data || response.data;
+  },
+
+  /**
+   * Récupère les informations d'accès du contenu pour l'utilisateur connecté
+   * @param {string} id - ID du contenu
+   * @returns {Promise<Object>}
+   */
+  async getContentAccess(id) {
+    const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/access`);
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || data?.message || 'Impossible de récupérer l\'accès au contenu.');
+    }
+    return data.data;
+  },
+
+  /**
+   * Tente de débloquer un contenu (quota/bonus/paiement)
+   * @param {string} id - ID du contenu
+   * @returns {Promise<Object>}
+   */
+  async unlockContent(id) {
+    const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const data = await response.json();
+
+    if (response.status === 402) {
+      return {
+        success: false,
+        paymentRequired: true,
+        data: data?.data || {},
+        message: data?.error?.message || data?.message || 'Paiement requis.',
+      };
+    }
+
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || data?.message || 'Impossible de débloquer le contenu.');
+    }
+
+    return {
+      success: true,
+      paymentRequired: false,
+      data: data.data,
+    };
+  },
+
+  /**
+   * Vérifie un paiement Flutterwave pour déblocage de contenu
+   * @param {string} id - ID du contenu
+   * @param {{transactionId: string, reference: string}} params
+   * @returns {Promise<Object>}
+   */
+  async verifyUnlockPayment(id, { transactionId, reference }) {
+    const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock/verify-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        transactionId,
+        reference,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || data?.message || 'Impossible de vérifier le paiement.');
+    }
+    return data.data || {};
   },
 
   /**
@@ -45,8 +123,12 @@ export const contentsService = {
    * @returns {Promise<{url: string, expiresAt: string}>}
    */
   async getContentFileUrl(id) {
-    const response = await apiClient.get(`/api/contents/${id}/file-url`);
-    return response.data;
+    const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/file-url`);
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || data?.message || 'Impossible de récupérer le fichier sécurisé.');
+    }
+    return data.data;
   },
 
   /**
@@ -65,7 +147,7 @@ export const contentsService = {
    */
   async getCategoryBySlug(slug) {
     const response = await apiClient.get(`/api/categories/${slug}`);
-    return response.data;
+    return response.data.data || response.data;
   },
 
   /**

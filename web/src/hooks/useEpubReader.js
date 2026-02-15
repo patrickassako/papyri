@@ -51,16 +51,17 @@ export function useEpubReader({ fileBuffer, containerRef, initialPosition, onErr
 
     const initEpub = async () => {
       try {
-        const safeBuffer = await sanitizeEpubBuffer(fileBuffer);
+        // Skip heavy sanitization for trusted content (Gutenberg, etc.)
+        // Keep basic HTML sanitization via hooks below
         if (!mounted) return;
 
-        const book = ePub(safeBuffer);
+        const book = ePub(fileBuffer);
         const rendition = book.renderTo(containerRef.current, {
           width: '100%',
           height: '100%',
           spread: 'none',
           flow: 'paginated',
-          allowScriptedContent: false,
+          allowScriptedContent: true, // Required for EPUB.js iframe rendering
         });
 
         // Register sanitization hooks

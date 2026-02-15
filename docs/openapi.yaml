@@ -1,0 +1,693 @@
+openapi: 3.0.3
+info:
+  title: Bibliotheque Num API
+  version: 2026-02-14
+  description: API backend complète (état actuel du code)
+servers:
+  - url: http://localhost:3001
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Contents
+  - name: Categories
+  - name: Search
+  - name: Subscriptions
+  - name: Webhooks
+  - name: Home
+  - name: Reading History
+paths:
+  /health:
+    get:
+      tags: [Health]
+      security: []
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                full_name: { type: string }
+                language: { type: string, default: fr }
+      responses:
+        '201': { description: Created }
+        '409': { description: Email already exists }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid credentials }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Refresh session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: OK }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      responses:
+        '204': { description: No Content }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: OK }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Reset password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200': { description: OK }
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        '200': { description: OK }
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                language: { type: string, enum: [fr, en, es, pt] }
+                avatar_url: { type: string }
+      responses:
+        '200': { description: OK }
+  /users/me/password:
+    put:
+      tags: [Users]
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200': { description: OK }
+  /users/me/onboarding-complete:
+    post:
+      tags: [Users]
+      summary: Complete onboarding
+      responses:
+        '200': { description: OK }
+  /api/contents:
+    get:
+      tags: [Contents]
+      security: []
+      summary: List contents
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: type
+          schema: { type: string, enum: [ebook, audiobook] }
+        - in: query
+          name: language
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Contents]
+      summary: Create content (admin)
+      responses:
+        '201': { description: Created }
+  /api/contents/{id}:
+    get:
+      tags: [Contents]
+      security: []
+      summary: Get content details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+    put:
+      tags: [Contents]
+      summary: Update content (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Contents]
+      summary: Delete content (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+  /api/contents/{id}/file-url:
+    get:
+      tags: [Contents]
+      summary: Get signed file URL (content access required)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '401': { description: Authentication required }
+        '402': { description: Payment required (locked paid content) }
+        '403': { description: Active subscription required for subscription-only content }
+        '404': { description: Content not found }
+  /api/contents/{id}/access:
+    get:
+      tags: [Contents]
+      summary: Get access state for current user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      content_id: { type: string, format: uuid }
+                      access_type: { type: string, enum: [subscription, paid, subscription_or_paid] }
+                      is_purchasable: { type: boolean }
+                      has_active_subscription: { type: boolean }
+                      unlocked: { type: boolean }
+                      can_read: { type: boolean }
+                      pricing:
+                        type: object
+                        properties:
+                          currency: { type: string, example: USD }
+                          base_price_cents: { type: integer, example: 1500 }
+                          discount_percent: { type: integer, example: 30 }
+                          final_price_cents: { type: integer, example: 1050 }
+                      denial:
+                        nullable: true
+                        type: object
+                        properties:
+                          code: { type: string, example: CONTENT_LOCKED_PAYMENT_REQUIRED }
+                          message: { type: string }
+        '404': { description: Content not found }
+  /api/contents/{id}/unlock:
+    post:
+      tags: [Contents]
+      summary: Unlock content (quota/bonus/paid)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Unlocked (quota/bonus/already unlocked) }
+        '402': { description: Payment required }
+        '403': { description: Unlock not allowed without active subscription }
+        '404': { description: Content not found }
+  /api/contents/{id}/unlock/verify-payment:
+    post:
+      tags: [Contents]
+      summary: Verify unlock payment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transactionId, reference]
+              properties:
+                transactionId: { type: string }
+                reference: { type: string }
+      responses:
+        '200': { description: Payment verified, content unlocked }
+        '400': { description: Payment failed or missing parameters }
+        '403': { description: Unauthorized payment ownership/content mismatch }
+        '404': { description: Content or payment not found }
+  /api/categories:
+    get:
+      tags: [Categories]
+      security: []
+      summary: List categories
+      responses:
+        '200': { description: OK }
+  /api/categories/{slug}:
+    get:
+      tags: [Categories]
+      security: []
+      summary: Get category by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/search:
+    get:
+      tags: [Search]
+      security: []
+      summary: Search contents
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: language
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/search/index:
+    post:
+      tags: [Search]
+      summary: Reindex contents (admin)
+      responses:
+        '200': { description: OK }
+  /api/search/stats:
+    get:
+      tags: [Search]
+      summary: Search stats (admin)
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/plans:
+    get:
+      tags: [Subscriptions]
+      security: []
+      summary: Get active subscription plans
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/me:
+    get:
+      tags: [Subscriptions]
+      summary: Get current subscription status
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/all:
+    get:
+      tags: [Subscriptions]
+      summary: Get all subscriptions for user
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/checkout:
+    post:
+      tags: [Subscriptions]
+      summary: Initiate subscription checkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planId: { type: string, format: uuid }
+                planCode: { type: string }
+                usersLimit: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid request }
+        '503': { description: Payment provider not configured }
+  /api/subscriptions/verify-payment:
+    post:
+      tags: [Subscriptions]
+      summary: Verify subscription payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transactionId, reference]
+              properties:
+                transactionId: { type: string }
+                reference: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Unauthorized payment ownership }
+  /api/subscriptions/renew:
+    post:
+      tags: [Subscriptions]
+      summary: Initiate renewal checkout
+      responses:
+        '200': { description: OK }
+        '404': { description: No active subscription }
+        '503': { description: Payment provider not configured }
+  /api/subscriptions/resume:
+    post:
+      tags: [Subscriptions]
+      summary: Resume subscription cancellation
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/change-plan:
+    post:
+      tags: [Subscriptions]
+      summary: Schedule plan change for next cycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planId: { type: string, format: uuid }
+                planCode: { type: string }
+                usersLimit: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Scheduled }
+        '400': { description: Invalid plan/usersLimit }
+        '403': { description: Only owner can schedule plan change }
+        '404': { description: No active subscription }
+  /api/subscriptions/cancel:
+    post:
+      tags: [Subscriptions]
+      summary: Cancel current subscription
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                immediately: { type: boolean, default: false }
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/payment-history:
+    get:
+      tags: [Subscriptions]
+      summary: Payment history
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/cycle/current:
+    get:
+      tags: [Subscriptions]
+      summary: Current billing cycle + usage
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/usage/me:
+    get:
+      tags: [Subscriptions]
+      summary: My usage summary
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/bonuses/me:
+    get:
+      tags: [Subscriptions]
+      summary: My bonus credits
+      responses:
+        '200': { description: OK }
+  /api/subscriptions/members:
+    get:
+      tags: [Subscriptions]
+      summary: List subscription members
+      responses:
+        '200': { description: OK }
+        '404': { description: No active subscription }
+    post:
+      tags: [Subscriptions]
+      summary: Add subscription member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '201': { description: Created }
+        '400': { description: users_limit reached or missing userId }
+        '403': { description: Only owner can add members }
+        '404': { description: No active subscription }
+        '409': { description: Member already exists }
+  /api/subscriptions/members/{userId}:
+    delete:
+      tags: [Subscriptions]
+      summary: Remove subscription member
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '400': { description: Owner cannot be removed }
+        '403': { description: Only owner can remove members }
+        '404': { description: No active subscription or member not found }
+  /api/subscriptions/users-limit:
+    patch:
+      tags: [Subscriptions]
+      summary: Update subscription users limit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usersLimit]
+              properties:
+                usersLimit: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Updated }
+        '400': { description: Invalid usersLimit or below active members/plan minimum }
+        '403': { description: Only owner can update users_limit }
+        '404': { description: No active subscription }
+  /webhooks/flutterwave:
+    post:
+      tags: [Webhooks]
+      security: []
+      summary: Flutterwave webhook receiver
+      responses:
+        '200': { description: Acknowledged }
+  /webhooks/test:
+    get:
+      tags: [Webhooks]
+      security: []
+      summary: Webhook test endpoint
+      responses:
+        '200': { description: OK }
+  /home:
+    get:
+      tags: [Home]
+      summary: Personalized home payload
+      responses:
+        '200': { description: OK }
+  /reading-history:
+    get:
+      tags: [Reading History]
+      summary: Reading history list
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: OK }
+  /reading-history/{content_id}:
+    put:
+      tags: [Reading History]
+      summary: Upsert reading progress
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [progress_percent]
+              properties:
+                progress_percent: { type: number, minimum: 0, maximum: 100 }
+                last_position: { type: string, nullable: true }
+      responses:
+        '200': { description: Updated }
+        '201': { description: Created }
+  /reading-history/continue:
+    get:
+      tags: [Reading History]
+      summary: Continue reading items
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: OK }
+  /api/reading/{content_id}/session:
+    get:
+      tags: [Reading History]
+      summary: Resolve reading session (access + signed URL + progress)
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+        '402': { description: Payment required }
+        '403': { description: Subscription required }
+        '404': { description: Content not found }
+  /api/reading/{content_id}/progress:
+    post:
+      tags: [Reading History]
+      summary: Save reading/listening progress
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [progress_percent]
+              properties:
+                progress_percent: { type: number, minimum: 0, maximum: 100 }
+                last_position: { type: object, nullable: true }
+                total_time_seconds: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Updated }
+        '201': { description: Created }
+        '401': { description: Unauthorized }
+        '402': { description: Payment required }
+        '403': { description: Subscription required }
+        '404': { description: Content not found }
+  /api/reading/{content_id}/chapters:
+    get:
+      tags: [Reading History]
+      summary: Get chapters/toc for reading session
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+        '402': { description: Payment required }
+        '403': { description: Subscription required }
+        '404': { description: Content not found }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

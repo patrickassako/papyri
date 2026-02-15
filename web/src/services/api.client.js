@@ -53,11 +53,16 @@ apiClient.interceptors.response.use(
         }
 
         // Appeler l'endpoint de rafraîchissement
-        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
           refresh_token: refreshToken
         });
 
-        const { access_token, refresh_token } = response.data;
+        const session = response.data?.data?.session;
+        const access_token = session?.access_token;
+        const refresh_token = session?.refresh_token;
+        if (!access_token || !refresh_token) {
+          throw new Error('Invalid refresh response');
+        }
         setTokens(access_token, refresh_token);
 
         // Réessayer la requête originale avec le nouveau token

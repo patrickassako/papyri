@@ -28,7 +28,7 @@
 # - SM typically creates next story ONLY after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then Dev runs code-review (fresh context, ideally different LLM)
 
-generated: 2026-02-07
+generated: 2026-02-14
 project: BibliotheuqeNum
 project_key: NOKEY
 tracking_system: file-system
@@ -48,29 +48,29 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Abonnement & Paiements (8 stories)
-  epic-2: backlog
-  2-1-modele-abonnement-page-de-choix: backlog
+  epic-2: in-progress
+  2-1-modele-abonnement-page-de-choix: done
   2-2-integration-paiement-stripe: backlog
-  2-3-integration-paiement-flutterwave: backlog
-  2-4-webhooks-activation-abonnement: backlog
-  2-5-middleware-verification-abonnement: backlog
+  2-3-integration-paiement-flutterwave: done
+  2-4-webhooks-activation-abonnement: in-progress
+  2-5-middleware-verification-abonnement: done
   2-6-renouvellement-automatique: backlog
-  2-7-annulation-changement-de-plan: backlog
-  2-8-historique-des-paiements: backlog
+  2-7-annulation-changement-de-plan: in-progress
+  2-8-historique-des-paiements: done
   epic-2-retrospective: optional
 
   # Epic 3: Catalogue & Recherche (5 stories)
-  epic-3: backlog
-  3-1-landing-page-visiteurs: backlog
-  3-2-catalogue-pagination-categories: backlog
-  3-3-page-detail-contenu: backlog
-  3-4-integration-meilisearch-recherche: backlog
-  3-5-filtres-combines-tri: backlog
+  epic-3: done
+  3-1-landing-page-visiteurs: done
+  3-2-catalogue-pagination-categories: done
+  3-3-page-detail-contenu: done
+  3-4-integration-meilisearch-recherche: done
+  3-5-filtres-combines-tri: done
   epic-3-retrospective: optional
 
   # Epic 4: Lecteur Ebook (7 stories)
-  epic-4: backlog
-  4-1-lecteur-epub-reprise-automatique: backlog
+  epic-4: in-progress
+  4-1-lecteur-epub-reprise-automatique: in-progress
   4-2-lecteur-pdf-reprise-automatique: backlog
   4-3-marque-pages: backlog
   4-4-surlignage-de-texte: backlog
@@ -80,8 +80,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: Lecteur Audio & Mini-Player (6 stories)
-  epic-5: backlog
-  5-1-lecteur-audio-plein-ecran-streaming: backlog
+  epic-5: in-progress
+  5-1-lecteur-audio-plein-ecran-streaming: in-progress
   5-2-vitesse-lecture-chapitres: backlog
   5-3-mini-player-persistant: backlog
   5-4-audio-arriere-plan-controles-notification: backlog
@@ -126,12 +126,12 @@ development_status:
   epic-9-retrospective: optional
 
   # Epic 10: Back-Office Administration (7 stories)
-  epic-10: backlog
-  10-1-setup-adminjs-authentification-admin: backlog
-  10-2-gestion-utilisateurs: backlog
-  10-3-gestion-abonnements: backlog
-  10-4-gestion-catalogue-upload-contenus: backlog
-  10-5-gestion-metadonnees-categories-licences: backlog
-  10-6-dashboard-statistiques-admin: backlog
-  10-7-envoi-notifications-manuelles-audit-trail: backlog
+  epic-10: in-progress
+  10-1-setup-adminjs-authentification-admin: ready-for-dev
+  10-2-gestion-utilisateurs: ready-for-dev
+  10-3-gestion-abonnements: ready-for-dev
+  10-4-gestion-catalogue-upload-contenus: ready-for-dev
+  10-5-gestion-metadonnees-categories-licences: ready-for-dev
+  10-6-dashboard-statistiques-admin: ready-for-dev
+  10-7-envoi-notifications-manuelles-audit-trail: ready-for-dev
   epic-10-retrospective: optional

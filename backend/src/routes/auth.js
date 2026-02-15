@@ -11,7 +11,7 @@ const { verifyJWT } = require('../middleware/auth');
  */
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
-    const { email, password, full_name } = req.body;
+    const { email, password, full_name, language = 'fr' } = req.body;
 
     // Validate required fields
     if (!email || !password || !full_name) {
@@ -48,7 +48,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
     }
 
     // Register user
-    const result = await authService.register(email, password, full_name);
+    const result = await authService.register(email, password, full_name, language);
 
     res.status(201).json({
       success: true,
@@ -56,7 +56,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
     });
   } catch (error) {
     // Handle duplicate email
-    if (error.code === '23505' || error.message.includes('duplicate') || error.message.includes('already exists')) {
+    if (error.code === 'EMAIL_ALREADY_EXISTS' || error.code === '23505' || error.message.includes('duplicate') || error.message.includes('already exists')) {
       return res.status(409).json({
         success: false,
         error: {
@@ -121,7 +121,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
     }
 
     // Handle invalid credentials (don't distinguish between email not found and wrong password)
-    if (error.message === 'Invalid credentials') {
+    if (error.code === 'INVALID_CREDENTIALS' || error.message === 'Invalid credentials') {
       return res.status(401).json({
         success: false,
         error: {

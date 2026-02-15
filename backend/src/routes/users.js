@@ -36,7 +36,7 @@ router.get('/me', verifyJWT, async (req, res, next) => {
     // Try to get subscription data (may not exist yet - Epic 2)
     const { data: subscription } = await supabaseAdmin
       .from('subscriptions')
-      .select('status, plan, price_eur, current_period_end')
+      .select('status, plan_type, plan_id, users_limit, amount, currency, current_period_end')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)

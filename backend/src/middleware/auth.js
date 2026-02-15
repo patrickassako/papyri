@@ -97,5 +97,6 @@ function requireRole(...roles) {
 
 module.exports = {
   verifyJWT,
+  authenticate: verifyJWT, // Alias for consistency
   requireRole
 };

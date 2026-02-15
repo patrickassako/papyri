@@ -4,6 +4,10 @@
  */
 
 const contentsService = require('../services/contents.service');
+const subscriptionsService = require('../services/subscriptions.service');
+const flutterwaveService = require('../services/flutterwave.service');
+const contentAccessService = require('../services/content-access.service');
+const { supabaseAdmin } = require('../config/database');
 
 /**
  * GET /contents
@@ -81,15 +85,12 @@ async function getContent(req, res) {
  */
 async function getContentFileUrl(req, res) {
   try {
-    const { id } = req.params;
-
-    // Get content to retrieve file_key
-    const content = await contentsService.getContentById(id);
+    const content = req.contentAccessContext?.content || await contentsService.getContentById(req.params.id);
 
     // Determine expiration based on content type
     const expiresIn = content.content_type === 'audiobook' ? 3600 : 900; // 1h for audio, 15min for ebooks
 
-    const signedUrl = await contentsService.generateSignedUrl(content.file_key, expiresIn);
+    const signedUrl = await contentsService.generateSignedUrl(content.file_key, expiresIn, content.content_type);
 
     res.json({
       success: true,
@@ -117,6 +118,419 @@ async function getContentFileUrl(req, res) {
         code: 'GET_FILE_URL_FAILED',
         message: 'Impossible de générer l\'URL du fichier.',
       },
+    });
+  }
+}
+
+/**
+ * GET /contents/:id/access
+ * Get access/unlock status for current user
+ */
+async function getContentAccess(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const context = await contentAccessService.resolveContentAccess({
+      userId,
+      contentId: id,
+    });
+
+    res.json({
+      success: true,
+      data: context.access,
+    });
+  } catch (error) {
+    console.error('Get content access error:', error);
+    if (error.message === 'CONTENT_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'CONTENT_NOT_FOUND', message: 'Contenu introuvable.' },
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: { code: 'GET_CONTENT_ACCESS_FAILED', message: 'Impossible de verifier les acces.' },
+    });
+  }
+}
+
+/**
+ * POST /contents/:id/unlock
+ * Try unlocking content through quota -> bonus -> paid
+ */
+async function unlockContent(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const content = await contentsService.getContentByIdForUnlock(id);
+
+    // Idempotent return if already unlocked
+    const existingUnlock = await contentsService.getUserContentUnlock(userId, id);
+    if (existingUnlock) {
+      return res.json({
+        success: true,
+        data: {
+          unlocked: true,
+          source: existingUnlock.source,
+          unlock: existingUnlock,
+          already_unlocked: true,
+        },
+      });
+    }
+
+    const subscriptionMembership = await subscriptionsService.getActiveSubscriptionForMember(userId);
+    const hasActiveSubscription = !!subscriptionMembership?.subscription;
+    const subscription = subscriptionMembership?.subscription || null;
+    const canSubscriptionAccess = hasActiveSubscription && ['subscription', 'subscription_or_paid'].includes(content.access_type);
+    const isTextContent = content.content_type === 'ebook';
+
+    if (canSubscriptionAccess && subscription) {
+      await subscriptionsService.ensureOwnerMembership(subscription);
+      const cycle = await subscriptionsService.ensureCurrentCycle(subscription);
+
+      if (cycle) {
+        const usage = await subscriptionsService.ensureMemberCycleUsage(subscription, cycle, userId);
+        const quotaField = isTextContent ? 'text_unlocked_count' : 'audio_unlocked_count';
+        const quotaLimitField = isTextContent ? 'text_quota' : 'audio_quota';
+        const currentCount = Number(usage[quotaField] || 0);
+        const quotaLimit = Number(usage[quotaLimitField] || 0);
+
+        if (currentCount < quotaLimit) {
+          const nextCount = currentCount + 1;
+          const { error: usageError } = await supabaseAdmin
+            .from('member_cycle_usage')
+            .update({
+              [quotaField]: nextCount,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', usage.id)
+            .eq(quotaField, currentCount);
+
+          if (!usageError) {
+            const unlock = await contentsService.createContentUnlock({
+              user_id: userId,
+              content_id: content.id,
+              source: 'quota',
+              currency: content.price_currency || 'USD',
+              metadata: {
+                cycle_id: cycle.id,
+                subscription_id: subscription.id,
+              },
+            });
+
+            return res.status(200).json({
+              success: true,
+              data: {
+                unlocked: true,
+                source: 'quota',
+                unlock,
+                cycle_usage: {
+                  used: nextCount,
+                  quota: quotaLimit,
+                },
+              },
+            });
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        const bonusType = isTextContent ? 'text' : 'audio';
+        const { data: bonusCredits, error: bonusError } = await supabaseAdmin
+          .from('bonus_credits')
+          .select('*')
+          .eq('user_id', userId)
+          .gt('expires_at', nowIso)
+          .in('bonus_type', [bonusType, 'flex'])
+          .order('expires_at', { ascending: true })
+          .limit(10);
+
+        if (bonusError) throw bonusError;
+
+        const bonusCredit = (bonusCredits || []).find(
+          (item) => Number(item.quantity_used || 0) < Number(item.quantity_total || 0)
+        ) || null;
+        if (bonusCredit) {
+          const nextUsed = Number(bonusCredit.quantity_used || 0) + 1;
+          const updatePayload = {
+            quantity_used: nextUsed,
+            updated_at: new Date().toISOString(),
+          };
+
+          if (nextUsed >= Number(bonusCredit.quantity_total || 0)) {
+            updatePayload.consumed_at = new Date().toISOString();
+          }
+
+          const { error: bonusUpdateError } = await supabaseAdmin
+            .from('bonus_credits')
+            .update(updatePayload)
+            .eq('id', bonusCredit.id)
+            .eq('quantity_used', bonusCredit.quantity_used);
+
+          if (!bonusUpdateError) {
+            const unlock = await contentsService.createContentUnlock({
+              user_id: userId,
+              content_id: content.id,
+              source: 'bonus',
+              bonus_credit_id: bonusCredit.id,
+              currency: content.price_currency || 'USD',
+              metadata: {
+                cycle_id: cycle.id,
+                subscription_id: subscription.id,
+              },
+            });
+
+            const { error: usageBonusError } = await supabaseAdmin
+              .from('member_cycle_usage')
+              .update({
+                bonus_used_count: Number(usage.bonus_used_count || 0) + 1,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', usage.id);
+
+            if (usageBonusError) {
+              console.warn('Unable to increment bonus_used_count:', usageBonusError.message);
+            }
+
+            return res.status(200).json({
+              success: true,
+              data: {
+                unlocked: true,
+                source: 'bonus',
+                unlock,
+                bonus_credit_id: bonusCredit.id,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Paid fallback path
+    const canPay = !!content.is_purchasable || ['paid', 'subscription_or_paid'].includes(content.access_type);
+    if (!canPay || !content.price_cents) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'UNLOCK_NOT_ALLOWED',
+          message: 'Ce contenu necessite un abonnement actif pour etre debloque.',
+        },
+      });
+    }
+
+    const pricing = contentAccessService.computePricing(content, hasActiveSubscription);
+    const discountPercent = pricing.discount_percent;
+    const basePriceCents = pricing.base_price_cents;
+    const finalPriceCents = pricing.final_price_cents;
+
+    if (!req.user.email) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_USER_EMAIL',
+          message: 'Adresse email requise pour initier le paiement.',
+        },
+      });
+    }
+
+    const checkout = await flutterwaveService.initiateCheckout({
+      amount: finalPriceCents / 100,
+      currency: content.price_currency || 'USD',
+      email: req.user.email,
+      name: req.user.full_name || req.user.email,
+      userId,
+      txPrefix: 'CNT',
+      redirectPath: `/catalogue/${content.id}`,
+      title: 'Papyri - Déblocage contenu',
+      description: `Déblocage: ${content.title}`,
+      meta: {
+        payment_type: 'content_unlock',
+        content_id: content.id,
+        access_type: content.access_type || 'paid',
+      },
+    });
+
+    const paymentLink = checkout.link;
+    const reference = checkout.reference;
+
+    const paymentRecord = await subscriptionsService.createPayment({
+      userId,
+      subscriptionId: subscription?.id || null,
+      amount: finalPriceCents / 100,
+      currency: content.price_currency || 'USD',
+      status: 'pending',
+      provider: 'flutterwave',
+      providerPaymentId: reference,
+      providerCustomerId: null,
+      paymentMethod: 'card',
+      metadata: {
+        payment_type: 'content_unlock',
+        content_id: content.id,
+        access_type: content.access_type || 'paid',
+        base_price_cents: basePriceCents,
+        discount_percent: discountPercent,
+        final_price_cents: finalPriceCents,
+      },
+    });
+
+    const paymentRecordId = paymentRecord.id;
+
+    return res.status(402).json({
+      success: false,
+      error: {
+        code: 'PAYMENT_REQUIRED',
+        message: 'Paiement requis pour debloquer ce contenu.',
+      },
+      data: {
+        unlockable_via: 'paid',
+        payment: {
+          provider: 'flutterwave',
+          reference,
+          payment_id: paymentRecordId,
+          payment_link: paymentLink,
+        },
+        pricing: {
+          currency: content.price_currency || 'USD',
+          base_price_cents: basePriceCents,
+          discount_percent: discountPercent,
+          final_price_cents: finalPriceCents,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Unlock content error:', error);
+    if (error.message === 'CONTENT_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'CONTENT_NOT_FOUND', message: 'Contenu introuvable.' },
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: { code: 'UNLOCK_CONTENT_FAILED', message: 'Impossible de debloquer ce contenu.' },
+    });
+  }
+}
+
+/**
+ * POST /contents/:id/unlock/verify-payment
+ * Verify content unlock payment and create unlock record
+ */
+async function verifyUnlockPayment(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const { transactionId, reference } = req.body;
+
+    if (!transactionId || !reference) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_PARAMETERS', message: 'transactionId et reference sont requis.' },
+      });
+    }
+
+    const content = await contentsService.getContentByIdForUnlock(id);
+    const existingUnlock = await contentsService.getUserContentUnlock(userId, id);
+    if (existingUnlock) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          unlocked: true,
+          source: existingUnlock.source,
+          unlock: existingUnlock,
+          already_unlocked: true,
+        },
+      });
+    }
+
+    const paymentDetails = await flutterwaveService.verifyPayment(transactionId);
+    if (paymentDetails.meta?.user_id !== userId || paymentDetails.meta?.content_id !== id) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED_PAYMENT', message: 'Ce paiement ne correspond pas a cet utilisateur/contenu.' },
+      });
+    }
+
+    const { data: paymentRecord, error: paymentRecordError } = await supabaseAdmin
+      .from('payments')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('provider', 'flutterwave')
+      .eq('provider_payment_id', reference)
+      .maybeSingle();
+
+    if (paymentRecordError) throw paymentRecordError;
+    if (!paymentRecord) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'PAYMENT_NOT_FOUND', message: 'Paiement introuvable.' },
+      });
+    }
+
+    if (paymentDetails.status === 'failed') {
+      if (paymentRecord.status !== 'failed') {
+        await subscriptionsService.updatePaymentStatus(paymentRecord.id, 'failed', 'Payment failed');
+      }
+      return res.status(400).json({
+        success: false,
+        error: { code: 'PAYMENT_FAILED', message: 'Le paiement a echoue.' },
+      });
+    }
+
+    if (paymentDetails.status !== 'successful') {
+      return res.status(200).json({
+        success: false,
+        status: 'pending',
+        message: 'Paiement en cours de traitement.',
+      });
+    }
+
+    if (paymentRecord.status !== 'succeeded') {
+      await subscriptionsService.updatePaymentStatus(paymentRecord.id, 'succeeded');
+    }
+
+    const hasActiveSubscription = (await subscriptionsService.checkSubscriptionStatus(userId)).isActive === true;
+    const pricing = contentAccessService.computePricing(content, hasActiveSubscription);
+    const basePriceCents = pricing.base_price_cents;
+    const discountPercent = pricing.discount_percent;
+    const finalPriceCents = pricing.final_price_cents;
+
+    const unlock = await contentsService.createContentUnlock({
+      user_id: userId,
+      content_id: content.id,
+      source: 'paid',
+      payment_id: paymentRecord.id,
+      base_price_cents: basePriceCents,
+      paid_amount_cents: finalPriceCents,
+      currency: content.price_currency || paymentRecord.currency || 'USD',
+      discount_applied_percent: discountPercent,
+      metadata: {
+        provider: 'flutterwave',
+        reference,
+        transaction_id: transactionId,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        unlocked: true,
+        source: 'paid',
+        unlock,
+      },
+    });
+  } catch (error) {
+    console.error('Verify unlock payment error:', error);
+    if (error.message === 'CONTENT_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'CONTENT_NOT_FOUND', message: 'Contenu introuvable.' },
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: { code: 'VERIFY_UNLOCK_PAYMENT_FAILED', message: 'Impossible de verifier le paiement.' },
     });
   }
 }
@@ -265,6 +679,9 @@ module.exports = {
   listContents,
   getContent,
   getContentFileUrl,
+  getContentAccess,
+  unlockContent,
+  verifyUnlockPayment,
   listCategories,
   getCategory,
   createContent,

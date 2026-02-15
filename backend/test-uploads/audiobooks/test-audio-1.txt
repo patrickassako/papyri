@@ -1,0 +1,14 @@
+Ceci est un fichier de test audio pour la bibliothèque Papyri.
+Ce fichier simule un audiobook pour tester le système d'upload et de streaming.
+
+Titre: Conte Africain - Test Audio
+Narrateur: Test Voice
+Durée: Test
+
+Dans ce test, nous vérifions:
+1. Upload vers Cloudflare R2
+2. Génération de signed URLs avec TTL 60 minutes
+3. Streaming audio depuis R2
+4. Indexation dans Meilisearch
+
+Fin du fichier de test audio.
