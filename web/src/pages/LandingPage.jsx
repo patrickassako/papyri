@@ -8,9 +8,6 @@ import {
   Card,
   CardContent,
   Chip,
-  AppBar,
-  Toolbar,
-  IconButton,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -24,11 +21,12 @@ import {
   Lock,
   Star,
   ArrowRight,
-  Menu,
   Play,
   Eye
 } from 'lucide-react';
 import { contentsService } from '../services/contents.service';
+import * as authService from '../services/auth.service';
+import PublicHeader from '../components/PublicHeader';
 
 /**
  * Landing page pour les visiteurs non authentifiés
@@ -41,18 +39,9 @@ export default function LandingPage() {
 
   const [selectedCategory, setSelectedCategory] = useState('tous');
   const [popularContents, setPopularContents] = useState([]);
+  const [categories, setCategories] = useState([{ id: 'tous', label: 'Tous' }]);
   const [loading, setLoading] = useState(true);
-
-  const categories = [
-    { id: 'tous', label: 'Tous' },
-    { id: 'romans', label: 'Romans' },
-    { id: 'essais', label: 'Essais' },
-    { id: 'histoire', label: 'Histoire' },
-    { id: 'sciences', label: 'Sciences' },
-    { id: 'jeunesse', label: 'Jeunesse' },
-    { id: 'arts', label: 'Arts' },
-    { id: 'philosophie', label: 'Philosophie' }
-  ];
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const features = [
     {
@@ -78,8 +67,27 @@ export default function LandingPage() {
   ];
 
   useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const data = await contentsService.getCategories();
+        const apiCategories = (data || []).map(cat => ({ id: cat.slug, label: cat.name }));
+        setCategories([{ id: 'tous', label: 'Tous' }, ...apiCategories]);
+      } catch (err) {
+        console.error('Erreur chargement catégories:', err);
+      }
+    };
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
     loadPopularContents();
   }, [selectedCategory]);
+
+  useEffect(() => {
+    authService.isAuthenticated()
+      .then((v) => setIsAuthenticated(Boolean(v)))
+      .catch(() => setIsAuthenticated(false));
+  }, []);
 
   const loadPopularContents = async () => {
     setLoading(true);
@@ -87,8 +95,7 @@ export default function LandingPage() {
       const params = {
         page: 1,
         limit: 5,
-        sort: 'published_at',
-        order: 'desc'
+        sort: 'popular'
       };
 
       if (selectedCategory !== 'tous') {
@@ -106,76 +113,7 @@ export default function LandingPage() {
 
   return (
     <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh' }}>
-      {/* Header */}
-      <AppBar
-        position="sticky"
-        elevation={0}
-        sx={{
-          bgcolor: 'rgba(252, 250, 248, 0.8)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #f4efe6'
-        }}
-      >
-        <Toolbar sx={{ justifyContent: 'space-between', py: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Book size={28} color="#B5651D" />
-            <Typography
-              variant="h6"
-              sx={{
-                color: '#1d160c',
-                fontWeight: 700,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              Bibliothèque Numérique
-            </Typography>
-          </Box>
-
-          {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 4 }}>
-              <Button sx={{ color: '#1d160c', textTransform: 'none', fontWeight: 500 }}>
-                Accueil
-              </Button>
-              <Button
-                sx={{ color: '#1d160c', textTransform: 'none', fontWeight: 500 }}
-                onClick={() => navigate('/catalogue')}
-              >
-                Bibliothèque
-              </Button>
-              <Button sx={{ color: '#1d160c', textTransform: 'none', fontWeight: 500 }}>
-                Tarifs
-              </Button>
-            </Box>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              sx={{
-                color: '#1d160c',
-                textTransform: 'none',
-                fontWeight: 700,
-                '&:hover': { bgcolor: '#F5E6D3' }
-              }}
-              onClick={() => navigate('/login')}
-            >
-              Se connecter
-            </Button>
-            <Button
-              variant="contained"
-              sx={{
-                bgcolor: '#B5651D',
-                textTransform: 'none',
-                fontWeight: 700,
-                boxShadow: 'none',
-                '&:hover': { bgcolor: '#9a5418' }
-              }}
-              onClick={() => navigate('/register')}
-            >
-              S'inscrire
-            </Button>
-          </Box>
-        </Toolbar>
-      </AppBar>
+      <PublicHeader activeKey="home" isAuthenticated={isAuthenticated} background="#fcfaf8" />
 
       {/* Hero Section */}
       <Box
@@ -654,7 +592,7 @@ export default function LandingPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
                 <Book size={28} color="#B5651D" />
                 <Typography variant="h6" fontWeight={700} sx={{ color: '#1d160c' }}>
-                  Bibliothèque Numérique
+                  Papyri
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.7 }}>
@@ -750,7 +688,7 @@ export default function LandingPage() {
             }}
           >
             <Typography variant="caption" color="text.secondary">
-              © 2026 Bibliothèque Numérique. Tous droits réservés.
+              © 2026 Papyri. developpe par Afrik NoCode
             </Typography>
           </Box>
         </Container>

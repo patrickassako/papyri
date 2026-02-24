@@ -77,17 +77,64 @@ async function getContents(options = {}) {
     }
   }
 
-  // Sorting
+  // Popular sort requires a separate approach: count reading_history per content
+  if (sort === 'popular') {
+    // Get read counts per content (bypass RLS with supabaseAdmin)
+    const { data: readCounts, error: rcError } = await supabaseAdmin
+      .from('reading_history')
+      .select('content_id');
+
+    if (rcError) {
+      throw rcError;
+    }
+
+    // Count reads per content_id
+    const countMap = {};
+    for (const row of readCounts || []) {
+      countMap[row.content_id] = (countMap[row.content_id] || 0) + 1;
+    }
+
+    // Get all matching content IDs sorted by popularity
+    const popularIds = Object.entries(countMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id);
+
+    if (popularIds.length > 0) {
+      query = query.in('id', popularIds);
+    }
+
+    // Fallback ordering for contents with no reads
+    query = query.order('published_at', { ascending: false });
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: contents, error, count } = await query;
+    if (error) throw error;
+
+    // Sort results by popularity (read count descending)
+    const sorted = (contents || []).sort((a, b) => {
+      return (countMap[b.id] || 0) - (countMap[a.id] || 0);
+    });
+
+    const transformedContents = sorted.map(content => ({
+      ...content,
+      categories: content.categories?.map(cc => cc.category).filter(Boolean) || [],
+    }));
+
+    return {
+      contents: transformedContents,
+      total: count || 0,
+      page,
+      totalPages: Math.ceil((count || 0) / limit),
+    };
+  }
+
+  // Sorting (non-popular)
   switch (sort) {
     case 'newest':
       query = query.order('published_at', { ascending: false });
       break;
     case 'title':
       query = query.order('title', { ascending: true });
-      break;
-    case 'popular':
-      // TODO: Implement popularity based on reading_history
-      query = query.order('published_at', { ascending: false });
       break;
     default:
       query = query.order('created_at', { ascending: false });

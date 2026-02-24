@@ -19,10 +19,10 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import API_BASE_URL from '../config/api';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
-const API_URL = 'http://localhost:3001'; // TODO: Configure via environment
 
 const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
@@ -76,7 +76,7 @@ const ProfileScreen = ({ navigation }) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/users/me`, {
+      const response = await fetch(`${API_BASE_URL}/users/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -129,7 +129,7 @@ const ProfileScreen = ({ navigation }) => {
       setSuccess(null);
 
       const token = await AsyncStorage.getItem('access_token');
-      const response = await fetch(`${API_URL}/users/me`, {
+      const response = await fetch(`${API_BASE_URL}/users/me`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -181,7 +181,7 @@ const ProfileScreen = ({ navigation }) => {
       }
 
       const token = await AsyncStorage.getItem('access_token');
-      const response = await fetch(`${API_URL}/users/me/password`, {
+      const response = await fetch(`${API_BASE_URL}/users/me/password`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -223,7 +223,7 @@ const ProfileScreen = ({ navigation }) => {
       const token = await AsyncStorage.getItem('access_token');
 
       // Call logout endpoint
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

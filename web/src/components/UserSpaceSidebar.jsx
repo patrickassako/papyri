@@ -1,0 +1,188 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Box, Typography, Avatar, Button, IconButton } from '@mui/material';
+import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
+import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined';
+import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
+import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
+import SecurityOutlined from '@mui/icons-material/SecurityOutlined';
+import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
+import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
+import PhotoCameraOutlined from '@mui/icons-material/PhotoCameraOutlined';
+import tokens from '../config/tokens';
+import * as authService from '../services/auth.service';
+
+const navItems = [
+  { label: 'Vue d\'ensemble', icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
+  { label: 'Ma bibliothèque', icon: AutoStoriesOutlined, key: 'library', route: '/my-list' },
+  { label: 'Statistiques', icon: AnalyticsOutlined, key: 'stats', route: '/history' },
+  { label: 'Préférences', icon: SettingsOutlined, key: 'preferences', route: '/profile' },
+  { label: 'Abonnement', icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
+  { label: 'Appareils', icon: DevicesOutlined, key: 'devices', disabled: true },
+  { label: 'Sécurité', icon: SecurityOutlined, key: 'security', disabled: true },
+];
+
+export default function UserSpaceSidebar({
+  user,
+  activeKey = 'overview',
+  subscriptionLabel = 'Abonnement actif',
+}) {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const userName = user?.full_name || 'Utilisateur';
+  const userEmail = user?.email || '';
+  const userAvatar = user?.avatar_url || '';
+
+  return (
+    <Box
+      sx={{
+        width: '25%',
+        maxWidth: 320,
+        minWidth: 260,
+        position: 'sticky',
+        top: 0,
+        height: '100vh',
+        bgcolor: '#fff',
+        borderRight: `1px solid ${tokens.colors.surfaces.light.variant}`,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'auto',
+      }}
+    >
+      <Box sx={{ p: 3, textAlign: 'center', borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}` }}>
+        <Box sx={{ position: 'relative', display: 'inline-block', mb: 1.5 }}>
+          <Avatar
+            src={userAvatar}
+            alt={userName}
+            sx={{
+              width: 80,
+              height: 80,
+              bgcolor: tokens.colors.primaryLight,
+              fontSize: '2rem',
+              color: '#fff',
+              fontWeight: 600,
+            }}
+          >
+            {userName.charAt(0).toUpperCase()}
+          </Avatar>
+          <IconButton
+            size="small"
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              right: -4,
+              bgcolor: tokens.colors.primary,
+              color: '#fff',
+              width: 28,
+              height: 28,
+              '&:hover': { bgcolor: tokens.colors.primaryDark },
+            }}
+          >
+            <PhotoCameraOutlined sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Box>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, lineHeight: 1.3 }}>
+          {userName}
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#9c7e49', mt: 0.25 }}>
+          {userEmail}
+        </Typography>
+      </Box>
+
+      <Box sx={{ flex: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeKey === item.key;
+          return (
+            <Button
+              key={item.key}
+              onClick={() => item.route && navigate(item.route)}
+              disabled={item.disabled || !item.route}
+              startIcon={<Icon />}
+              fullWidth
+              sx={{
+                justifyContent: 'flex-start',
+                borderRadius: '12px',
+                px: 2,
+                py: 1.25,
+                textTransform: 'none',
+                fontSize: '0.9rem',
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? tokens.colors.primary : tokens.colors.onBackground.light,
+                bgcolor: isActive ? `${tokens.colors.primary}1A` : 'transparent',
+                '&:hover': {
+                  bgcolor: isActive
+                    ? `${tokens.colors.primary}1A`
+                    : tokens.colors.surfaces.light.variant,
+                },
+                '&.Mui-disabled': {
+                  color: '#b5b0a7',
+                  bgcolor: 'transparent',
+                  cursor: 'not-allowed',
+                },
+                gap: 1,
+              }}
+            >
+              {item.label}
+            </Button>
+          );
+        })}
+      </Box>
+
+      <Box sx={{ p: 2, borderTop: `1px solid ${tokens.colors.surfaces.light.variant}` }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            bgcolor: `${tokens.colors.secondary}1A`,
+            borderRadius: '12px',
+            px: 2,
+            py: 1.25,
+            mb: 1.5,
+          }}
+        >
+          <WorkspacePremiumOutlined sx={{ color: tokens.colors.secondary, fontSize: 22 }} />
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, lineHeight: 1.2 }}>
+              Membre Premium
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#9c7e49' }}>
+              {subscriptionLabel}
+            </Typography>
+          </Box>
+        </Box>
+
+        <Button
+          onClick={handleLogout}
+          startIcon={<LogoutOutlined />}
+          fullWidth
+          sx={{
+            justifyContent: 'flex-start',
+            borderRadius: '12px',
+            px: 2,
+            py: 1.25,
+            textTransform: 'none',
+            fontSize: '0.9rem',
+            fontWeight: 500,
+            color: tokens.colors.semantic.error,
+            '&:hover': { bgcolor: `${tokens.colors.semantic.error}0D` },
+            gap: 1,
+          }}
+        >
+          Déconnexion
+        </Button>
+      </Box>
+    </Box>
+  );
+}

@@ -1,5 +1,5 @@
 # API Endpoints Complets (Backend)
-**Date:** 2026-02-14  
+**Date:** 2026-02-16  
 **Base URL locale:** `http://localhost:3001`  
 **Auth:** JWT Supabase via header `Authorization: Bearer <access_token>`
 
@@ -141,12 +141,14 @@
 ### `GET /api/contents/:id/access`
 - Auth: `JWT requis`
 - Description: État d’accès utilisateur (unlock, pricing, discount, etc.).
+- Note: abonnement actif n'autorise plus la lecture directe pour les contenus abonnement; un unlock est requis.
 
 ### `POST /api/contents/:id/unlock`
 - Auth: `JWT requis`
 - Description: Flux `quota -> bonus -> paiement`.
 - Réponses:
-  - `200` déblocage effectué
+  - `200` déblocage effectué (source `quota|bonus|paid|already_unlocked`)
+  - `403` unlock requis mais non autorise (ex: pas d'abonnement actif pour contenu abonnement-only)
   - `402` paiement requis (avec `payment_link`)
 
 ### `POST /api/contents/:id/unlock/verify-payment`
@@ -359,6 +361,7 @@
 }
 ```
 - Description: Sauvegarde progression unifiée texte/audio (upsert).
+- Note: si `reading_history` n'est pas exploitable dans l'environnement (schema/FK), l'API peut repondre `200` avec `skipped: true` pour ne pas bloquer la lecture.
 - Réponses:
   - `200` update
   - `201` create

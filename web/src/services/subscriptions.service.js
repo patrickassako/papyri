@@ -9,7 +9,11 @@ export const subscriptionsService = {
     return response.data?.plans || [];
   },
 
-  async checkout({ planId, planCode, usersLimit }) {
+  /**
+   * Initiate checkout — supports 'flutterwave' (mobile money) and 'stripe' (card)
+   * Returns { paymentLink, reference, provider, subscription }
+   */
+  async checkout({ planId, planCode, usersLimit, provider = 'flutterwave' }) {
     const response = await authFetch(`${API_BASE_URL}/api/subscriptions/checkout`, {
       method: 'POST',
       headers: {
@@ -19,6 +23,7 @@ export const subscriptionsService = {
         planId,
         planCode,
         usersLimit,
+        provider,
       }),
     });
 
@@ -26,12 +31,48 @@ export const subscriptionsService = {
     if (!response.ok || !data?.success) {
       if (response.status === 503) {
         throw new Error(
-          'Paiement indisponible: configure FLUTTERWAVE_PUBLIC_KEY et FLUTTERWAVE_SECRET_KEY côté backend.'
+          data?.message || 'Paiement indisponible: le fournisseur de paiement n\'est pas configuré côté backend.'
         );
       }
       throw new Error(data?.message || 'Failed to initiate checkout');
     }
 
+    return data;
+  },
+
+  /**
+   * Initiate payment for one extra seat on a family subscription
+   * Returns { paymentLink, provider, reference }
+   */
+  async buyExtraSeat({ provider = 'stripe' } = {}) {
+    const response = await authFetch(`${API_BASE_URL}/api/subscriptions/buy-extra-seat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      if (response.status === 503) {
+        throw new Error(data?.message || 'Fournisseur de paiement non configuré.');
+      }
+      throw new Error(data?.message || 'Failed to initiate extra seat purchase');
+    }
+    return data;
+  },
+
+  /**
+   * Verify a Stripe Checkout Session (called from callback page after Stripe redirect)
+   */
+  async verifyStripeSession(sessionId) {
+    const response = await authFetch(`${API_BASE_URL}/api/subscriptions/verify-stripe-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to verify Stripe session');
+    }
     return data;
   },
 
@@ -186,6 +227,17 @@ export const subscriptionsService = {
     return data;
   },
 
+  async lookupUserByEmail(email) {
+    const response = await authFetch(
+      `${API_BASE_URL}/users/lookup?email=${encodeURIComponent(email)}`
+    );
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || 'Utilisateur introuvable.');
+    }
+    return data.data;
+  },
+
   async verifyPayment({ transactionId, reference }) {
     const response = await authFetch(`${API_BASE_URL}/api/subscriptions/verify-payment`, {
       method: 'POST',
@@ -204,5 +256,31 @@ export const subscriptionsService = {
     }
 
     return data;
+  },
+
+  /**
+   * Download a PDF invoice for a specific payment.
+   * Triggers a browser file download.
+   */
+  async downloadInvoice(paymentId) {
+    const response = await authFetch(`${API_BASE_URL}/api/subscriptions/payments/${paymentId}/invoice`);
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Failed to download invoice');
+    }
+    const blob = await response.blob();
+    // Derive filename from Content-Disposition header if present
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `invoice-${paymentId.slice(-8)}.pdf`;
+    // Trigger browser download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   },
 };

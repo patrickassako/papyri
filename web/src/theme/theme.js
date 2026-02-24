@@ -31,24 +31,39 @@ const theme = createTheme({
     }
   },
   typography: {
-    fontFamily: `${tokens.typography.families.body}, -apple-system, sans-serif`,
+    fontFamily: '"Noto Sans", Inter, -apple-system, sans-serif',
     h1: {
-      fontFamily: `${tokens.typography.families.display}, Georgia, serif`,
+      fontFamily: '"Newsreader", Georgia, serif',
       fontSize: tokens.typography.scale.h1.rem,
       fontWeight: tokens.typography.scale.h1.weight,
       lineHeight: tokens.typography.scale.h1.lineHeight
     },
     h2: {
-      fontFamily: `${tokens.typography.families.display}, Georgia, serif`,
+      fontFamily: '"Newsreader", Georgia, serif',
       fontSize: tokens.typography.scale.h2.rem,
       fontWeight: tokens.typography.scale.h2.weight,
       lineHeight: tokens.typography.scale.h2.lineHeight
     },
     h3: {
-      fontFamily: `${tokens.typography.families.display}, Georgia, serif`,
+      fontFamily: '"Newsreader", Georgia, serif',
       fontSize: tokens.typography.scale.h3.rem,
       fontWeight: tokens.typography.scale.h3.weight,
       lineHeight: tokens.typography.scale.h3.lineHeight
+    },
+    h4: {
+      fontFamily: '"Newsreader", Georgia, serif',
+      fontWeight: 700,
+      lineHeight: 1.2
+    },
+    h5: {
+      fontFamily: '"Newsreader", Georgia, serif',
+      fontWeight: 700,
+      lineHeight: 1.25
+    },
+    h6: {
+      fontFamily: '"Newsreader", Georgia, serif',
+      fontWeight: 700,
+      lineHeight: 1.25
     },
     body1: {
       fontSize: tokens.typography.scale.body.rem,

@@ -254,13 +254,15 @@ CREATE INDEX idx_rh_type ON rights_holders(type);
 
 Marque-pages utilisateur dans les ebooks.
 
+> **Migration** : `docs/migrations/026_bookmarks_highlights.sql`
+
 ```sql
 CREATE TABLE bookmarks (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content_id  UUID NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
   position    JSONB NOT NULL,
-    -- {chapter: "ch3", cfi: "/4/2/8", percent: 0.42}
+    -- {cfi: "epubcfi(...)", percent: 42, chapter_label: "Chapitre 3"}
   label       VARCHAR(255),
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
@@ -275,12 +277,16 @@ CREATE INDEX idx_bookmarks_user_content ON bookmarks(user_id, content_id);
 
 Surlignages utilisateur dans les ebooks.
 
+> **Migration** : `docs/migrations/026_bookmarks_highlights.sql`
+
 ```sql
 CREATE TABLE highlights (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content_id  UUID NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
   text        TEXT NOT NULL,
+  cfi_range   TEXT NOT NULL,
+    -- CFI range epub.js pour restauration visuelle
   position    JSONB NOT NULL,
     -- {start_cfi: "...", end_cfi: "...", chapter: "ch3"}
   color       VARCHAR(20) DEFAULT 'yellow',

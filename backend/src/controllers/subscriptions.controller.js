@@ -5,7 +5,11 @@
 
 const subscriptionsService = require('../services/subscriptions.service');
 const flutterwaveService = require('../services/flutterwave.service');
+const stripeService = require('../services/stripe.service');
+const { generateInvoicePDF } = require('../services/invoice.service');
+const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
+const config = require('../config/env');
 
 /**
  * GET /api/subscriptions/plans
@@ -14,14 +18,6 @@ const { supabaseAdmin } = require('../config/database');
 async function getPlans(req, res) {
   try {
     const plans = await subscriptionsService.getPlans();
-
-    console.log('[subscriptions.checkout] success', {
-      userId,
-      subscriptionId: subscription.id,
-      reference: payment.reference,
-      planId: plan.id,
-      usersLimit: subscription.users_limit,
-    });
 
     res.status(200).json({
       success: true,
@@ -88,19 +84,20 @@ async function getAllMySubscriptions(req, res) {
 
 /**
  * POST /api/subscriptions/checkout
- * Initiate subscription payment via Flutterwave
+ * Initiate subscription payment via Flutterwave (mobile money) or Stripe (card)
  *
  * Body: {
  *   planCode?: string,
  *   planId?: string,
- *   usersLimit?: number
+ *   usersLimit?: number,
+ *   provider?: 'flutterwave' | 'stripe'  // default: 'flutterwave'
  * }
  */
 async function initiateCheckout(req, res) {
   try {
     const userId = req.user.id;
-    const { planCode, planId, usersLimit } = req.body;
-    console.log('[subscriptions.checkout] start', { userId, planCode, planId, usersLimit });
+    const { planCode, planId, usersLimit, provider = 'flutterwave' } = req.body;
+    console.log('[subscriptions.checkout] start', { userId, planCode, planId, usersLimit, provider });
 
     // Validate plan
     const plan = await subscriptionsService.getPlan(planId || planCode);
@@ -143,11 +140,22 @@ async function initiateCheckout(req, res) {
       });
     }
 
-    if (!flutterwaveService.isConfigured()) {
+    // Validate provider choice
+    const resolvedProvider = provider === 'stripe' ? 'stripe' : 'flutterwave';
+
+    if (resolvedProvider === 'flutterwave' && !flutterwaveService.isConfigured()) {
       return res.status(503).json({
         success: false,
         error: 'Payment provider not configured',
         message: 'Flutterwave is not configured. Set FLUTTERWAVE_PUBLIC_KEY and FLUTTERWAVE_SECRET_KEY in backend env.',
+      });
+    }
+
+    if (resolvedProvider === 'stripe' && !stripeService.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Payment provider not configured',
+        message: 'Stripe is not configured. Set STRIPE_SECRET_KEY in backend env.',
       });
     }
 
@@ -156,52 +164,109 @@ async function initiateCheckout(req, res) {
       userId,
       planId: plan.id,
       usersLimit,
-      provider: 'flutterwave',
+      provider: resolvedProvider,
       providerData: {},
     });
 
-    // Initiate Flutterwave payment
     const requestOrigin = req.headers.origin;
     const redirectBaseUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(requestOrigin || ''))
       ? requestOrigin
       : undefined;
 
-    const payment = await flutterwaveService.initiatePayment({
-      amount: subscription.amount,
-      currency: subscription.currency,
-      email: payerEmail,
-      name: payerName || payerEmail,
+    // ---- Flutterwave path ----
+    if (resolvedProvider === 'flutterwave') {
+      const payment = await flutterwaveService.initiatePayment({
+        amount: subscription.amount,
+        currency: subscription.currency,
+        email: payerEmail,
+        name: payerName || payerEmail,
+        planCode: plan.slug,
+        planName: plan.name,
+        usersLimit: subscription.users_limit,
+        userId,
+        redirectBaseUrl,
+      });
+
+      await subscriptionsService.createPayment({
+        userId,
+        subscriptionId: subscription.id,
+        amount: subscription.amount,
+        currency: subscription.currency,
+        status: 'pending',
+        provider: 'flutterwave',
+        providerPaymentId: payment.reference,
+        providerCustomerId: null,
+        paymentMethod: 'mobile_money',
+        metadata: {
+          payment_type: 'subscription_initial',
+          tx_ref: payment.reference,
+          plan_id: plan.id,
+          plan_code: plan.slug,
+          users_limit: subscription.users_limit,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        provider: 'flutterwave',
+        paymentLink: payment.link,
+        reference: payment.reference,
+        subscription: {
+          id: subscription.id,
+          planId: subscription.plan_id,
+          planCode: subscription.plan_type,
+          planName: plan.name,
+          usersLimit: subscription.users_limit,
+          amount: subscription.amount,
+          currency: subscription.currency,
+          status: subscription.status,
+        },
+      });
+    }
+
+    // ---- Stripe path ----
+    // Convert major-unit amount to cents for Stripe
+    const amountMajor = Number(subscription.amount);
+    const amountCents = Math.round(amountMajor >= 100 ? amountMajor : amountMajor * 100);
+
+    const stripeSession = await stripeService.createCheckoutSession({
+      userId,
+      subscriptionId: subscription.id,
+      planId: plan.id,
       planCode: plan.slug,
       planName: plan.name,
+      amountCents,
+      currency: subscription.currency,
       usersLimit: subscription.users_limit,
-      userId,
+      customerEmail: payerEmail,
+      paymentType: 'subscription_initial',
       redirectBaseUrl,
     });
 
-    // Create payment record
     await subscriptionsService.createPayment({
       userId,
       subscriptionId: subscription.id,
       amount: subscription.amount,
       currency: subscription.currency,
       status: 'pending',
-      provider: 'flutterwave',
-      providerPaymentId: payment.reference,
+      provider: 'stripe',
+      providerPaymentId: stripeSession.sessionId,
       providerCustomerId: null,
       paymentMethod: 'card',
       metadata: {
         payment_type: 'subscription_initial',
-        tx_ref: payment.reference,
+        stripe_session_id: stripeSession.sessionId,
         plan_id: plan.id,
         plan_code: plan.slug,
         users_limit: subscription.users_limit,
       },
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      paymentLink: payment.link,
-      reference: payment.reference,
+      provider: 'stripe',
+      paymentLink: stripeSession.sessionUrl,
+      reference: stripeSession.sessionId,
       subscription: {
         id: subscription.id,
         planId: subscription.plan_id,
@@ -350,6 +415,22 @@ async function verifyPayment(req, res) {
         await subscriptionsService.updatePaymentStatus(payment.id, 'succeeded');
       }
 
+      // Extra seat purchase
+      const paymentType = payment.metadata?.payment_type;
+      if (paymentType === 'extra_seat') {
+        const targetUsersLimit = Number(payment.metadata?.target_users_limit || 0);
+        let updatedSub = null;
+        if (payment.subscription_id && targetUsersLimit > 0) {
+          updatedSub = await subscriptionsService.applyExtraSeat(payment.subscription_id, targetUsersLimit);
+        }
+        return res.status(200).json({
+          success: true,
+          type: 'extra_seat',
+          message: `Siège ajouté. Votre abonnement passe à ${targetUsersLimit} places.`,
+          subscription: updatedSub,
+        });
+      }
+
       // Activate or renew depending on current subscription state.
       const subscription = await subscriptionsService.applySuccessfulSubscriptionPayment(payment.subscription_id);
 
@@ -395,6 +476,94 @@ async function verifyPayment(req, res) {
       error: 'Failed to verify payment',
       message: error.message,
     });
+  }
+}
+
+/**
+ * POST /api/subscriptions/verify-stripe-session
+ * Verify a Stripe Checkout Session after browser redirect (fallback if webhook missed).
+ * Body: { sessionId: string }
+ */
+async function verifyStripeSession(req, res) {
+  try {
+    const userId = req.user.id;
+    const { sessionId } = req.body;
+    console.log('[subscriptions.verify-stripe] start', { userId, sessionId });
+
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'Missing sessionId' });
+    }
+
+    if (!stripeService.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'Stripe not configured' });
+    }
+
+    // Retrieve session from Stripe
+    const session = await stripeService.retrieveSession(sessionId);
+
+    // Security: verify session belongs to this user via metadata
+    if (session.metadata?.user_id && session.metadata.user_id !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized', message: 'Session does not belong to you' });
+    }
+
+    // Find payment record
+    const { data: payment } = await supabaseAdmin
+      .from('payments')
+      .select('id, subscription_id, status')
+      .eq('provider_payment_id', sessionId)
+      .maybeSingle();
+
+    if (!payment) {
+      return res.status(404).json({ success: false, error: 'Payment not found' });
+    }
+
+    if (session.paymentStatus !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        status: session.paymentStatus,
+        message: session.status === 'expired' ? 'La session de paiement a expiré.' : 'Paiement non encore confirmé.',
+      });
+    }
+
+    // Mark payment as succeeded
+    if (payment.status !== 'succeeded') {
+      await subscriptionsService.updatePaymentStatus(payment.id, 'succeeded');
+    }
+
+    const paymentType = payment.metadata?.payment_type;
+
+    // Extra seat purchase
+    if (paymentType === 'extra_seat') {
+      const targetUsersLimit = Number(payment.metadata?.target_users_limit || 0);
+      let updatedSub = null;
+      if (payment.subscription_id && targetUsersLimit > 0) {
+        updatedSub = await subscriptionsService.applyExtraSeat(payment.subscription_id, targetUsersLimit);
+      }
+      console.log('[subscriptions.verify-stripe] extra_seat success', { userId, sessionId, targetUsersLimit });
+      return res.status(200).json({
+        success: true,
+        type: 'extra_seat',
+        message: `Siège ajouté. Votre abonnement passe à ${targetUsersLimit} places.`,
+        subscription: updatedSub,
+      });
+    }
+
+    // Regular subscription activation
+    let subscription = null;
+    if (payment.subscription_id) {
+      subscription = await subscriptionsService.applySuccessfulSubscriptionPayment(payment.subscription_id);
+    }
+
+    console.log('[subscriptions.verify-stripe] success', { userId, sessionId });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Paiement Stripe confirmé. Abonnement activé.',
+      subscription,
+    });
+  } catch (error) {
+    console.error('❌ Verify Stripe session error:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify Stripe session', message: error.message });
   }
 }
 
@@ -1019,6 +1188,16 @@ async function updateUsersLimit(req, res) {
       ? await subscriptionsService.getPlan(subscription.plan_id)
       : await subscriptionsService.getPlan(subscription.plan_type);
     const minUsers = Number(livePlan?.includedUsers || snapshot.includedUsers || 1);
+
+    // Security: increasing seats must go through buy-extra-seat (paid flow)
+    if (nextUsersLimit > Number(subscription.users_limit || 1)) {
+      return res.status(403).json({
+        success: false,
+        error: 'USE_BUY_EXTRA_SEAT',
+        message: 'Pour ajouter des places, utilisez le flux de paiement (POST /buy-extra-seat).',
+      });
+    }
+
     if (nextUsersLimit < minUsers) {
       return res.status(400).json({
         success: false,
@@ -1076,14 +1255,230 @@ async function updateUsersLimit(req, res) {
   }
 }
 
+/**
+ * POST /api/subscriptions/buy-extra-seat
+ * Initiate payment for one additional seat on a family subscription.
+ * Body: { provider?: 'stripe' | 'flutterwave' }
+ */
+async function buyExtraSeat(req, res) {
+  try {
+    const userId = req.user.id;
+    const { provider = 'stripe' } = req.body;
+
+    // Verify caller is subscription owner
+    const membership = await subscriptionsService.getActiveSubscriptionForMember(userId);
+    if (!membership) {
+      return res.status(404).json({ success: false, error: 'NO_ACTIVE_SUBSCRIPTION', message: 'No active subscription found.' });
+    }
+    if (membership.memberRole !== 'owner') {
+      return res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'Only the subscription owner can purchase extra seats.' });
+    }
+
+    const subscription = membership.subscription;
+    const snapshot = subscription.plan_snapshot || {};
+    const plan = subscription.plan_id ? await subscriptionsService.getPlan(subscription.plan_id) : null;
+    const extraUserPriceCents = Number(plan?.extraUserPriceCents || snapshot.extraUserPriceCents || 0);
+
+    if (!extraUserPriceCents) {
+      return res.status(400).json({ success: false, error: 'NO_EXTRA_SEAT_PRICING', message: 'Your plan does not support extra seats.' });
+    }
+
+    const targetUsersLimit = Number(subscription.users_limit || 1) + 1;
+
+    // Resolve payer identity
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const payerEmail = authUser?.user?.email;
+    if (!payerEmail) {
+      return res.status(400).json({ success: false, error: 'MISSING_EMAIL', message: 'User email is required.' });
+    }
+    const { data: profile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', userId).maybeSingle();
+    const payerName = profile?.full_name || payerEmail;
+
+    const requestOrigin = req.headers.origin;
+    const redirectBaseUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(requestOrigin || ''))
+      ? requestOrigin
+      : undefined;
+
+    const resolvedProvider = provider === 'stripe' ? 'stripe' : 'flutterwave';
+
+    // ---- Stripe ----
+    if (resolvedProvider === 'stripe') {
+      if (!stripeService.isConfigured()) {
+        return res.status(503).json({ success: false, error: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured.' });
+      }
+      const stripeSession = await stripeService.createCheckoutSession({
+        userId,
+        subscriptionId: subscription.id,
+        planId: plan?.id || '',
+        planCode: plan?.slug || subscription.plan_type,
+        planName: `+1 siège — ${plan?.name || snapshot.name || 'Abonnement'}`,
+        amountCents: extraUserPriceCents,
+        currency: subscription.currency,
+        usersLimit: targetUsersLimit,
+        customerEmail: payerEmail,
+        paymentType: 'extra_seat',
+        redirectBaseUrl,
+      });
+
+      await subscriptionsService.createPayment({
+        userId,
+        subscriptionId: subscription.id,
+        amount: extraUserPriceCents / 100,
+        currency: subscription.currency,
+        status: 'pending',
+        provider: 'stripe',
+        providerPaymentId: stripeSession.sessionId,
+        providerCustomerId: null,
+        paymentMethod: 'card',
+        metadata: {
+          payment_type: 'extra_seat',
+          stripe_session_id: stripeSession.sessionId,
+          target_users_limit: targetUsersLimit,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        provider: 'stripe',
+        paymentLink: stripeSession.sessionUrl,
+        reference: stripeSession.sessionId,
+      });
+    }
+
+    // ---- Flutterwave ----
+    if (!flutterwaveService.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'FLUTTERWAVE_NOT_CONFIGURED', message: 'Flutterwave is not configured.' });
+    }
+    const payment = await flutterwaveService.initiateCheckout({
+      amount: extraUserPriceCents / 100,
+      currency: subscription.currency,
+      email: payerEmail,
+      name: payerName,
+      userId,
+      redirectBaseUrl,
+      txPrefix: 'SEAT',
+      redirectPath: '/subscription/callback',
+      title: 'Papyri — Place supplémentaire',
+      description: `+1 siège pour votre abonnement famille`,
+      meta: {
+        user_id: userId,
+        payment_type: 'extra_seat',
+        target_users_limit: targetUsersLimit,
+        subscription_id: subscription.id,
+      },
+    });
+
+    await subscriptionsService.createPayment({
+      userId,
+      subscriptionId: subscription.id,
+      amount: extraUserPriceCents / 100,
+      currency: subscription.currency,
+      status: 'pending',
+      provider: 'flutterwave',
+      providerPaymentId: payment.reference,
+      providerCustomerId: null,
+      paymentMethod: 'mobile_money',
+      metadata: {
+        payment_type: 'extra_seat',
+        tx_ref: payment.reference,
+        target_users_limit: targetUsersLimit,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      provider: 'flutterwave',
+      paymentLink: payment.link,
+      reference: payment.reference,
+    });
+  } catch (error) {
+    console.error('❌ Buy extra seat error:', error);
+    res.status(500).json({ success: false, error: 'FAILED_TO_BUY_SEAT', message: error.message });
+  }
+}
+
+/**
+ * GET /api/subscriptions/payments/:paymentId/invoice
+ * Download a PDF invoice for a specific payment
+ * @protected — user can only download their own invoices
+ */
+async function downloadInvoice(req, res) {
+  try {
+    const userId = req.user.id;
+    const { paymentId } = req.params;
+
+    // Fetch the payment, ensuring it belongs to the requesting user
+    const { data: payment, error: paymentError } = await supabaseAdmin
+      .from('payments')
+      .select('*')
+      .eq('id', paymentId)
+      .eq('user_id', userId)
+      .single();
+
+    if (paymentError || !payment) {
+      return res.status(404).json({ success: false, error: 'Paiement introuvable.' });
+    }
+
+    // Only generate invoices for succeeded payments
+    if (payment.status !== 'succeeded') {
+      return res.status(400).json({ success: false, error: 'Facture disponible uniquement pour les paiements réussis.' });
+    }
+
+    // Fetch subscription (optional — for plan details)
+    let subscription = null;
+    if (payment.subscription_id) {
+      const { data: sub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('id', payment.subscription_id)
+        .maybeSingle();
+      subscription = sub;
+    }
+
+    // Use user info from JWT (already enriched by auth middleware)
+    const user = {
+      email: req.user.email,
+      full_name: req.user.full_name,
+    };
+
+    // Load app settings (cached — includes invoice prefix, colors, company info)
+    const settings = await getSettings();
+
+    // Build a short filename using the configured prefix
+    const { buildInvoiceNumber } = require('../services/invoice.service');
+    const invoiceNumber = buildInvoiceNumber(
+      payment.id,
+      payment.paid_at || payment.created_at,
+      settings.invoice_prefix || 'INV'
+    );
+    const filename = `${invoiceNumber}.pdf`;
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Generate and stream the PDF with dynamic settings
+    generateInvoicePDF({ payment, user, subscription, settings, stream: res });
+
+  } catch (error) {
+    console.error('❌ Download invoice error:', error);
+    // Can't send JSON if headers already sent (PDF streaming started)
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'Erreur lors de la génération de la facture.', message: error.message });
+    }
+  }
+}
+
 module.exports = {
   getPlans,
   getMySubscription,
   getAllMySubscriptions,
   initiateCheckout,
+  buyExtraSeat,
   cancelSubscription,
   getPaymentHistory,
   verifyPayment,
+  verifyStripeSession,
   initiateRenewalCheckout,
   resumeSubscription,
   schedulePlanChange,
@@ -1094,4 +1489,5 @@ module.exports = {
   addMember,
   removeMember,
   updateUsersLimit,
+  downloadInvoice,
 };

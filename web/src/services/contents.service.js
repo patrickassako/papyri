@@ -22,14 +22,16 @@ export const contentsService = {
    */
   async getContents(params = {}) {
     const response = await apiClient.get('/api/contents', { params });
-    // L'API retourne { success: true, data: { contents: [...], meta: {...} } }
-    if (response.data.data) {
-      return {
-        data: response.data.data.contents || [],
-        meta: response.data.data.meta || {}
-      };
-    }
-    return response.data;
+    // L'API retourne { success: true, data: { contents: [...], total, page, totalPages } }
+    const result = response.data.data || response.data;
+    return {
+      data: result.contents || [],
+      meta: {
+        total: result.total || 0,
+        page: result.page || 1,
+        totalPages: result.totalPages || 1,
+      }
+    };
   },
 
   /**

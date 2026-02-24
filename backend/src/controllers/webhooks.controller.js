@@ -1,10 +1,12 @@
 /**
  * Webhooks Controller
- * Gestion des webhooks de paiement (Flutterwave)
+ * Gestion des webhooks de paiement (Flutterwave + Stripe)
  */
 
 const flutterwaveService = require('../services/flutterwave.service');
+const stripeService = require('../services/stripe.service');
 const subscriptionsService = require('../services/subscriptions.service');
+const { sendPaymentConfirmationEmail } = require('../services/email.service');
 const { supabaseAdmin } = require('../config/database');
 
 /**
@@ -171,8 +173,17 @@ async function handleChargeCompleted(data, eventId) {
     }
 
     const paymentType = payment.metadata?.payment_type;
+
     if (paymentType === 'content_unlock') {
       console.log(`ℹ️  Content unlock payment confirmed: ${txRef}`);
+      return;
+    }
+
+    if (paymentType === 'extra_seat') {
+      const targetUsersLimit = Number(payment.metadata?.target_users_limit || 0);
+      if (payment.subscription_id && targetUsersLimit > 0) {
+        await subscriptionsService.applyExtraSeat(payment.subscription_id, targetUsersLimit);
+      }
       return;
     }
 
@@ -184,8 +195,27 @@ async function handleChargeCompleted(data, eventId) {
     const updatedSubscription = await subscriptionsService.applySuccessfulSubscriptionPayment(payment.subscription_id);
     console.log(`✅ Subscription ${updatedSubscription.id} active until ${updatedSubscription.current_period_end}`);
 
-    // TODO: Send confirmation email to user
-    console.log('📧 TODO: Send subscription confirmation email');
+    // Send payment confirmation email
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', payment.user_id)
+        .maybeSingle();
+
+      if (profile) {
+        const planName = updatedSubscription.plan_snapshot?.name || updatedSubscription.plan_type || 'Abonnement';
+        await sendPaymentConfirmationEmail(
+          profile.email,
+          profile.full_name || profile.email,
+          planName,
+          amount,
+          currency
+        );
+      }
+    } catch (emailErr) {
+      console.error('📧 Email sending failed (non-blocking):', emailErr.message);
+    }
   } catch (error) {
     console.error('❌ Error handling charge.completed:', error);
     throw error;
@@ -219,11 +249,185 @@ async function handleChargeFailed(data, eventId) {
       await subscriptionsService.updatePaymentStatus(payment.id, 'failed', 'Payment failed');
     }
 
-    // TODO: Send failure notification email
-    console.log('📧 TODO: Send payment failure email');
+    console.log('📧 Payment failure recorded for', txRef);
   } catch (error) {
     console.error('❌ Error handling charge.failed:', error);
     throw error;
+  }
+}
+
+/**
+ * POST /webhooks/stripe
+ * Handle Stripe webhook events (checkout.session.completed, etc.)
+ *
+ * IMPORTANT: This route must receive the RAW body (Buffer), NOT the parsed JSON body.
+ * Mount it BEFORE express.json() in index.js using express.raw({ type: 'application/json' }).
+ */
+async function handleStripeWebhook(req, res) {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripeService.constructWebhookEvent(req.body, sig);
+  } catch (err) {
+    console.error('❌ Stripe webhook signature verification failed:', err.message);
+    return res.status(400).send(`Stripe Webhook Error: ${err.message}`);
+  }
+
+  const eventId = event.id;
+  console.log('📥 Stripe webhook received:', { type: event.type, id: eventId });
+
+  // Idempotency check
+  const { data: existingEvent } = await supabaseAdmin
+    .from('webhook_events')
+    .select('id, processed')
+    .eq('provider', 'stripe')
+    .eq('event_id', eventId)
+    .maybeSingle();
+
+  if (existingEvent?.processed) {
+    console.log('⚠️  Stripe webhook already processed, skipping:', eventId);
+    return res.status(200).json({ success: true, message: 'Already processed' });
+  }
+
+  // Store event record
+  if (!existingEvent) {
+    await supabaseAdmin.from('webhook_events').insert({
+      provider: 'stripe',
+      event_id: eventId,
+      event_type: event.type,
+      payload: event,
+      processed: false,
+    });
+  }
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        await handleStripeCheckoutCompleted(event.data.object);
+        break;
+
+      case 'checkout.session.expired':
+        await handleStripeCheckoutExpired(event.data.object);
+        break;
+
+      default:
+        console.log(`⚠️  Unhandled Stripe event type: ${event.type}`);
+    }
+
+    // Mark processed
+    await supabaseAdmin
+      .from('webhook_events')
+      .update({ processed: true, processed_at: new Date().toISOString() })
+      .eq('event_id', eventId)
+      .eq('provider', 'stripe');
+
+    console.log('✅ Stripe webhook processed:', eventId);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('❌ Stripe webhook processing error:', error);
+    await supabaseAdmin
+      .from('webhook_events')
+      .update({ error_message: error.message })
+      .eq('event_id', eventId)
+      .eq('provider', 'stripe');
+    // Return 200 to avoid Stripe retries on non-transient errors
+    return res.status(200).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Handle checkout.session.completed
+ * Activate the subscription when Stripe confirms payment
+ */
+async function handleStripeCheckoutCompleted(session) {
+  const { subscription_id, user_id, payment_type } = session.metadata || {};
+  console.log(`💳 Stripe checkout completed — session: ${session.id}, user: ${user_id}`);
+
+  // Only process paid sessions
+  if (session.payment_status !== 'paid') {
+    console.log(`⚠️  Stripe session payment_status=${session.payment_status}, skipping`);
+    return;
+  }
+
+  // Find the payment record created during checkout initiation
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .select('*')
+    .eq('provider_payment_id', session.id)
+    .maybeSingle();
+
+  if (!payment) {
+    console.error('❌ No payment record found for Stripe session:', session.id);
+    throw new Error(`Payment not found for Stripe session ${session.id}`);
+  }
+
+  // Mark payment as succeeded
+  if (payment.status !== 'succeeded') {
+    await subscriptionsService.updatePaymentStatus(payment.id, 'succeeded');
+  }
+
+  if (payment_type === 'content_unlock') {
+    console.log(`ℹ️  Content unlock payment confirmed via Stripe: ${session.id}`);
+    return;
+  }
+
+  if (payment_type === 'extra_seat') {
+    const targetUsersLimit = Number(session.metadata?.users_limit || payment.metadata?.target_users_limit || 0);
+    if (payment.subscription_id && targetUsersLimit > 0) {
+      await subscriptionsService.applyExtraSeat(payment.subscription_id, targetUsersLimit);
+    }
+    return;
+  }
+
+  if (!payment.subscription_id) {
+    console.log(`ℹ️  No subscription linked to payment ${payment.id}`);
+    return;
+  }
+
+  const updatedSubscription = await subscriptionsService.applySuccessfulSubscriptionPayment(
+    payment.subscription_id
+  );
+  console.log(`✅ Subscription ${updatedSubscription.id} activated until ${updatedSubscription.current_period_end}`);
+
+  // Send confirmation email
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', user_id || payment.user_id)
+      .maybeSingle();
+
+    if (profile?.email) {
+      const planName = updatedSubscription.plan_snapshot?.name || updatedSubscription.plan_type || 'Abonnement';
+      const amountMajor = (session.amount_total || 0) / 100;
+      await sendPaymentConfirmationEmail(
+        profile.email,
+        profile.full_name || profile.email,
+        planName,
+        amountMajor,
+        (session.currency || 'usd').toUpperCase()
+      );
+    }
+  } catch (emailErr) {
+    console.error('📧 Email sending failed (non-blocking):', emailErr.message);
+  }
+}
+
+/**
+ * Handle checkout.session.expired
+ * Mark payment as failed when session expires without payment
+ */
+async function handleStripeCheckoutExpired(session) {
+  console.log(`⏰ Stripe session expired: ${session.id}`);
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .select('id, status')
+    .eq('provider_payment_id', session.id)
+    .maybeSingle();
+
+  if (payment && payment.status === 'pending') {
+    await subscriptionsService.updatePaymentStatus(payment.id, 'failed', 'Stripe session expired');
   }
 }
 
@@ -236,11 +440,12 @@ async function testWebhook(req, res) {
     success: true,
     message: 'Webhook endpoint is working',
     timestamp: new Date().toISOString(),
-    provider: 'flutterwave',
+    providers: ['flutterwave', 'stripe'],
   });
 }
 
 module.exports = {
   handleFlutterwaveWebhook,
+  handleStripeWebhook,
   testWebhook,
 };

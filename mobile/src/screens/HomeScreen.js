@@ -8,6 +8,8 @@ import {
   Dimensions,
   StatusBar,
   RefreshControl,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -21,13 +23,31 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as homeService from '../services/home.service';
 import * as userService from '../services/user.service';
+import { contentsService } from '../services/contents.service';
 import BottomNavBar from '../components/BottomNavBar';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.85;
+const CARD_WIDTH = Math.min(width * 0.9, 360);
+
+function mapContinueItem(item) {
+  const progressPercent = Math.max(0, Math.min(100, Math.round(item.progress_percent || 0)));
+  const isAudio = item.content_type === 'audiobook';
+  const defaultRemaining = isAudio ? 'restant' : 'p. restantes';
+
+  return {
+    id: item.content_id || item.id,
+    title: item.title,
+    author: item.author,
+    type: isAudio ? 'audiobook' : 'ebook',
+    progress: progressPercent / 100,
+    progressText: `${progressPercent}% ${isAudio ? 'écoutés' : 'terminés'}`,
+    remainingText: item.remaining_text || defaultRemaining,
+    cover: item.cover_url || 'https://via.placeholder.com/150x200',
+  };
+}
 
 const HomeScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
@@ -35,13 +55,15 @@ const HomeScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('Tous');
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-
   // Données de la page d'accueil
   const [continueReading, setContinueReading] = useState([]);
   const [nouveautes, setNouveautes] = useState([]);
   const [populaires, setPopulaires] = useState([]);
-  const [currentAudio, setCurrentAudio] = useState(null);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchError, setSearchError] = useState(null);
 
   const categories = ['Tous', 'Littérature', 'Audiobooks', 'Essais', 'Folklore'];
 
@@ -49,19 +71,64 @@ const HomeScreen = ({ navigation }) => {
     loadInitialData();
   }, []);
 
+  useEffect(() => {
+    if (!searchVisible) return;
+
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        setSearchError(null);
+        const payload = await contentsService.search(query, { limit: 20 });
+        if (cancelled) return;
+        const hits = Array.isArray(payload?.hits) ? payload.hits : [];
+        const mapped = hits.map((item) => ({
+          id: item.id || item.content_id,
+          title: item.title || 'Sans titre',
+          author: item.author || 'Auteur inconnu',
+          cover: item.cover_url || 'https://placehold.co/120x180/EEE/AAA?text=Book',
+          type: item.content_type || 'ebook',
+        })).filter((item) => !!item.id);
+        setSearchResults(mapped);
+      } catch (e) {
+        if (cancelled) return;
+        setSearchError('Erreur recherche. Réessaie.');
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 320);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, searchVisible]);
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
       setError(null);
 
       // Charger le profil utilisateur et les données de la page d'accueil en parallèle
-      const [userProfile, homeData] = await Promise.all([
+      const [userProfile, homeData, historyData] = await Promise.all([
         userService.getUserProfile().catch(err => {
           console.warn('Error loading user profile:', err);
           return null;
         }),
         homeService.getHomeData().catch(err => {
           console.warn('Error loading home data:', err);
+          return null;
+        }),
+        homeService.getReadingHistory(1, 20).catch(err => {
+          console.warn('Error loading reading history:', err);
           return null;
         }),
       ]);
@@ -74,18 +141,7 @@ const HomeScreen = ({ navigation }) => {
       // Mettre à jour les données de la page d'accueil
       if (homeData) {
         // Continue Reading - Transformer les données pour le format attendu
-        const continueReadingData = (homeData.continue_reading || []).map(item => ({
-          id: item.content_id || item.id,
-          title: item.title,
-          author: item.author,
-          type: item.content_type === 'audiobook' ? 'audiobook' : 'ebook',
-          progress: (item.progress_percent || 0) / 100,
-          progressText: `${Math.round(item.progress_percent || 0)}% ${
-            item.content_type === 'audiobook' ? 'écoutés' : 'terminés'
-          }`,
-          remainingText: item.remaining_text || '',
-          cover: item.cover_url || 'https://via.placeholder.com/150x200',
-        }));
+        const continueReadingData = (homeData.continue_reading || []).map(mapContinueItem);
         setContinueReading(continueReadingData);
 
         // Nouveautés
@@ -106,19 +162,16 @@ const HomeScreen = ({ navigation }) => {
         }));
         setPopulaires(populairesData);
 
-        // Vérifier s'il y a un audiobook en cours
-        const currentAudiobook = continueReadingData.find(
-          item => item.type === 'audiobook'
-        );
-        if (currentAudiobook) {
-          setCurrentAudio({
-            title: currentAudiobook.title,
-            author: currentAudiobook.author,
-            chapter: 'En cours...', // À améliorer avec les vraies données
-            progress: currentAudiobook.progress,
-            cover: currentAudiobook.cover,
-          });
-        }
+      }
+
+      // Fallback: si /home ne renvoie rien pour "continue_reading",
+      // on utilise l'historique pour alimenter la section "Reprendre".
+      if ((!homeData?.continue_reading || homeData.continue_reading.length === 0) && Array.isArray(historyData?.data)) {
+        const inProgress = historyData.data
+          .filter((item) => !item?.is_completed && Number(item?.progress_percent || 0) > 0)
+          .slice(0, 8)
+          .map(mapContinueItem);
+        setContinueReading(inProgress);
       }
     } catch (err) {
       console.error('Error loading initial data:', err);
@@ -153,7 +206,7 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.subGreeting}>Prêt pour une nouvelle histoire ?</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.searchButton}>
+          <TouchableOpacity style={styles.searchButton} onPress={() => setSearchVisible(true)}>
             <MaterialCommunityIcons name="magnify" size={24} color={tokens.colors.onSurface.light} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
@@ -244,7 +297,6 @@ const HomeScreen = ({ navigation }) => {
           >
             <MaterialCommunityIcons
               name={item.type === 'audiobook' ? 'headphones' : 'play'}
-              size={16}
               color={item.type === 'audiobook' ? '#FFFFFF' : tokens.colors.primary}
             />
             <Text
@@ -331,46 +383,6 @@ const HomeScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderMiniPlayer = () => (
-    <View style={styles.miniPlayer}>
-      <View style={styles.miniPlayerContent}>
-        <View style={styles.miniPlayerLeft}>
-          <Image
-            source={{ uri: currentAudio.cover }}
-            style={styles.miniPlayerCover}
-          />
-          <View style={styles.miniPlayerInfo}>
-            <Text style={styles.miniPlayerTitle}>{currentAudio.title}</Text>
-            <Text style={styles.miniPlayerSubtitle}>
-              {currentAudio.author} • {currentAudio.chapter}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.miniPlayerControls}>
-          <TouchableOpacity style={styles.miniPlayerButton}>
-            <MaterialCommunityIcons name="rewind" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.miniPlayerPlayButton}
-            onPress={() => setIsAudioPlaying(!isAudioPlaying)}
-          >
-            <MaterialCommunityIcons
-              name={isAudioPlaying ? 'pause' : 'play'}
-              size={24}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.miniPlayerButton}>
-            <MaterialCommunityIcons name="fast-forward" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      <View style={styles.miniPlayerProgress}>
-        <View style={[styles.miniPlayerProgressBar, { width: `${currentAudio.progress * 100}%` }]} />
-      </View>
-    </View>
-  );
-
   const renderBottomNav = () => (
     <View style={styles.bottomNav}>
       <TouchableOpacity style={styles.navItem}>
@@ -415,7 +427,6 @@ const HomeScreen = ({ navigation }) => {
         {populaires.length > 0 && renderPopulaires()}
         <View style={{ height: 180 }} />
       </ScrollView>
-      {currentAudio && renderMiniPlayer()}
       {renderBottomNav()}
       <Snackbar
         visible={!!error}
@@ -428,6 +439,90 @@ const HomeScreen = ({ navigation }) => {
       >
         {error}
       </Snackbar>
+
+      <Modal
+        visible={searchVisible}
+        animationType="slide"
+        onRequestClose={() => setSearchVisible(false)}
+      >
+        <SafeAreaView style={styles.searchModalContainer} edges={['top']}>
+          <View style={styles.searchModalHeader}>
+            <TouchableOpacity
+              style={styles.searchCloseButton}
+              onPress={() => {
+                setSearchVisible(false);
+                setSearchQuery('');
+                setSearchResults([]);
+                setSearchError(null);
+              }}
+            >
+              <MaterialCommunityIcons name="arrow-left" size={22} color={tokens.colors.onSurface.light} />
+            </TouchableOpacity>
+            <Text style={styles.searchModalTitle}>Recherche</Text>
+            <View style={styles.searchCloseButton} />
+          </View>
+
+          <View style={styles.searchInputWrap}>
+            <MaterialCommunityIcons name="magnify" size={20} color="#867465" />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Titre, auteur..."
+              placeholderTextColor="#9a8f86"
+              style={styles.searchInput}
+              autoFocus
+              returnKeyType="search"
+            />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.searchResultsContent}>
+            {searchQuery.trim().length < 2 ? (
+              <Text style={styles.searchHint}>Tape au moins 2 caractères.</Text>
+            ) : null}
+
+            {searchLoading ? (
+              <View style={styles.searchLoadingWrap}>
+                <ActivityIndicator size="small" color={tokens.colors.primary} />
+              </View>
+            ) : null}
+
+            {!searchLoading && searchError ? (
+              <Text style={styles.searchErrorText}>{searchError}</Text>
+            ) : null}
+
+            {!searchLoading && !searchError && searchQuery.trim().length >= 2 && searchResults.length === 0 ? (
+              <Text style={styles.searchHint}>Aucun résultat.</Text>
+            ) : null}
+
+            {searchResults.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.searchResultCard}
+                onPress={() => {
+                  setSearchVisible(false);
+                  navigation.navigate('ContentDetail', { contentId: item.id });
+                }}
+              >
+                <Image source={{ uri: item.cover }} style={styles.searchResultCover} />
+                <View style={styles.searchResultBody}>
+                  <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.searchResultAuthor} numberOfLines={1}>{item.author}</Text>
+                  <View style={styles.searchResultType}>
+                    <MaterialCommunityIcons
+                      name={item.type === 'audiobook' ? 'headphones' : 'book-open-variant'}
+                      size={13}
+                      color="#867465"
+                    />
+                    <Text style={styles.searchResultTypeText}>
+                      {item.type === 'audiobook' ? 'Audio' : 'E-book'}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Bottom Navigation */}
       <BottomNavBar navigation={navigation} activeTab="Home" />
@@ -559,7 +654,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
     borderWidth: 1,
     borderColor: '#e5e0dc',
     shadowColor: '#000',
@@ -568,8 +663,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   continueCardCover: {
-    width: 96,
-    height: 144,
+    width: 88,
+    height: 132,
     borderRadius: 8,
   },
   continueCardContent: {
@@ -593,13 +688,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   continueCardTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: tokens.colors.onSurface.light,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   continueCardAuthor: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#867465',
   },
   continueCardBottom: {
@@ -630,7 +725,7 @@ const styles = StyleSheet.create({
   resumeButton: {
     backgroundColor: 'rgba(181, 101, 29, 0.1)',
     borderRadius: 20,
-    paddingVertical: 8,
+    paddingVertical: 7,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -679,84 +774,6 @@ const styles = StyleSheet.create({
     color: '#867465',
   },
 
-  // Mini Player
-  miniPlayer: {
-    position: 'absolute',
-    bottom: 80,
-    left: 16,
-    right: 16,
-    backgroundColor: 'rgba(29, 24, 18, 0.95)',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  miniPlayerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  miniPlayerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  miniPlayerCover: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  miniPlayerInfo: {
-    flex: 1,
-  },
-  miniPlayerTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  miniPlayerSubtitle: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  miniPlayerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  miniPlayerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  miniPlayerPlayButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: tokens.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  miniPlayerProgress: {
-    position: 'absolute',
-    bottom: 0,
-    left: 48,
-    right: 48,
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 1,
-  },
-  miniPlayerProgressBar: {
-    height: '100%',
-    backgroundColor: tokens.colors.primary,
-    borderRadius: 1,
-  },
-
   // Bottom Navigation
   bottomNav: {
     position: 'absolute',
@@ -784,6 +801,106 @@ const styles = StyleSheet.create({
   navLabelActive: {
     fontWeight: '700',
     color: tokens.colors.primary,
+  },
+
+  // Search modal
+  searchModalContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.backgrounds.light,
+  },
+  searchModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  searchCloseButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: tokens.colors.onBackground.light,
+  },
+  searchInputWrap: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ded6d0',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 46,
+    color: tokens.colors.onBackground.light,
+  },
+  searchResultsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  searchHint: {
+    marginTop: 10,
+    color: '#867465',
+  },
+  searchLoadingWrap: {
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  searchErrorText: {
+    marginTop: 10,
+    color: '#C54545',
+  },
+  searchResultCard: {
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e7dfd8',
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  searchResultCover: {
+    width: 58,
+    height: 84,
+    borderRadius: 6,
+    backgroundColor: '#EFEAE3',
+  },
+  searchResultBody: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  searchResultTitle: {
+    color: tokens.colors.onSurface.light,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  searchResultAuthor: {
+    marginTop: 4,
+    color: '#867465',
+    fontSize: 12,
+  },
+  searchResultType: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  searchResultTypeText: {
+    color: '#867465',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

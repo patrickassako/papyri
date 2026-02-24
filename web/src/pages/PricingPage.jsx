@@ -9,6 +9,11 @@ import {
   Chip,
   CircularProgress,
   Container,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -21,8 +26,13 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import GroupIcon from '@mui/icons-material/Group';
 import { useNavigate } from 'react-router-dom';
 import { subscriptionsService } from '../services/subscriptions.service';
+import * as authService from '../services/auth.service';
+import PublicHeader from '../components/PublicHeader';
 
 const primary = '#f4a825';
 const background = '#f8f7f5';
@@ -88,8 +98,67 @@ function getPlanFamilyKey(plan) {
     .replace(/-an$|-mensuel$|-annuel$/g, '');
 }
 
-function PlanCard({ plan, loadingCheckout, onCheckout }) {
+const MAX_FAMILY_MEMBERS = 10;
+
+function MemberSelector({ count, min, max, onChange }) {
+  return (
+    <Box
+      sx={{
+        mt: 2.4,
+        mb: 0.5,
+        p: 2,
+        borderRadius: '12px',
+        bgcolor: 'rgba(244,168,37,0.07)',
+        border: '1px solid rgba(244,168,37,0.25)',
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.2 }}>
+        <GroupIcon sx={{ fontSize: 18, color: primary }} />
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#5a5047', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Nombre de membres
+        </Typography>
+      </Stack>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <IconButton
+          size="small"
+          onClick={() => onChange(Math.max(min, count - 1))}
+          disabled={count <= min}
+          sx={{ color: count <= min ? '#ccc' : primary, p: 0.5 }}
+        >
+          <RemoveCircleOutlineIcon sx={{ fontSize: 28 }} />
+        </IconButton>
+
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography sx={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1, color: '#1c160d' }}>
+            {count}
+          </Typography>
+          <Typography sx={{ fontSize: '0.72rem', color: '#8a8279', mt: 0.2 }}>
+            {count === min ? `minimum (${min} inclus)` : `${count - min} supplémentaire${count - min > 1 ? 's' : ''}`}
+          </Typography>
+        </Box>
+
+        <IconButton
+          size="small"
+          onClick={() => onChange(Math.min(max, count + 1))}
+          disabled={count >= max}
+          sx={{ color: count >= max ? '#ccc' : primary, p: 0.5 }}
+        >
+          <AddCircleOutlineIcon sx={{ fontSize: 28 }} />
+        </IconButton>
+      </Stack>
+    </Box>
+  );
+}
+
+function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange }) {
   const isPremium = getPlanFamilyKey(plan) === 'personal';
+  const isFamily = getPlanFamilyKey(plan) === 'family';
+
+  const minMembers = Number(plan.includedUsers || 1);
+  const extraUserPriceCents = Number(plan.extraUserPriceCents || 0);
+  const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
+  const computedPriceCents = Number(plan.basePriceCents || 0) + extraMembers * extraUserPriceCents;
+
   return (
     <Box
       sx={{
@@ -125,11 +194,31 @@ function PlanCard({ plan, loadingCheckout, onCheckout }) {
         {planBadge(plan.slug)}
       </Typography>
       <Typography sx={{ mt: 0.5, fontSize: '1.6rem', fontWeight: 800 }}>{plan.name}</Typography>
-      <Box sx={{ mt: 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-        <Typography sx={{ fontSize: '2.4rem', lineHeight: 1, fontWeight: 900 }}>{formatMoney(plan.basePriceCents, plan.currency)}</Typography>
+
+      {/* Member selector for family plans */}
+      {isFamily && membersCount !== undefined && (
+        <MemberSelector
+          count={membersCount}
+          min={minMembers}
+          max={MAX_FAMILY_MEMBERS}
+          onChange={onMembersCountChange}
+        />
+      )}
+
+      <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+        <Typography sx={{ fontSize: '2.4rem', lineHeight: 1, fontWeight: 900 }}>
+          {formatMoney(computedPriceCents, plan.currency)}
+        </Typography>
         <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>/ {plan.durationDays} jours</Typography>
       </Box>
-      {plan.monthlyEquivalentCents ? (
+
+      {isFamily && extraMembers > 0 && (
+        <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d' }}>
+          {formatMoney(plan.basePriceCents, plan.currency)} base · +{formatMoney(extraUserPriceCents, plan.currency)} × {extraMembers}
+        </Typography>
+      )}
+
+      {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d' }}>
           Soit {formatMoney(plan.monthlyEquivalentCents, plan.currency)} / mois
         </Typography>
@@ -137,27 +226,27 @@ function PlanCard({ plan, loadingCheckout, onCheckout }) {
 
       <Button
         fullWidth
-        disabled={loadingCheckout}
-        onClick={() => onCheckout(plan)}
+        disabled={loadingCheckout || actionDisabled}
+        onClick={() => onCheckout(plan, isFamily ? membersCount : undefined)}
         sx={{
           mt: 3,
           height: 46,
-          bgcolor: isPremium ? primary : '#f2f2f2',
-          color: isPremium ? '#111' : '#1c160d',
+          bgcolor: isPremium ? primary : isFamily ? '#1c160d' : '#f2f2f2',
+          color: isPremium || isFamily ? '#fff' : '#1c160d',
           borderRadius: '10px',
           fontWeight: 800,
           '&:hover': {
-            bgcolor: isPremium ? '#e49e22' : '#e8e8e8',
+            bgcolor: isPremium ? '#e49e22' : isFamily ? '#2e2519' : '#e8e8e8',
           },
         }}
       >
-        {loadingCheckout ? 'Chargement...' : planCta(plan.slug)}
+        {loadingCheckout ? 'Chargement...' : actionLabel}
       </Button>
 
       <Stack spacing={1.7} sx={{ mt: 2.2 }}>
         {planFeatures(plan).map((feature) => (
           <Box key={feature} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
-            <CheckCircleOutlineIcon sx={{ color: isPremium ? primary : '#30a46c', fontSize: 20 }} />
+            <CheckCircleOutlineIcon sx={{ color: isPremium ? primary : isFamily ? '#2563eb' : '#30a46c', fontSize: 20 }} />
             <Typography sx={{ fontSize: '0.9rem', color: '#1c160d' }}>{feature}</Typography>
           </Box>
         ))}
@@ -176,6 +265,17 @@ export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [expandedFaq, setExpandedFaq] = useState(() => ({ 'faq-0': true }));
   const [error, setError] = useState('');
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'info' });
+  const showSnack = (message, severity = 'info') => setSnack({ open: true, message, severity });
+  // Payment method dialog state
+  const [paymentDialog, setPaymentDialog] = useState({ open: false, plan: null, membersCount: null, providerBusy: '' });
+  const closePaymentDialog = () => {
+    if (paymentDialog.providerBusy) return; // prevent close while loading
+    setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
+  };
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const [familyMembersCount, setFamilyMembersCount] = useState(3);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -193,6 +293,24 @@ export default function PricingPage() {
     };
 
     loadPlans();
+  }, []);
+
+  useEffect(() => {
+    const loadAuthAndSubscription = async () => {
+      try {
+        const authenticated = await authService.isAuthenticated();
+        setIsAuthenticated(authenticated);
+        if (!authenticated) {
+          setSubscriptionStatus(null);
+          return;
+        }
+        const sub = await subscriptionsService.getMySubscription();
+        setSubscriptionStatus(sub || null);
+      } catch (_) {
+        setSubscriptionStatus(null);
+      }
+    };
+    loadAuthAndSubscription();
   }, []);
 
   const sortedPlans = useMemo(() => {
@@ -242,6 +360,15 @@ export default function PricingPage() {
     [plans]
   );
 
+  // Sync familyMembersCount minimum when billing cycle or plans change
+  useEffect(() => {
+    const familyPlan = sortedPlans.find((p) => getPlanFamilyKey(p) === 'family');
+    if (familyPlan) {
+      const min = Number(familyPlan.includedUsers || 3);
+      setFamilyMembersCount((prev) => Math.max(prev, min));
+    }
+  }, [sortedPlans]);
+
   const toggleFaq = (faqId) => (_, expanded) => {
     setExpandedFaq((prev) => ({
       ...prev,
@@ -249,31 +376,92 @@ export default function PricingPage() {
     }));
   };
 
-  const handleCheckout = async (plan) => {
+  const handleCheckout = async (plan, membersCount) => {
+    const isFamily = getPlanFamilyKey(plan) === 'family';
+    const resolvedUsersLimit = isFamily && membersCount !== undefined
+      ? membersCount
+      : Number(plan.includedUsers || 1);
+
+    const activeSub = Boolean(subscriptionStatus?.isActive && subscriptionStatus?.subscription);
+    const currentSub = subscriptionStatus?.subscription || null;
+    const currentPlanId = currentSub?.plan_id || null;
+    const currentPlanType = String(currentSub?.plan_type || '').toLowerCase();
+    const currentUsersLimit = Number(currentSub?.users_limit || plan.includedUsers || 1);
+    const currentDisplayedPlan = sortedPlans.find((p) => p.id === currentPlanId)
+      || sortedPlans.find((p) => getPlanFamilyKey(p) === getPlanFamilyKey({ slug: currentPlanType }));
+    const currentPrice = Number(currentDisplayedPlan?.basePriceCents || 0);
+    const samePlan = (currentPlanId && currentPlanId === plan.id)
+      || (currentPlanType && getPlanFamilyKey({ slug: currentPlanType }) === getPlanFamilyKey(plan));
+
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    if (activeSub && samePlan) return;
+
     setLoadingCheckoutSlug(plan.slug);
     setError('');
     try {
       if (plan.displayOnlyAnnual) {
-        setError(`Le plan annuel réel pour "${plan.name}" n'est pas encore configuré côté backend.`);
+        showSnack(`Plan annuel pour "${plan.name}" non disponible pour l'instant.`, 'warning');
         return;
       }
 
-      const response = await subscriptionsService.checkout({
-        planId: plan.id,
-        usersLimit: plan.includedUsers,
-      });
-
-      if (response.paymentLink) {
-        window.location.href = response.paymentLink;
+      if (activeSub) {
+        if (Number(plan.basePriceCents || 0) <= currentPrice) {
+          showSnack('Seuls les upgrades vers un plan supérieur sont disponibles ici.', 'warning');
+          return;
+        }
+        await subscriptionsService.changePlan({
+          planId: plan.id,
+          usersLimit: Math.max(currentUsersLimit, resolvedUsersLimit),
+        });
+        showSnack(`✓ Changement vers "${plan.name}" planifié — effectif au prochain cycle.`, 'success');
+        setLoadingCheckoutSlug('');
       } else {
-        setError('Le lien de paiement est indisponible pour ce plan.');
+        // Open payment method dialog — user will choose between Stripe (card) or Flutterwave (mobile money)
+        setLoadingCheckoutSlug('');
+        setPaymentDialog({ open: true, plan, membersCount: resolvedUsersLimit, providerBusy: '' });
       }
     } catch (err) {
       console.error('Checkout error:', err);
-      setError('Connecte-toi puis réessaie pour lancer le paiement.');
-      if (String(err.message || '').toLowerCase().includes('not authenticated')) {
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('not authenticated') || msg.toLowerCase().includes('session expired')) {
         navigate('/login');
+        return;
       }
+      showSnack(msg || 'Une erreur est survenue. Réessaie dans quelques instants.', 'error');
+      setLoadingCheckoutSlug('');
+    }
+  };
+
+  // Called when user picks a payment provider in the dialog
+  const doCheckout = async (provider) => {
+    const { plan, membersCount } = paymentDialog;
+    setPaymentDialog((d) => ({ ...d, providerBusy: provider }));
+    setLoadingCheckoutSlug(plan.slug);
+    try {
+      const response = await subscriptionsService.checkout({
+        planId: plan.id,
+        usersLimit: membersCount,
+        provider,
+      });
+      setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
+      if (response.paymentLink) {
+        window.location.href = response.paymentLink;
+        return;
+      }
+      showSnack('Le lien de paiement est indisponible pour ce plan.', 'warning');
+    } catch (err) {
+      console.error('doCheckout error:', err);
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('not authenticated') || msg.toLowerCase().includes('session expired')) {
+        navigate('/login');
+        return;
+      }
+      showSnack(msg || 'Une erreur est survenue. Réessaie dans quelques instants.', 'error');
+      setPaymentDialog((d) => ({ ...d, providerBusy: '' }));
     } finally {
       setLoadingCheckoutSlug('');
     }
@@ -308,20 +496,12 @@ export default function PricingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: background, color: '#1c160d' }}>
-      <Box sx={{ borderBottom: '1px solid rgba(244,168,37,0.14)', bgcolor: background, position: 'sticky', top: 0, zIndex: 30 }}>
-        <Container maxWidth="lg" sx={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.03rem' }}>emoti numérique</Typography>
-          <Stack direction="row" spacing={3} sx={{ display: { xs: 'none', md: 'flex' } }}>
-            <Typography sx={{ fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => navigate('/catalogue')}>Bibliothèque</Typography>
-            <Typography sx={{ fontSize: '0.9rem' }}>Nouveautés</Typography>
-            <Typography sx={{ fontSize: '0.9rem', color: primary, fontWeight: 700 }}>Tarifs</Typography>
-            <Typography sx={{ fontSize: '0.9rem' }}>À propos</Typography>
-          </Stack>
-          <Button sx={{ bgcolor: primary, color: '#111', borderRadius: '9px', fontWeight: 800, '&:hover': { bgcolor: '#e29d22' } }} onClick={() => navigate('/register')}>
-            S'inscrire
-          </Button>
-        </Container>
-      </Box>
+      <PublicHeader
+        activeKey="pricing"
+        isAuthenticated={isAuthenticated}
+        authenticatedCtaPath="/subscription"
+        background={background}
+      />
 
       <Box sx={{ background: 'linear-gradient(to bottom, rgba(244,168,37,0.12), rgba(244,168,37,0))', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
@@ -393,14 +573,50 @@ export default function PricingPage() {
           </Box>
         ) : (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: `repeat(${Math.max(1, sortedPlans.length)},minmax(0,1fr))` }, gap: 3 }}>
-            {sortedPlans.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                loadingCheckout={loadingCheckoutSlug === plan.slug}
-                onCheckout={handleCheckout}
-              />
-            ))}
+            {sortedPlans.map((plan) => {
+              const activeSub = Boolean(subscriptionStatus?.isActive && subscriptionStatus?.subscription);
+              const currentSub = subscriptionStatus?.subscription || null;
+              const currentPlanId = currentSub?.plan_id || null;
+              const currentPlanType = String(currentSub?.plan_type || '').toLowerCase();
+              const currentDisplayedPlan = sortedPlans.find((p) => p.id === currentPlanId)
+                || sortedPlans.find((p) => getPlanFamilyKey(p) === getPlanFamilyKey({ slug: currentPlanType }));
+              const currentPrice = Number(currentDisplayedPlan?.basePriceCents || 0);
+              const samePlan = activeSub && (
+                (currentPlanId && currentPlanId === plan.id)
+                || (currentPlanType && getPlanFamilyKey({ slug: currentPlanType }) === getPlanFamilyKey(plan))
+              );
+
+              let actionLabel = planCta(plan.slug);
+              let actionDisabled = false;
+              if (!isAuthenticated) {
+                actionLabel = planCta(plan.slug);
+              } else if (samePlan) {
+                actionLabel = 'Plan actuel';
+                actionDisabled = true;
+              } else if (activeSub) {
+                if (Number(plan.basePriceCents || 0) > currentPrice) {
+                  actionLabel = 'Upgrade';
+                } else {
+                  actionLabel = 'Plan inférieur';
+                  actionDisabled = true;
+                }
+              }
+
+              const isFamily = getPlanFamilyKey(plan) === 'family';
+
+              return (
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  loadingCheckout={loadingCheckoutSlug === plan.slug}
+                  onCheckout={handleCheckout}
+                  actionLabel={actionLabel}
+                  actionDisabled={actionDisabled}
+                  membersCount={isFamily ? familyMembersCount : undefined}
+                  onMembersCountChange={isFamily ? setFamilyMembersCount : undefined}
+                />
+              );
+            })}
           </Box>
         )}
       </Container>
@@ -469,8 +685,8 @@ export default function PricingPage() {
             Choisissez un plan et commencez immédiatement.
           </Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 3, justifyContent: 'center' }}>
-            <Button sx={{ bgcolor: '#111', color: '#fff', height: 46, px: 3.2, borderRadius: '10px', fontWeight: 800, '&:hover': { bgcolor: '#000' } }} onClick={() => navigate('/register')}>
-              Créer un compte
+            <Button sx={{ bgcolor: '#111', color: '#fff', height: 46, px: 3.2, borderRadius: '10px', fontWeight: 800, '&:hover': { bgcolor: '#000' } }} onClick={() => navigate(isAuthenticated ? '/subscription' : '/register')}>
+              {isAuthenticated ? 'Mon espace' : 'Créer un compte'}
             </Button>
             <Button sx={{ bgcolor: 'rgba(255,255,255,0.28)', color: '#111', height: 46, px: 3.2, borderRadius: '10px', border: '1px solid rgba(0,0,0,0.1)', fontWeight: 800 }} onClick={() => navigate('/catalogue')}>
               Voir la bibliothèque
@@ -481,10 +697,114 @@ export default function PricingPage() {
 
       <Box sx={{ borderTop: '1px solid #e6e2db', py: 4.2, bgcolor: '#fff' }}>
         <Container maxWidth="lg" sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2.5 }}>
-          <Typography sx={{ fontWeight: 800 }}>emoti numérique</Typography>
-          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>© 2024 Emoti Numérique. Tous droits réservés.</Typography>
+          <Typography sx={{ fontWeight: 800 }}>Papyri</Typography>
+          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>© 2026 Papyri. developpe par Afrik NoCode</Typography>
         </Container>
       </Box>
+
+      {/* Payment method dialog */}
+      <Dialog
+        open={paymentDialog.open}
+        onClose={closePaymentDialog}
+        PaperProps={{ sx: { borderRadius: 4, p: 0.5, maxWidth: 420, width: '100%' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.2rem', pb: 0.5, color: '#1c160d' }}>
+          Choisir le mode de paiement
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: '#8a7f74', mb: 2.5, fontSize: '0.92rem' }}>
+            Sélectionne comment tu souhaites régler ton abonnement{paymentDialog.plan ? ` "${paymentDialog.plan.name}"` : ''}.
+          </Typography>
+          <Stack spacing={1.5}>
+            {/* Stripe — carte bancaire */}
+            <Button
+              fullWidth
+              variant="outlined"
+              disabled={Boolean(paymentDialog.providerBusy)}
+              onClick={() => doCheckout('stripe')}
+              sx={{
+                borderRadius: 3,
+                p: 2,
+                textTransform: 'none',
+                borderColor: '#5469d4',
+                justifyContent: 'flex-start',
+                gap: 2,
+                '&:hover': { bgcolor: '#f0f1ff', borderColor: '#4556c4' },
+                '&.Mui-disabled': { borderColor: '#ccc' },
+              }}
+            >
+              {paymentDialog.providerBusy === 'stripe' ? (
+                <CircularProgress size={22} sx={{ color: '#5469d4', flexShrink: 0 }} />
+              ) : (
+                <Box component="span" sx={{ fontSize: '1.6rem', lineHeight: 1, flexShrink: 0 }}>💳</Box>
+              )}
+              <Stack alignItems="flex-start" spacing={0.2} sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#5469d4' }}>
+                  Carte bancaire
+                </Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: '#888' }}>
+                  Visa, Mastercard · sécurisé par Stripe
+                </Typography>
+              </Stack>
+            </Button>
+
+            {/* Flutterwave — mobile money */}
+            <Button
+              fullWidth
+              variant="outlined"
+              disabled={Boolean(paymentDialog.providerBusy)}
+              onClick={() => doCheckout('flutterwave')}
+              sx={{
+                borderRadius: 3,
+                p: 2,
+                textTransform: 'none',
+                borderColor: '#f9a825',
+                justifyContent: 'flex-start',
+                gap: 2,
+                '&:hover': { bgcolor: '#fff8e1', borderColor: '#f9a825' },
+                '&.Mui-disabled': { borderColor: '#ccc' },
+              }}
+            >
+              {paymentDialog.providerBusy === 'flutterwave' ? (
+                <CircularProgress size={22} sx={{ color: '#f9a825', flexShrink: 0 }} />
+              ) : (
+                <Box component="span" sx={{ fontSize: '1.6rem', lineHeight: 1, flexShrink: 0 }}>📱</Box>
+              )}
+              <Stack alignItems="flex-start" spacing={0.2} sx={{ flex: 1 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#e65100' }}>
+                  Mobile Money
+                </Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: '#888' }}>
+                  MTN, Orange, Wave · via Flutterwave
+                </Typography>
+              </Stack>
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      {/* Snackbar global — visible peu importe le scroll */}
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={snack.severity === 'success' ? 6000 : 8000}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={snack.severity}
+          onClose={() => setSnack((s) => ({ ...s, open: false }))}
+          sx={{ width: '100%', maxWidth: 520, fontWeight: 600 }}
+          action={
+            snack.severity === 'success' ? (
+              <Button color="inherit" size="small" onClick={() => navigate('/subscription')}>
+                Voir mon abonnement →
+              </Button>
+            ) : null
+          }
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

@@ -1,9 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Configuration de l'URL de base de l'API
-const API_BASE_URL = __DEV__
-  ? 'http://192.168.8.108:3001'  // Dev - IP réseau pour iOS physique
-  : 'https://api.bibliotheque-numerique.com';  // Production
+import API_BASE_URL from '../config/api';
 
 /**
  * Récupère le token d'accès depuis AsyncStorage

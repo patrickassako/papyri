@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PaperProvider, Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import theme from './src/theme/theme';
 import * as authService from './src/services/auth.service';
+import { AudioProvider } from './src/context/AudioContext';
+import GlobalMiniPlayer from './src/components/GlobalMiniPlayer';
 
 // Import screens
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -19,13 +21,22 @@ import ProfileScreen from './src/screens/ProfileScreen.simple';
 import HistoryScreen from './src/screens/HistoryScreen.simple';
 import CatalogScreen from './src/screens/CatalogScreen';
 import ContentDetailScreen from './src/screens/ContentDetailScreen';
+import AudioPlayerScreen from './src/screens/AudioPlayerScreen';
+import ReaderScreen from './src/screens/ReaderScreen';
+import BookReaderScreen from './src/screens/BookReaderScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
 
 const Stack = createNativeStackNavigator();
+
+// Screens where mini-player should be hidden
+const HIDE_MINI_PLAYER_SCREENS = ['Onboarding', 'Login', 'Register', 'ForgotPassword', 'AudioPlayer', 'Reader', 'BookReader'];
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState('');
+  const navigationRef = useNavigationContainerRef();
 
   // Load fonts
   const [fontsLoaded] = useFonts({
@@ -40,14 +51,9 @@ export default function App() {
 
   const checkAuthStatus = async () => {
     try {
-      // DEV MODE: Force onboarding to show (comment out after testing)
-      // await AsyncStorage.removeItem('onboarding_complete');
-
-      // Check if user has seen onboarding
       const onboardingComplete = await AsyncStorage.getItem('onboarding_complete');
       setHasSeenOnboarding(onboardingComplete === 'true');
 
-      // Check authentication
       const authenticated = await authService.isAuthenticated();
       setIsAuthenticated(authenticated);
     } catch (error) {
@@ -75,80 +81,124 @@ export default function App() {
     return isAuthenticated ? 'Home' : 'Login';
   };
 
+  const showMiniPlayer = !HIDE_MINI_PLAYER_SCREENS.includes(currentRoute);
+
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer>
-        <StatusBar style="auto" />
-        <Stack.Navigator
-          initialRouteName={getInitialRoute()}
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: '#B5651D',
-            },
-            headerTintColor: '#FFFFFF',
-            headerTitleStyle: {
-              fontWeight: 'bold',
-            },
+      <AudioProvider>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => {
+            setCurrentRoute(navigationRef.getCurrentRoute()?.name || '');
+          }}
+          onStateChange={() => {
+            setCurrentRoute(navigationRef.getCurrentRoute()?.name || '');
           }}
         >
-          {/* Onboarding */}
-          <Stack.Screen
-            name="Onboarding"
-            component={OnboardingScreen}
-            options={{ headerShown: false }}
-          />
+          <View style={{ flex: 1 }}>
+            <StatusBar style="auto" />
+            <Stack.Navigator
+              initialRouteName={getInitialRoute()}
+              screenOptions={{
+                headerStyle: {
+                  backgroundColor: '#B5651D',
+                },
+                headerTintColor: '#FFFFFF',
+                headerTitleStyle: {
+                  fontWeight: 'bold',
+                },
+              }}
+            >
+              {/* Onboarding */}
+              <Stack.Screen
+                name="Onboarding"
+                component={OnboardingScreen}
+                options={{ headerShown: false }}
+              />
 
-          {/* Public routes */}
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ title: 'Connexion' }}
-          />
-          <Stack.Screen
-            name="Register"
-            component={RegisterScreen}
-            options={{ title: 'Inscription' }}
-          />
-          <Stack.Screen
-            name="ForgotPassword"
-            component={ForgotPasswordScreen}
-            options={{ title: 'Mot de passe oublié' }}
-          />
+              {/* Public routes */}
+              <Stack.Screen
+                name="Login"
+                component={LoginScreen}
+                options={{ title: 'Connexion' }}
+              />
+              <Stack.Screen
+                name="Register"
+                component={RegisterScreen}
+                options={{ title: 'Inscription' }}
+              />
+              <Stack.Screen
+                name="ForgotPassword"
+                component={ForgotPasswordScreen}
+                options={{ title: 'Mot de passe oublié' }}
+              />
 
-          {/* Protected routes */}
-          <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{
-              title: 'Accueil',
-              headerShown: false
-            }}
-          />
-          <Stack.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={{ title: 'Mon Profil' }}
-          />
-          <Stack.Screen
-            name="History"
-            component={HistoryScreen}
-            options={{ title: 'Historique' }}
-          />
-          <Stack.Screen
-            name="Catalog"
-            component={CatalogScreen}
-            options={{
-              title: 'Catalogue',
-              headerShown: false
-            }}
-          />
-          <Stack.Screen
-            name="ContentDetail"
-            component={ContentDetailScreen}
-            options={{ title: 'Détails' }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
+              {/* Protected routes */}
+              <Stack.Screen
+                name="Home"
+                component={HomeScreen}
+                options={{
+                  title: 'Accueil',
+                  headerShown: false
+                }}
+              />
+              <Stack.Screen
+                name="Profile"
+                component={ProfileScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Subscription"
+                component={SubscriptionScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="History"
+                component={HistoryScreen}
+                options={{ title: 'Historique' }}
+              />
+              <Stack.Screen
+                name="Catalog"
+                component={CatalogScreen}
+                options={{
+                  title: 'Catalogue',
+                  headerShown: false
+                }}
+              />
+              <Stack.Screen
+                name="ContentDetail"
+                component={ContentDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Reader"
+                component={ReaderScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="BookReader"
+                component={BookReaderScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Audio Player — full screen modal */}
+              <Stack.Screen
+                name="AudioPlayer"
+                component={AudioPlayerScreen}
+                options={{
+                  headerShown: false,
+                  presentation: 'fullScreenModal',
+                }}
+              />
+            </Stack.Navigator>
+
+            {/* Global MiniPlayer */}
+            {showMiniPlayer && (
+              <GlobalMiniPlayer navigationRef={navigationRef} />
+            )}
+          </View>
+        </NavigationContainer>
+      </AudioProvider>
     </PaperProvider>
   );
 }

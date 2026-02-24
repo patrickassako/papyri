@@ -13,10 +13,10 @@ import {
   HelperText,
   Banner,
 } from 'react-native-paper';
+import API_BASE_URL from '../config/api';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
-const API_URL = 'http://localhost:3001'; // TODO: Configure via environment
 
 const ResetPasswordScreen = ({ route, navigation }) => {
   // Get token from navigation params or deep link
@@ -82,7 +82,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/auth/reset-password`, {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

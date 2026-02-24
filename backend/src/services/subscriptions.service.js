@@ -671,7 +671,63 @@ async function ensureOwnerMembership(subscription) {
     .select()
     .single();
 
+  if (error) {
+    // 23505 = unique_violation: concurrent request already inserted — not an error
+    if (error.code === '23505') return null;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Apply an extra seat purchase to a subscription (idempotent).
+ * Only updates users_limit if current value < targetUsersLimit.
+ *
+ * @param {string} subscriptionId
+ * @param {number} targetUsersLimit - The new desired users_limit
+ * @returns {object} Updated subscription row
+ */
+async function applyExtraSeat(subscriptionId, targetUsersLimit) {
+  const { data: sub, error: subErr } = await supabaseAdmin
+    .from('subscriptions')
+    .select('users_limit, plan_id, plan_type, plan_snapshot, currency, amount')
+    .eq('id', subscriptionId)
+    .single();
+
+  if (subErr) throw subErr;
+
+  // Idempotent guard: already at target or higher
+  if (Number(sub.users_limit) >= targetUsersLimit) {
+    console.log(`ℹ️  applyExtraSeat: already at ${sub.users_limit} seats, target=${targetUsersLimit}, skipping`);
+    return sub;
+  }
+
+  // Recompute monthly amount with new seat count
+  const plan = sub.plan_id ? await getPlan(sub.plan_id) : null;
+  let amountCents;
+  if (plan) {
+    amountCents = computeSubscriptionAmountCents(plan, targetUsersLimit);
+  } else {
+    const snapshot = sub.plan_snapshot || {};
+    const baseCents = Number(snapshot.basePriceCents || Math.round(Number(sub.amount || 0) * 100));
+    const includedUsers = Number(snapshot.includedUsers || 1);
+    const extraCents = Number(snapshot.extraUserPriceCents || 0);
+    amountCents = baseCents + Math.max(0, targetUsersLimit - includedUsers) * extraCents;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('subscriptions')
+    .update({
+      users_limit: targetUsersLimit,
+      amount: toMajorAmount(amountCents),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', subscriptionId)
+    .select()
+    .single();
+
   if (error) throw error;
+  console.log(`✅ applyExtraSeat: subscription ${subscriptionId} → ${targetUsersLimit} seats`);
   return data;
 }
 
@@ -793,6 +849,7 @@ module.exports = {
   applySuccessfulSubscriptionPayment,
   getActiveSubscriptionForMember,
   ensureOwnerMembership,
+  applyExtraSeat,
   getCurrentCycle,
   ensureCurrentCycle,
   ensureMemberCycleUsage,

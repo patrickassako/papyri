@@ -61,19 +61,22 @@ export function useEpubReader({ fileBuffer, containerRef, initialPosition, onErr
           height: '100%',
           spread: 'none',
           flow: 'paginated',
-          allowScriptedContent: true, // Required for EPUB.js iframe rendering
+          allowScriptedContent: false,
         });
 
         // Register sanitization hooks
         try {
-          book.spine?.hooks?.serialize?.register((output) => sanitizeHtmlString(output));
+          book.spine?.hooks?.serialize?.register(function (output) {
+            this.output = sanitizeHtmlString(output);
+          });
         } catch (error) {
           console.error('Erreur enregistrement hook sanitization EPUB:', error);
         }
 
         rendition.hooks.content.register((contents) => {
           try {
-            const doc = contents?.document;
+            if (!contents) return;
+            const doc = contents.document;
             if (!doc) return;
             doc.querySelectorAll('script').forEach((node) => node.remove());
             doc.querySelectorAll('*').forEach((el) => {
@@ -111,10 +114,19 @@ export function useEpubReader({ fileBuffer, containerRef, initialPosition, onErr
 
         // Display at saved position or start
         const savedCfi = initialPosition?.cfi || null;
-        if (savedCfi) {
-          await rendition.display(savedCfi);
-        } else {
-          await rendition.display();
+        try {
+          if (savedCfi) {
+            await rendition.display(savedCfi);
+          } else {
+            await rendition.display();
+          }
+        } catch (displayErr) {
+          console.warn('EPUB: erreur affichage position sauvegardée, reprise au début:', displayErr);
+          try {
+            await rendition.display();
+          } catch (fallbackErr) {
+            console.error('EPUB: impossible d\'afficher le contenu:', fallbackErr);
+          }
         }
 
         // Track position changes

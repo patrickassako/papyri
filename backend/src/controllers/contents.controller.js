@@ -199,16 +199,18 @@ async function unlockContent(req, res) {
 
         if (currentCount < quotaLimit) {
           const nextCount = currentCount + 1;
-          const { error: usageError } = await supabaseAdmin
+          const { data: updatedUsageRow, error: usageError } = await supabaseAdmin
             .from('member_cycle_usage')
             .update({
               [quotaField]: nextCount,
               updated_at: new Date().toISOString(),
             })
             .eq('id', usage.id)
-            .eq(quotaField, currentCount);
+            .eq(quotaField, currentCount)
+            .select('id, text_unlocked_count, audio_unlocked_count')
+            .maybeSingle();
 
-          if (!usageError) {
+          if (!usageError && updatedUsageRow) {
             const unlock = await contentsService.createContentUnlock({
               user_id: userId,
               content_id: content.id,
@@ -262,13 +264,15 @@ async function unlockContent(req, res) {
             updatePayload.consumed_at = new Date().toISOString();
           }
 
-          const { error: bonusUpdateError } = await supabaseAdmin
+          const { data: updatedBonusRow, error: bonusUpdateError } = await supabaseAdmin
             .from('bonus_credits')
             .update(updatePayload)
             .eq('id', bonusCredit.id)
-            .eq('quantity_used', bonusCredit.quantity_used);
+            .eq('quantity_used', bonusCredit.quantity_used)
+            .select('id, quantity_used')
+            .maybeSingle();
 
-          if (!bonusUpdateError) {
+          if (!bonusUpdateError && updatedBonusRow) {
             const unlock = await contentsService.createContentUnlock({
               user_id: userId,
               content_id: content.id,
@@ -334,6 +338,12 @@ async function unlockContent(req, res) {
       });
     }
 
+    // Detect origin for correct redirect (Vite=5173, CRA=3000, etc.)
+    const requestOrigin = req.headers.origin;
+    const redirectBaseUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(requestOrigin || ''))
+      ? requestOrigin
+      : undefined;
+
     const checkout = await flutterwaveService.initiateCheckout({
       amount: finalPriceCents / 100,
       currency: content.price_currency || 'USD',
@@ -342,6 +352,7 @@ async function unlockContent(req, res) {
       userId,
       txPrefix: 'CNT',
       redirectPath: `/catalogue/${content.id}`,
+      redirectBaseUrl,
       title: 'Papyri - Déblocage contenu',
       description: `Déblocage: ${content.title}`,
       meta: {

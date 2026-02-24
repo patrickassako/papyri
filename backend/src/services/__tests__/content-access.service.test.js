@@ -16,7 +16,7 @@ describe('content-access.service', () => {
     jest.clearAllMocks();
   });
 
-  it('allows read for subscription content when user has active subscription', async () => {
+  it('requires unlock for subscription content even when user has active subscription', async () => {
     contentsService.getContentByIdForUnlock.mockResolvedValue({
       id: 'c-1',
       access_type: 'subscription',
@@ -36,8 +36,8 @@ describe('content-access.service', () => {
       contentId: 'c-1',
     });
 
-    expect(result.access.can_read).toBe(true);
-    expect(result.access.denial).toBeNull();
+    expect(result.access.can_read).toBe(false);
+    expect(result.access.denial.code).toBe('SUBSCRIPTION_UNLOCK_REQUIRED');
     expect(result.access.has_active_subscription).toBe(true);
   });
 

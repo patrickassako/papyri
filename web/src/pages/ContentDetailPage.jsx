@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { contentsService } from '../services/contents.service';
 import * as authService from '../services/auth.service';
+import { readingService } from '../services/reading.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 
 function formatDuration(seconds) {
@@ -88,6 +89,7 @@ export default function ContentDetailPage() {
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [hasAnySubscription, setHasAnySubscription] = useState(false);
   const [accessInfo, setAccessInfo] = useState(null);
+  const [usageInfo, setUsageInfo] = useState(null);
   const [accessActionLoading, setAccessActionLoading] = useState(false);
   const [accessActionError, setAccessActionError] = useState('');
   const [callbackNotice, setCallbackNotice] = useState('');
@@ -213,9 +215,10 @@ export default function ContentDetailPage() {
           return;
         }
 
-        const [subscriptionResult, accessResult] = await Promise.allSettled([
+        const [subscriptionResult, accessResult, usageResult] = await Promise.allSettled([
           subscriptionsService.getMySubscription(),
           contentsService.getContentAccess(id),
+          subscriptionsService.getMyUsage(),
         ]);
 
         if (!active) return;
@@ -236,6 +239,12 @@ export default function ContentDetailPage() {
         } else {
           setAccessInfo(null);
         }
+
+        if (usageResult.status === 'fulfilled') {
+          setUsageInfo(usageResult.value?.data?.usage || null);
+        } else {
+          setUsageInfo(null);
+        }
       } catch (ctxError) {
         console.error('Erreur contexte utilisateur:', ctxError);
         if (!active) return;
@@ -243,6 +252,7 @@ export default function ContentDetailPage() {
         setHasAnySubscription(false);
         setHasActiveSubscription(false);
         setAccessInfo(null);
+        setUsageInfo(null);
       } finally {
         if (active) setAuthContextLoading(false);
       }
@@ -263,10 +273,6 @@ export default function ContentDetailPage() {
     navigate(`/listen/${id}`);
   };
 
-  const handleAddToList = () => {
-    window.alert('Ajout a ma liste a venir dans Epic 4');
-  };
-
   const isAudiobook = content?.content_type === 'audiobook';
   const accessType = content?.access_type || 'subscription';
   const isSubscriptionBook = ['subscription', 'subscription_or_paid'].includes(accessType);
@@ -282,7 +288,10 @@ export default function ContentDetailPage() {
     accessInfo?.pricing?.final_price_cents ?? Math.max(0, Math.round(basePriceCents * (100 - discountPercent) / 100))
   );
   const isUnlocked = Boolean(accessInfo?.unlocked);
-  const canOpenContent = isUnlocked || (isSubscriptionBook && hasActiveSubscription && !isPaidBook);
+  const canOpenContent = Boolean(accessInfo?.can_read || isUnlocked);
+  const quotaUsed = Number(isAudiobook ? usageInfo?.audio_unlocked_count : usageInfo?.text_unlocked_count || 0);
+  const quotaTotal = Number(isAudiobook ? usageInfo?.audio_quota : usageInfo?.text_quota || 0);
+  const quotaRemaining = Math.max(0, quotaTotal - quotaUsed);
 
   const scenario = useMemo(() => {
     if (!isAuthenticated) return 'guest';
@@ -305,9 +314,9 @@ export default function ContentDetailPage() {
 
   const secondaryActionLabel = useMemo(() => {
     if (scenario === 'guest') return 'Voir les abonnements';
-    if (scenario === 'active_subscriber') return 'Ajouter à ma liste';
+    if (scenario === 'active_subscriber') return isAudiobook ? 'Ajouter a la playlist' : 'Ajouter a ma liste';
     return isPaidBook ? 'Prendre un abonnement' : 'Voir les abonnements';
-  }, [scenario, isPaidBook]);
+  }, [scenario, isPaidBook, isAudiobook]);
 
   const handlePrimaryAccessAction = async () => {
     setAccessActionError('');
@@ -348,8 +357,27 @@ export default function ContentDetailPage() {
         setAccessInfo((prev) => ({
           ...(prev || {}),
           unlocked: true,
+          can_read: true,
           unlock: result.data?.unlock || null,
         }));
+        if (result.data?.cycle_usage) {
+          setUsageInfo((prev) => {
+            const next = { ...(prev || {}) };
+            if (isAudiobook) {
+              next.audio_unlocked_count = Number(result.data.cycle_usage.used || 0);
+              next.audio_quota = Number(result.data.cycle_usage.quota || next.audio_quota || 0);
+            } else {
+              next.text_unlocked_count = Number(result.data.cycle_usage.used || 0);
+              next.text_quota = Number(result.data.cycle_usage.quota || next.text_quota || 0);
+            }
+            return next;
+          });
+        } else {
+          // Refresh usage when source is bonus/paid or when backend does not include cycle_usage.
+          subscriptionsService.getMyUsage()
+            .then((usageRes) => setUsageInfo(usageRes?.data?.usage || null))
+            .catch(() => {});
+        }
 
         if (isAudiobook) {
           handleListen();
@@ -365,9 +393,9 @@ export default function ContentDetailPage() {
     }
   };
 
-  const handleSecondaryAction = () => {
+  const handleSecondaryAction = async () => {
     if (scenario === 'active_subscriber') {
-      handleAddToList();
+      await handleAddToList();
       return;
     }
     navigate('/pricing');
@@ -439,7 +467,7 @@ export default function ContentDetailPage() {
               }}
               onClick={() => navigate('/')}
             >
-              Emoti Numerique
+              Papyri
             </Typography>
             <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 3 }}>
               <Typography sx={{ fontSize: '0.9rem', color: '#58482f', cursor: 'pointer' }} onClick={() => navigate('/catalogue')}>
@@ -480,9 +508,9 @@ export default function ContentDetailPage() {
                   fontSize: '0.8rem',
                   '&:hover': { bgcolor: '#e18f08' }
                 }}
-                onClick={() => navigate(isAuthenticated ? '/pricing' : '/login')}
+                onClick={() => navigate(isAuthenticated ? '/subscription' : '/login')}
               >
-                {isAuthenticated ? "S'abonner" : 'Se connecter'}
+                {isAuthenticated ? 'Mon espace' : 'Se connecter'}
               </Button>
             )}
             <UserCircle2 size={18} color="#6e5a3a" />
@@ -653,9 +681,15 @@ export default function ContentDetailPage() {
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     {isSubscriptionBook
-                      ? 'Ce livre est accessible avec votre abonnement.'
+                      ? 'Débloquez ce livre avec votre abonnement pour consommer votre quota.'
                       : 'Vous pouvez acheter ce livre avec remise abonnement.'}
                   </Typography>
+                  {isSubscriptionBook ? (
+                    <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                      Quota {isAudiobook ? 'audio' : 'texte'}: <strong>{quotaUsed}</strong> / <strong>{quotaTotal}</strong>
+                      {' '}({quotaRemaining} restant{quotaRemaining > 1 ? 's' : ''})
+                    </Typography>
+                  ) : null}
                   {isPaidBook && basePriceCents > 0 ? (
                     <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
                       Prix public: <strong>{formatMoney(basePriceCents, pricingCurrency)}</strong>
@@ -836,10 +870,22 @@ export default function ContentDetailPage() {
       <Box sx={{ mt: 8, py: 4, borderTop: '1px solid #f4efe7' }}>
         <Container maxWidth="lg">
           <Typography sx={{ textAlign: 'center', color: '#9c7e49', fontSize: '0.75rem' }}>
-            © 2024 Emoti Numerique. Bibliotheque de prestige pour lecteurs exigeants.
+            © 2026 Papyri. developpe par Afrik NoCode
           </Typography>
         </Container>
       </Box>
     </Box>
   );
 }
+  const handleAddToList = async () => {
+    try {
+      if (!isAudiobook) {
+        window.alert('Ajout à ma liste (ebook) à finaliser dans Epic 6.');
+        return;
+      }
+      await readingService.addToAudioPlaylist(id);
+      setAccessActionError('Livre audio ajoute a votre playlist.');
+    } catch (err) {
+      setAccessActionError(err?.message || 'Impossible d ajouter ce livre audio a votre playlist.');
+    }
+  };

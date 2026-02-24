@@ -548,39 +548,45 @@ GET /reading-history?page=1&limit=20         [subscriber]
 ### 8.4 Marque-pages
 
 ```
-GET    /contents/:id/bookmarks               [subscriber]
-POST   /contents/:id/bookmarks               [subscriber]
-DELETE /bookmarks/:bookmark_id                [subscriber]
+GET    /api/reading/:content_id/bookmarks    [subscriber]
+POST   /api/reading/:content_id/bookmarks    [subscriber]
+DELETE /api/reading/:content_id/bookmarks/:id [subscriber]
 ```
 
 **Body POST :**
 ```json
 {
-  "position": { "chapter": "ch3", "cfi": "/4/2/8", "percent": 0.42 },
+  "position": { "cfi": "epubcfi(/6/4!/4/2/8)", "percent": 42, "chapter_label": "Chapitre 3" },
   "label": "Passage important"
 }
 ```
+
+> **Note implementation** : Routes implementees dans `backend/src/routes/reading.js`.
+> Migration DB : `docs/migrations/026_bookmarks_highlights.sql`.
 
 ---
 
 ### 8.5 Surlignages
 
 ```
-GET    /contents/:id/highlights              [subscriber]
-POST   /contents/:id/highlights              [subscriber]
-PATCH  /highlights/:highlight_id             [subscriber]
-DELETE /highlights/:highlight_id             [subscriber]
+GET    /api/reading/:content_id/highlights              [subscriber]
+POST   /api/reading/:content_id/highlights              [subscriber]
+DELETE /api/reading/:content_id/highlights/:id           [subscriber]
 ```
 
 **Body POST :**
 ```json
 {
   "text": "Le texte surligne",
+  "cfi_range": "epubcfi(/6/4!/4/2/8,/1:0,/1:22)",
   "position": { "start_cfi": "...", "end_cfi": "...", "chapter": "ch3" },
   "color": "yellow",
   "note": "Note optionnelle"
 }
 ```
+
+> **Note implementation** : `cfi_range` (requis) est le CFI range epub.js utilise pour restaurer le surlignage visuel.
+> Couleurs disponibles : `yellow`, `green`, `blue`, `pink`.
 
 ---
 
@@ -971,13 +977,12 @@ POST /admin/notifications/send               [admin]
 | 23 | PUT | `/reading-history/:content_id` | subscriber | Sauvegarder position |
 | 24 | GET | `/reading-history/:content_id` | subscriber | Recuperer position |
 | 25 | GET | `/reading-history` | subscriber | Historique complet |
-| 26 | GET | `/contents/:id/bookmarks` | subscriber | Lister marque-pages |
-| 27 | POST | `/contents/:id/bookmarks` | subscriber | Creer marque-page |
-| 28 | DELETE | `/bookmarks/:id` | subscriber | Supprimer marque-page |
-| 29 | GET | `/contents/:id/highlights` | subscriber | Lister surlignages |
-| 30 | POST | `/contents/:id/highlights` | subscriber | Creer surlignage |
-| 31 | PATCH | `/highlights/:id` | subscriber | Modifier surlignage |
-| 32 | DELETE | `/highlights/:id` | subscriber | Supprimer surlignage |
+| 26 | GET | `/api/reading/:content_id/bookmarks` | subscriber | Lister marque-pages |
+| 27 | POST | `/api/reading/:content_id/bookmarks` | subscriber | Creer marque-page |
+| 28 | DELETE | `/api/reading/:content_id/bookmarks/:id` | subscriber | Supprimer marque-page |
+| 29 | GET | `/api/reading/:content_id/highlights` | subscriber | Lister surlignages |
+| 30 | POST | `/api/reading/:content_id/highlights` | subscriber | Creer surlignage |
+| 31 | DELETE | `/api/reading/:content_id/highlights/:id` | subscriber | Supprimer surlignage |
 | 33 | GET | `/playlists` | subscriber | Lister playlists |
 | 34 | POST | `/playlists` | subscriber | Creer playlist |
 | 35 | GET | `/playlists/:id` | subscriber | Detail playlist |

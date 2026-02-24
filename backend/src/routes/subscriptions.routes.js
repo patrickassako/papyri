@@ -30,11 +30,19 @@ router.get('/all', authenticate, subscriptionsController.getAllMySubscriptions);
 
 /**
  * POST /api/subscriptions/checkout
- * Initiate subscription payment via Flutterwave
+ * Initiate subscription payment via Flutterwave or Stripe
  * @protected
- * @body {planCode?: string, planId?: string, usersLimit?: number}
+ * @body {planCode?: string, planId?: string, usersLimit?: number, provider?: string}
  */
 router.post('/checkout', authenticate, subscriptionsController.initiateCheckout);
+
+/**
+ * POST /api/subscriptions/buy-extra-seat
+ * Purchase one additional seat for a family subscription (requires payment)
+ * @protected
+ * @body {provider?: 'stripe' | 'flutterwave'}
+ */
+router.post('/buy-extra-seat', authenticate, subscriptionsController.buyExtraSeat);
 
 /**
  * POST /api/subscriptions/cancel
@@ -58,6 +66,14 @@ router.get('/payment-history', authenticate, subscriptionsController.getPaymentH
  * @body {transactionId: string, reference: string}
  */
 router.post('/verify-payment', authenticate, subscriptionsController.verifyPayment);
+
+/**
+ * POST /api/subscriptions/verify-stripe-session
+ * Verify a Stripe Checkout Session after redirect (fallback if webhook missed)
+ * @protected
+ * @body {sessionId: string}
+ */
+router.post('/verify-stripe-session', authenticate, subscriptionsController.verifyStripeSession);
 
 /**
  * POST /api/subscriptions/renew
@@ -131,5 +147,12 @@ router.delete('/members/:userId', authenticate, subscriptionsController.removeMe
  * @body {usersLimit: number}
  */
 router.patch('/users-limit', authenticate, subscriptionsController.updateUsersLimit);
+
+/**
+ * GET /api/subscriptions/payments/:paymentId/invoice
+ * Download PDF invoice for a specific payment
+ * @protected — only the owner of the payment can download it
+ */
+router.get('/payments/:paymentId/invoice', authenticate, subscriptionsController.downloadInvoice);
 
 module.exports = router;

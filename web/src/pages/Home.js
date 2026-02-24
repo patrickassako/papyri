@@ -39,7 +39,7 @@ const Home = () => {
         }}
       >
         <Typography variant="h1" component="h1" color="primary">
-          Bibliothèque Numérique Privée
+          Papyri
         </Typography>
 
         <Typography variant="h2" component="h2">

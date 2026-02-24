@@ -237,10 +237,44 @@ export async function getAccessToken() {
 
 /**
  * Make authenticated API request to backend with Supabase token
+ * Handles token refresh on 401 before giving up.
  * @param {string} url - API endpoint
  * @param {Object} options - Fetch options
  * @returns {Promise<Response>}
  */
+let _refreshPromise = null;
+
+async function refreshTokens() {
+  // Deduplicate concurrent refresh attempts
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const refreshToken = getStoredRefreshToken();
+      if (!refreshToken) return null;
+
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+
+      if (error || !data?.session) {
+        clearTokens();
+        return null;
+      }
+
+      setTokens(data.session.access_token, data.session.refresh_token);
+      return data.session.access_token;
+    } catch {
+      clearTokens();
+      return null;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
 export async function authFetch(url, options = {}) {
   const accessToken = await getAccessToken();
 
@@ -256,8 +290,25 @@ export async function authFetch(url, options = {}) {
 
   const response = await fetch(url, { ...options, headers });
 
-  // If 401, session expired - logout
+  // If 401, attempt token refresh before giving up
   if (response.status === 401) {
+    const newToken = await refreshTokens();
+    if (newToken) {
+      // Retry with refreshed token
+      const retryHeaders = {
+        ...options.headers,
+        'Authorization': `Bearer ${newToken}`,
+      };
+      const retryResponse = await fetch(url, { ...options, headers: retryHeaders });
+      if (retryResponse.status === 401) {
+        // Refresh succeeded but still rejected — force logout
+        await logout();
+        throw new Error('Session expired');
+      }
+      return retryResponse;
+    }
+
+    // No refresh token or refresh failed — logout
     await logout();
     throw new Error('Session expired');
   }

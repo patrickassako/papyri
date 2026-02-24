@@ -21,6 +21,26 @@ export const readingService = {
     return data.data;
   },
 
+  async getChapterFileUrl(contentId, chapterId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/chapters/${chapterId}/file-url`);
+    const contentType = response.headers.get('content-type') || '';
+    let data;
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      await response.text();
+      throw new Error(
+        response.ok
+          ? 'Réponse inattendue du serveur pour le chapitre.'
+          : `Erreur serveur (${response.status}) lors du chargement du chapitre.`
+      );
+    }
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || data?.message || 'Impossible de charger le flux du chapitre.');
+    }
+    return data.data;
+  },
+
   async saveProgress(contentId, { progressPercent, lastPosition, totalTimeSeconds }) {
     const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/progress`, {
       method: 'POST',
@@ -85,5 +105,123 @@ export const readingService = {
     }
 
     return buffer.buffer;
+  },
+
+  // ---- Highlights ----
+
+  async getHighlights(contentId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/highlights`);
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de charger les surlignages.');
+    }
+    return data.data;
+  },
+
+  async createHighlight(contentId, { text, cfi_range, position, color, note }) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/highlights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, cfi_range, position, color: color || 'yellow', note: note || null }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de créer le surlignage.');
+    }
+    return data.data;
+  },
+
+  async deleteHighlight(contentId, highlightId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/highlights/${highlightId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de supprimer le surlignage.');
+    }
+    return data;
+  },
+
+  // ---- Bookmarks ----
+
+  async getBookmarks(contentId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/bookmarks`);
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de charger les marque-pages.');
+    }
+    return data.data;
+  },
+
+  async createBookmark(contentId, { position, label }) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/bookmarks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position, label: label || null }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de créer le marque-page.');
+    }
+    return data.data;
+  },
+
+  async deleteBookmark(contentId, bookmarkId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/bookmarks/${bookmarkId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de supprimer le marque-page.');
+    }
+    return data;
+  },
+
+  // ---- Audio playlist ----
+
+  async getAudioPlaylist() {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/audio/playlist`);
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de charger la playlist audio.');
+    }
+    return data.data;
+  },
+
+  async addToAudioPlaylist(contentId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/audio/playlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_id: contentId }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible d’ajouter ce contenu à la playlist.');
+    }
+    return data.data;
+  },
+
+  async removeFromAudioPlaylist(contentId) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/audio/playlist/${contentId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de retirer ce contenu de la playlist.');
+    }
+    return data.data;
+  },
+
+  async reorderAudioPlaylist(contentIds) {
+    const response = await authFetch(`${API_BASE_URL}/api/reading/audio/playlist/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_ids: contentIds }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message || 'Impossible de réordonner la playlist.');
+    }
+    return data.data;
   },
 };

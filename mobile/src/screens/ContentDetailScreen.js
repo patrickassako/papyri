@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   Image,
   TouchableOpacity,
-  Dimensions
+  Dimensions,
+  Alert,
+  Linking,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,70 +17,307 @@ import { contentsService } from '../services/contents.service';
 import { subscriptionService } from '../services/subscription.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const COVER_WIDTH = SCREEN_WIDTH * 0.5;
+const COVER_WIDTH = Math.min(SCREEN_WIDTH * 0.58, 260);
+
+function formatDuration(seconds) {
+  const value = Number(seconds || 0);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const h = Math.floor(value / 3600);
+  const m = Math.floor((value % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+function formatYear(dateString) {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return null;
+  return String(date.getFullYear());
+}
+
+function mapContentPayload(raw) {
+  const content = raw?.data || raw || {};
+  const categories = Array.isArray(content.categories) ? content.categories : [];
+  return {
+    ...content,
+    categories,
+  };
+}
 
 export default function ContentDetailScreen({ route, navigation }) {
-  const { contentId } = route.params;
+  const { contentId } = route.params || {};
 
   const [content, setContent] = useState(null);
+  const [access, setAccess] = useState(null);
+  const [usageData, setUsageData] = useState(null);
+  const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState(null);
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  const [userSubscription, setUserSubscription] = useState(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, [contentId]);
+    let alive = true;
 
-  const loadData = async () => {
-    try {
-      // Load content and subscription in parallel
-      const [contentData, subscriptionData] = await Promise.all([
-        contentsService.getContentById(contentId),
-        subscriptionService.getCurrentSubscription()
+    const refreshAccessAndUsage = async () => {
+      const [accessResult, usageResult] = await Promise.allSettled([
+        contentsService.getContentAccess(contentId),
+        subscriptionService.getMyUsage(),
       ]);
 
-      setContent(contentData);
-      setUserSubscription(subscriptionData);
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Impossible de charger ce contenu');
-    } finally {
+      if (accessResult.status === 'fulfilled' && alive) {
+        setAccess(accessResult.value || null);
+      }
+      if (usageResult.status === 'fulfilled' && alive) {
+        setUsageData(usageResult.value || null);
+      }
+    };
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [contentResult, subscriptionResult] = await Promise.allSettled([
+          contentsService.getContentById(contentId),
+          subscriptionService.getCurrentSubscription(),
+        ]);
+
+        if (contentResult.status !== 'fulfilled') {
+          throw contentResult.reason || new Error('Impossible de charger le contenu.');
+        }
+
+        const normalized = mapContentPayload(contentResult.value);
+        if (alive) setContent(normalized);
+
+        if (subscriptionResult.status === 'fulfilled' && alive) {
+          setSubscription(subscriptionResult.value || null);
+        }
+
+        await refreshAccessAndUsage();
+      } catch (err) {
+        console.error('Error loading content detail:', err);
+        if (alive) setError('Impossible de charger ce contenu.');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    if (contentId) {
+      load();
+    } else {
+      setError('Contenu introuvable.');
       setLoading(false);
     }
-  };
 
-  const isLocked = () => {
-    // Content is locked if user doesn't have an active subscription
-    // or if content is marked as premium_only
-    if (!userSubscription || userSubscription.status !== 'active') {
-      return true;
+    return () => {
+      alive = false;
+    };
+  }, [contentId]);
+
+  const isAudiobook = useMemo(
+    () => String(content?.content_type || '').toLowerCase() === 'audiobook',
+    [content?.content_type]
+  );
+
+  const hasActiveSubscription = useMemo(
+    () =>
+      access?.has_active_subscription === true
+      || String(subscription?.status || '').toLowerCase() === 'active',
+    [access?.has_active_subscription, subscription?.status]
+  );
+
+  const isLocked = useMemo(() => {
+    if (access && typeof access.can_read === 'boolean') {
+      return !access.can_read;
     }
 
-    // Additional check: if content has a premium_only flag
-    if (content?.premium_only === true) {
-      return !userSubscription;
-    }
+    if (!content) return true;
+
+    const accessType = String(content.access_type || 'subscription').toLowerCase();
+    const subscriptionRequired = accessType === 'subscription' || accessType === 'subscription_or_paid';
+
+    if (content.premium_only) return !hasActiveSubscription;
+    if (subscriptionRequired) return !hasActiveSubscription;
 
     return false;
+  }, [access, content, hasActiveSubscription]);
+
+  const ratingValue = Number(content?.rating || 0);
+
+  const chapterItems = useMemo(() => {
+    if (!isAudiobook) return [];
+
+    const rawChapters = Array.isArray(content?.chapters) ? content.chapters : [];
+    if (rawChapters.length > 0) {
+      return rawChapters.map((ch, idx) => ({
+        id: ch.id || `${idx}`,
+        title: ch.title || `Chapitre ${idx + 1}`,
+        duration: ch.duration_seconds || ch.duration || null,
+      }));
+    }
+
+    return [
+      { id: 'c1', title: 'Introduction', duration: 1800 },
+      { id: 'c2', title: 'Le départ', duration: 2400 },
+      { id: 'c3', title: 'Retour aux sources', duration: 2600 },
+    ];
+  }, [isAudiobook, content?.chapters]);
+
+  const handleSubscribe = () => {
+    Alert.alert('Abonnement requis', 'Ouvre le catalogue pour choisir une offre.');
+    navigation.navigate('Catalog');
   };
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return null;
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
+  const refreshAccessAndUsage = async () => {
+    try {
+      const [accessResult, usageResult] = await Promise.allSettled([
+        contentsService.getContentAccess(content.id || contentId),
+        subscriptionService.getMyUsage(),
+      ]);
+
+      if (accessResult.status === 'fulfilled') {
+        setAccess(accessResult.value || null);
+      }
+      if (usageResult.status === 'fulfilled') {
+        setUsageData(usageResult.value || null);
+      }
+    } catch (err) {
+      console.error('Refresh access error:', err);
+    }
   };
 
-  const formatYear = (dateString) => {
-    if (!dateString) return null;
-    return new Date(dateString).getFullYear();
+  const handleUnlockedAction = () => {
+    if (isAudiobook) {
+      navigation.navigate('AudioPlayer', { contentId: content.id || contentId });
+      return;
+    }
+    const format = String(content?.format || '').toLowerCase();
+    if (format === 'pdf') {
+      navigation.navigate('BookReader', { contentId: content.id || contentId });
+      return;
+    }
+    navigation.navigate('Reader', { contentId: content.id || contentId });
   };
+
+  const handleLockedPrimaryAction = async () => {
+    const denialCode = access?.denial?.code;
+    const canPay = access?.is_purchasable === true;
+
+    if (denialCode === 'NO_ACTIVE_SUBSCRIPTION' && !canPay) {
+      handleSubscribe();
+      return;
+    }
+
+    try {
+      setUnlocking(true);
+      const payload = await contentsService.unlockContent(content.id || contentId);
+      const unlockData = payload?.data || {};
+      const source = unlockData?.source;
+
+      if (source === 'quota') {
+        Alert.alert('Contenu débloqué', 'Débloqué via votre quota abonnement.');
+      } else if (source === 'bonus') {
+        Alert.alert('Contenu débloqué', 'Débloqué via vos crédits bonus.');
+      } else {
+        Alert.alert('Contenu débloqué', 'Accès au contenu accordé.');
+      }
+
+      await refreshAccessAndUsage();
+    } catch (err) {
+      const status = err?.response?.status;
+      const data = err?.response?.data || {};
+      const message = data?.error?.message || 'Impossible de débloquer ce contenu.';
+
+      if (status === 402) {
+        const paymentLink = data?.data?.payment?.payment_link;
+        if (paymentLink) {
+          Alert.alert(
+            'Paiement requis',
+            message,
+            [
+              { text: 'Annuler', style: 'cancel' },
+              {
+                text: 'Payer',
+                onPress: async () => {
+                  try {
+                    await Linking.openURL(paymentLink);
+                  } catch (linkError) {
+                    Alert.alert('Erreur', 'Impossible d’ouvrir le lien de paiement.');
+                  }
+                },
+              },
+            ],
+          );
+          return;
+        }
+      }
+
+      if (status === 403 && data?.error?.code === 'UNLOCK_NOT_ALLOWED') {
+        handleSubscribe();
+        return;
+      }
+
+      Alert.alert('Accès refusé', message);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handlePrimaryAction = () => {
+    if (isLocked) {
+      handleLockedPrimaryAction();
+      return;
+    }
+    handleUnlockedAction();
+  };
+
+  const handleDownload = async () => {
+    try {
+      const payload = await contentsService.getContentFileUrl(content.id || contentId);
+      const signedUrl = payload?.data?.url || payload?.url || null;
+      if (!signedUrl) {
+        Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
+        return;
+      }
+      Alert.alert('Téléchargement', 'Le téléchargement est prêt.');
+    } catch (err) {
+      console.error('Download error:', err);
+      Alert.alert('Erreur', 'Impossible de préparer le téléchargement.');
+    }
+  };
+
+  const handlePlaylist = () => {
+    Alert.alert('Playlist', 'Ajouté à votre playlist audio.');
+  };
+
+  const denialCode = access?.denial?.code;
+  const denialMessage = access?.denial?.message || null;
+  const activeUsage = usageData?.usage || null;
+  const bonuses = usageData?.bonuses || {};
+  const usedCount = Number(
+    isAudiobook ? activeUsage?.audio_unlocked_count : activeUsage?.text_unlocked_count
+  );
+  const quotaCount = Number(
+    isAudiobook ? activeUsage?.audio_quota : activeUsage?.text_quota
+  );
+  const hasQuota = Number.isFinite(quotaCount) && quotaCount > 0;
+  const remainingQuota = hasQuota ? Math.max(0, quotaCount - (Number.isFinite(usedCount) ? usedCount : 0)) : 0;
+  const bonusRemaining = Math.max(
+    0,
+    Number(isAudiobook ? bonuses?.audio || 0 : bonuses?.text || 0) + Number(bonuses?.flex || 0)
+  );
+  const primaryActionLabel = isLocked
+    ? (
+      denialCode === 'NO_ACTIVE_SUBSCRIPTION' && !access?.is_purchasable
+        ? (isAudiobook ? 'S\'abonner pour écouter' : 'S\'abonner pour lire')
+        : 'Débloquer maintenant'
+    )
+    : (isAudiobook ? 'Écouter' : 'Lire maintenant');
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centered}>
           <ActivityIndicator size="large" color="#B5651D" />
         </View>
       </SafeAreaView>
@@ -88,421 +327,296 @@ export default function ContentDetailScreen({ route, navigation }) {
   if (error || !content) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#171412" />
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#171412" />
           </TouchableOpacity>
         </View>
-        <View style={styles.errorContainer}>
+        <View style={styles.centered}>
           <Text style={styles.errorText}>{error || 'Contenu introuvable'}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const isAudiobook = content.content_type === 'audiobook';
-  const locked = isLocked();
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-        <MaterialCommunityIcons name="chevron-left" size={28} color="#171412" />
-      </TouchableOpacity>
-
-      <View style={styles.headerRight}>
-        {!locked && userSubscription?.active && (
-          <View style={styles.subscribedBadge}>
-            <Text style={styles.subscribedBadgeText}>ABONNÉ</Text>
-          </View>
-        )}
-        <TouchableOpacity style={styles.headerButton}>
-          <MaterialCommunityIcons
-            name={locked ? "bookmark-outline" : "share-variant-outline"}
-            size={24}
-            color="#171412"
-          />
-        </TouchableOpacity>
-        {!locked && (
-          <TouchableOpacity style={styles.headerButton}>
-            <MaterialCommunityIcons name="dots-vertical" size={24} color="#171412" />
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-
-  const renderCover = () => (
-    <View style={styles.coverContainer}>
-      <View style={styles.coverWrapper}>
-        <Image
-          source={{ uri: content.cover_url }}
-          style={styles.coverImage}
-          resizeMode="cover"
-        />
-        {locked && (
-          <View style={styles.coverOverlay}>
-            <MaterialCommunityIcons name="lock" size={40} color="rgba(255,255,255,0.5)" />
-          </View>
-        )}
-      </View>
-    </View>
-  );
-
-  const renderTitle = () => (
-    <View style={styles.titleContainer}>
-      <Text style={styles.title}>{content.title}</Text>
-      <Text style={styles.author}>{content.author}</Text>
-    </View>
-  );
-
-  const renderRating = () => {
-    // Only show rating for e-books and if rating exists
-    if (isAudiobook || !content.rating || content.rating === 0) return null;
-
-    return (
-      <View style={styles.ratingContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <MaterialCommunityIcons
-            key={star}
-            name={star <= Math.floor(content.rating) ? "star" : "star-outline"}
-            size={16}
-            color="#D4A017"
-          />
-        ))}
-        <Text style={styles.ratingText}>{content.rating.toFixed(1)}</Text>
-      </View>
-    );
-  };
-
-  const renderMetadataBadges = () => (
-    <View style={styles.metadataBadges}>
-      {content.language && (
-        <View style={styles.metadataBadge}>
-          <MaterialCommunityIcons name="web" size={14} color="#867465" />
-          <Text style={styles.metadataBadgeText}>{content.language.toUpperCase()}</Text>
-        </View>
-      )}
-      {content.categories && content.categories[0] && (
-        <View style={styles.metadataBadge}>
-          <MaterialCommunityIcons name="folder-outline" size={14} color="#867465" />
-          <Text style={styles.metadataBadgeText}>
-            {content.categories[0].name.toUpperCase()}
-          </Text>
-        </View>
-      )}
-      {isAudiobook && content.duration_seconds && (
-        <View style={styles.metadataBadge}>
-          <MaterialCommunityIcons name="clock-outline" size={14} color="#867465" />
-          <Text style={styles.metadataBadgeText}>
-            {formatDuration(content.duration_seconds)}
-          </Text>
-        </View>
-      )}
-      {!isAudiobook && content.page_count && (
-        <View style={styles.metadataBadge}>
-          <MaterialCommunityIcons name="file-outline" size={14} color="#867465" />
-          <Text style={styles.metadataBadgeText}>{content.page_count} PAGES</Text>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderNarrator = () => {
-    if (!isAudiobook || !content.narrator) return null;
-
-    return (
-      <View style={styles.narratorContainer}>
-        <MaterialCommunityIcons name="account-voice" size={16} color="#867465" />
-        <Text style={styles.narratorText}>Lu par {content.narrator}</Text>
-      </View>
-    );
-  };
-
-  const handleSubscribe = () => {
-    // Navigate to subscription page
-    navigation.navigate('Subscription');
-  };
-
-  const handlePrimaryAction = async () => {
-    if (isAudiobook) {
-      // TODO Epic 4: Navigate to audio player
-      navigation.navigate('AudioPlayer', { contentId: content.id });
-    } else {
-      // TODO Epic 4: Navigate to ebook reader
-      navigation.navigate('EbookReader', { contentId: content.id });
-    }
-  };
-
-  const handleDownload = async () => {
-    try {
-      // TODO Epic 3: Implement offline download
-      const { url } = await contentsService.getContentFileUrl(contentId);
-      console.log('Download URL:', url);
-      // Show success message
-      alert('Téléchargement démarré');
-    } catch (err) {
-      console.error('Download error:', err);
-      alert('Erreur lors du téléchargement');
-    }
-  };
-
-  const handleAddToPlaylist = () => {
-    // TODO Epic 3: Implement playlist functionality
-    alert('Ajouté à la playlist');
-  };
-
-  const renderActions = () => {
-    if (locked) {
-      return (
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe}>
-            <MaterialCommunityIcons name="lock" size={20} color="#fff" />
-            <Text style={styles.primaryButtonText}>S'abonner pour lire</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity style={styles.primaryButton} onPress={handlePrimaryAction}>
-          <MaterialCommunityIcons
-            name={isAudiobook ? "play" : "book-open-variant"}
-            size={20}
-            color="#fff"
-          />
-          <Text style={styles.primaryButtonText}>
-            {isAudiobook ? 'Écouter' : 'Lire maintenant'}
-          </Text>
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+          <MaterialCommunityIcons name="arrow-left" size={24} color="#171412" />
         </TouchableOpacity>
 
-        <View style={styles.secondaryActions}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleDownload}>
-            <MaterialCommunityIcons name="download-outline" size={18} color="#B5651D" />
-            <Text style={styles.secondaryButtonText}>Télécharger</Text>
+        <View style={styles.topRight}>
+          {hasActiveSubscription && (
+            <View style={styles.premiumPill}>
+              <MaterialCommunityIcons name="check-decagram" size={13} color="#B5651D" />
+              <Text style={styles.premiumPillText}>ABONNÉ</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.iconButton}>
+            <MaterialCommunityIcons name={isLocked ? 'bookmark-outline' : 'share-variant-outline'} size={22} color="#171412" />
           </TouchableOpacity>
-
-          {isAudiobook && (
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleAddToPlaylist}>
-              <MaterialCommunityIcons name="playlist-music" size={18} color="#B5651D" />
-              <Text style={styles.secondaryButtonText}>Playlist</Text>
+          {!isLocked && (
+            <TouchableOpacity style={styles.iconButton}>
+              <MaterialCommunityIcons name="dots-horizontal" size={22} color="#171412" />
             </TouchableOpacity>
           )}
         </View>
       </View>
-    );
-  };
 
-  const renderLockedBadge = () => {
-    if (!locked) return null;
-
-    return (
-      <View style={styles.lockedBadgeContainer}>
-        <View style={styles.lockedBadge}>
-          <MaterialCommunityIcons name="lock" size={14} color="#D4A017" />
-          <Text style={styles.lockedBadgeText}>CONTENU VERROUILLÉ</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderDescription = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>
-        {isAudiobook ? 'Synopsis' : 'À propos de ce livre'}
-      </Text>
-      <Text
-        style={[styles.description, locked && styles.descriptionLocked]}
-        numberOfLines={isDescriptionExpanded ? undefined : 4}
-      >
-        {content.description}
-      </Text>
-      <TouchableOpacity onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)}>
-        <Text style={styles.readMoreLink}>
-          {isDescriptionExpanded ? 'Voir moins' : 'Lire la suite'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderNarratorSection = () => {
-    if (!isAudiobook || !content.narrator) return null;
-
-    // Check if narrator bio is available, otherwise use default text
-    const narratorBio = content.narrator_bio ||
-      "Écouter l'autrice donner vie à son œuvre apporte une dimension unique à cette expérience littéraire.";
-
-    // Check if narrator is the author
-    const isNarratorAuthor = content.narrator === content.author ||
-      content.narrator?.toLowerCase().includes('auteur') ||
-      content.narrator?.toLowerCase().includes('autrice');
-
-    const sectionTitle = isNarratorAuthor ?
-      (content.narrator?.toLowerCase().includes('autrice') ? 'Narratrice' : 'Narrateur') :
-      'Narration';
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-        <View style={styles.narratorCard}>
-          <View style={styles.narratorAvatar}>
-            <MaterialCommunityIcons name="account" size={32} color="#867465" />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.coverArea}>
+          <View style={styles.coverShadow} />
+          <View style={styles.coverBox}>
+            <Image
+              source={{ uri: content.cover_url || 'https://placehold.co/400x600/DDD/777?text=Cover' }}
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
+            {isAudiobook && !isLocked && (
+              <View style={styles.playOverlay}>
+                <View style={styles.playCircle}>
+                  <MaterialCommunityIcons name="play" size={42} color="#fff" />
+                </View>
+              </View>
+            )}
+            {isLocked && (
+              <View style={styles.lockOverlay}>
+                <MaterialCommunityIcons name="lock" size={38} color="rgba(255,255,255,0.55)" />
+              </View>
+            )}
           </View>
-          <View style={styles.narratorInfo}>
-            <Text style={styles.narratorName}>{content.narrator}</Text>
-            <Text style={styles.narratorBio} numberOfLines={3}>
-              {narratorBio}
+        </View>
+
+        <View style={styles.identityArea}>
+          <Text style={styles.title}>{content.title || 'Titre inconnu'}</Text>
+          <Text style={styles.author}>{content.author || 'Auteur inconnu'}</Text>
+
+          {!isAudiobook && ratingValue > 0 && (
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <MaterialCommunityIcons
+                  key={star}
+                  name={star <= Math.floor(ratingValue) ? 'star' : 'star-outline'}
+                  size={16}
+                  color="#D4A017"
+                />
+              ))}
+              <Text style={styles.ratingText}>{ratingValue.toFixed(1)}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.chipsRow}>
+          {!!content.language && (
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="translate" size={14} color="#B5651D" />
+              <Text style={styles.chipText}>{String(content.language).toUpperCase()}</Text>
+            </View>
+          )}
+          {!!content.categories?.[0]?.name && (
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="book-open-variant" size={14} color="#B5651D" />
+              <Text style={styles.chipText}>{String(content.categories[0].name).toUpperCase()}</Text>
+            </View>
+          )}
+          {isAudiobook && !!content.duration_seconds && (
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="clock-outline" size={14} color="#B5651D" />
+              <Text style={styles.chipText}>{formatDuration(content.duration_seconds)}</Text>
+            </View>
+          )}
+          {!isAudiobook && !!content.page_count && (
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="file-document-outline" size={14} color="#B5651D" />
+              <Text style={styles.chipText}>{content.page_count} PAGES</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.actionsArea}>
+          <TouchableOpacity
+            style={[styles.primaryButton, unlocking ? styles.primaryButtonDisabled : null]}
+            onPress={handlePrimaryAction}
+            disabled={unlocking}
+          >
+            <MaterialCommunityIcons name={isLocked ? 'lock' : (isAudiobook ? 'play-circle' : 'book-open-variant')} size={20} color="#fff" />
+            <Text style={styles.primaryButtonText}>
+              {unlocking ? 'Déblocage...' : primaryActionLabel}
+            </Text>
+          </TouchableOpacity>
+
+          {!isLocked && (
+            <View style={styles.secondaryRow}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleDownload}>
+                <MaterialCommunityIcons name="download" size={18} color="#B5651D" />
+                <Text style={styles.secondaryButtonText}>Télécharger</Text>
+              </TouchableOpacity>
+
+              {isAudiobook && (
+                <TouchableOpacity style={styles.secondaryButton} onPress={handlePlaylist}>
+                  <MaterialCommunityIcons name="playlist-plus" size={18} color="#B5651D" />
+                  <Text style={styles.secondaryButtonText}>Playlist</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+
+        {isLocked && (
+          <View style={styles.lockedLabelWrap}>
+            <View style={styles.lockedLabel}>
+              <MaterialCommunityIcons name="lock" size={13} color="#D4A017" />
+              <Text style={styles.lockedLabelText}>CONTENU VERROUILLÉ</Text>
+            </View>
+            {!!denialMessage && (
+              <Text style={styles.lockedHintText}>{denialMessage}</Text>
+            )}
+          </View>
+        )}
+
+        {isLocked && hasActiveSubscription && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Accès abonnement</Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaKey}>Quota restant</Text>
+              <Text style={styles.metaValue}>
+                {hasQuota ? `${remainingQuota}/${quotaCount}` : '0/0'}
+              </Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaKey}>Bonus disponibles</Text>
+              <Text style={styles.metaValue}>{bonusRemaining}</Text>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{isAudiobook ? 'Synopsis' : 'À propos de ce livre'}</Text>
+          <View>
+            <Text
+              style={[styles.description, isLocked && !descriptionExpanded ? styles.descriptionLocked : null]}
+              numberOfLines={descriptionExpanded ? undefined : (isLocked ? 5 : 4)}
+            >
+              {content.description || 'Description indisponible.'}
+            </Text>
+            {isLocked && !descriptionExpanded && (
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(255,253,245,0)', '#FFFDF5']}
+                style={styles.descriptionFade}
+              />
+            )}
+          </View>
+          <TouchableOpacity onPress={() => setDescriptionExpanded((v) => !v)}>
+            <Text style={styles.linkText}>{descriptionExpanded ? 'Voir moins' : 'Voir plus'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isAudiobook && !isLocked && (
+          <View style={styles.card}>
+            <View style={styles.narrationHead}>
+              <View style={styles.narratorAvatar}>
+                <MaterialCommunityIcons name="account-voice" size={24} color="#867465" />
+              </View>
+              <View style={styles.narratorMeta}>
+                <Text style={styles.narratorLabel}>Narration</Text>
+                <Text style={styles.narratorName}>{content.narrator || 'Narrateur inconnu'}</Text>
+              </View>
+            </View>
+            <Text style={styles.narratorQuote}>
+              {content.narrator_bio || 'Une narration immersive pour une expérience d\'écoute complète.'}
             </Text>
           </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderChapters = () => {
-    if (!isAudiobook) return null;
-
-    // Check if content has chapters (Epic 4 feature)
-    const chapters = content.chapters || [];
-
-    // If no chapters available yet, use mock data for design
-    const displayChapters = chapters.length > 0 ? chapters : [
-      { id: 1, title: "L'appel du Niodior", duration: 2700 },
-      { id: 2, title: "Le retour aux abyssales", duration: 3120 },
-      { id: 3, title: "Terre d'accueil, terre d'exil", duration: 2880 }
-    ];
-
-    const formatChapterDuration = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      return `${mins}m`;
-    };
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Chapitres</Text>
-        {displayChapters.map((chapter, index) => (
-          <TouchableOpacity
-            key={chapter.id}
-            style={styles.chapterItem}
-            onPress={() => {
-              // TODO Epic 4: Navigate to audio player at specific chapter
-              console.log('Play chapter:', chapter.id);
-            }}
-          >
-            <View style={styles.chapterNumber}>
-              <Text style={styles.chapterNumberText}>
-                {(index + 1).toString().padStart(2, '0')}
-              </Text>
-            </View>
-            <View style={styles.chapterInfo}>
-              <Text style={styles.chapterTitle}>{chapter.title}</Text>
-              <Text style={styles.chapterDuration}>
-                {chapter.duration ? formatChapterDuration(chapter.duration) : '45m'}
-              </Text>
-            </View>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#867465" />
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
-  const renderTechnicalInfo = () => {
-    if (isAudiobook) return null;
-
-    // Only show technical info section if at least one field is available
-    const hasAnyInfo = content.publisher || content.published_at || content.isbn;
-    if (!hasAnyInfo) return null;
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Informations techniques</Text>
-        <View style={styles.technicalInfoContainer}>
-          {content.publisher && (
-            <>
-              <View style={styles.technicalInfoRow}>
-                <Text style={styles.technicalInfoLabel}>Éditeur</Text>
-                <Text style={styles.technicalInfoValue}>{content.publisher}</Text>
-              </View>
-              <View style={styles.technicalInfoDivider} />
-            </>
-          )}
-          {content.published_at && (
-            <>
-              <View style={styles.technicalInfoRow}>
-                <Text style={styles.technicalInfoLabel}>Date de parution</Text>
-                <Text style={styles.technicalInfoValue}>{formatYear(content.published_at)}</Text>
-              </View>
-              <View style={styles.technicalInfoDivider} />
-            </>
-          )}
-          {content.isbn && (
-            <View style={styles.technicalInfoRow}>
-              <Text style={styles.technicalInfoLabel}>ISBN</Text>
-              <Text style={styles.technicalInfoValue}>{content.isbn}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  const renderLockedStats = () => {
-    if (!locked) return null;
-
-    return (
-      <View style={styles.lockedStatsContainer}>
-        {content.page_count && (
-          <>
-            <View style={styles.lockedStat}>
-              <Text style={styles.lockedStatLabel}>Pages</Text>
-              <Text style={styles.lockedStatValue}>{content.page_count}</Text>
-            </View>
-            <View style={styles.lockedStatDivider} />
-          </>
         )}
-        {content.duration_seconds && (
-          <>
-            <View style={styles.lockedStat}>
-              <Text style={styles.lockedStatLabel}>Durée</Text>
-              <Text style={styles.lockedStatValue}>
-                {formatDuration(content.duration_seconds)}
-              </Text>
+
+        {isAudiobook && !isLocked && (
+          <View style={styles.card}>
+            <View style={styles.chaptersHeader}>
+              <Text style={styles.sectionTitle}>Chapitres</Text>
+              <Text style={styles.chapterCount}>{chapterItems.length} chapitres</Text>
             </View>
-            <View style={styles.lockedStatDivider} />
-          </>
+            {chapterItems.map((chapter, index) => (
+              <TouchableOpacity
+                key={chapter.id}
+                style={styles.chapterRow}
+                onPress={() => navigation.navigate('AudioPlayer', { contentId: content.id || contentId })}
+              >
+                <Text style={styles.chapterIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                <View style={styles.chapterBody}>
+                  <Text style={styles.chapterTitle}>{chapter.title}</Text>
+                  {!!chapter.duration && <Text style={styles.chapterDuration}>{formatDuration(chapter.duration)}</Text>}
+                </View>
+                <MaterialCommunityIcons name="play-circle-outline" size={20} color="#B5651D" />
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
-        <View style={styles.lockedStat}>
-          <Text style={styles.lockedStatLabel}>Langue</Text>
-          <Text style={styles.lockedStatValue}>
-            {content.language ? content.language.charAt(0).toUpperCase() + content.language.slice(1) : 'Français'}
-          </Text>
-        </View>
-      </View>
-    );
-  };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {renderHeader()}
+        {!isAudiobook && !isLocked && (content.publisher || content.published_at || content.isbn) && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Informations techniques</Text>
+            {!!content.publisher && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaKey}>Éditeur</Text>
+                <Text style={styles.metaValue}>{content.publisher}</Text>
+              </View>
+            )}
+            {!!content.published_at && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaKey}>Date de parution</Text>
+                <Text style={styles.metaValue}>{formatYear(content.published_at)}</Text>
+              </View>
+            )}
+            {!!content.isbn && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaKey}>ISBN</Text>
+                <Text style={styles.metaValue}>{content.isbn}</Text>
+              </View>
+            )}
+          </View>
+        )}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {renderCover()}
-        {renderTitle()}
-        {!locked && renderRating()}
-        {renderMetadataBadges()}
-        {isAudiobook && renderNarrator()}
-        {renderActions()}
-        {renderLockedBadge()}
-        {renderDescription()}
-        {!locked && renderNarratorSection()}
-        {!locked && renderChapters()}
-        {!locked && renderTechnicalInfo()}
-        {locked && renderLockedStats()}
+        {isLocked && (
+          <View style={styles.lockedStatsCard}>
+            {!!content.page_count && (
+              <View style={styles.lockedStatCell}>
+                <Text style={styles.lockedStatLabel}>Pages</Text>
+                <Text style={styles.lockedStatValue}>{content.page_count}</Text>
+              </View>
+            )}
+            {!!content.duration_seconds && (
+              <View style={styles.lockedStatCell}>
+                <Text style={styles.lockedStatLabel}>Durée</Text>
+                <Text style={styles.lockedStatValue}>{formatDuration(content.duration_seconds)}</Text>
+              </View>
+            )}
+            {!!content.language && (
+              <View style={styles.lockedStatCell}>
+                <Text style={styles.lockedStatLabel}>Langue</Text>
+                <Text style={styles.lockedStatValue}>{String(content.language).toUpperCase()}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isLocked && !isAudiobook && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Options</Text>
+            <TouchableOpacity style={styles.optionRow}>
+              <MaterialCommunityIcons name="share-variant-outline" size={18} color="#B5651D" />
+              <Text style={styles.optionText}>Partager l&apos;œuvre</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionRow}>
+              <MaterialCommunityIcons name="eye-outline" size={18} color="#B5651D" />
+              <Text style={styles.optionText}>Lire un aperçu gratuit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionRow}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#c44" />
+              <Text style={styles.optionText}>Signaler un problème</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -511,373 +625,412 @@ export default function ContentDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FBF7F2'
+    backgroundColor: '#FBF7F2',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  errorContainer: {
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24
+    padding: 24,
   },
   errorText: {
     fontSize: 16,
     color: '#867465',
-    textAlign: 'center'
+    textAlign: 'center',
   },
-  header: {
+
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: '#FBF7F2'
+    backgroundColor: '#FBF7F2',
   },
-  headerButton: {
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    borderRadius: 20,
   },
-  headerRight: {
+  premiumPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4
-  },
-  subscribedBadge: {
     backgroundColor: '#FFF3E6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 8
+    borderWidth: 1,
+    borderColor: '#f2dfc8',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 8,
   },
-  subscribedBadgeText: {
+  premiumPillText: {
+    marginLeft: 4,
     fontSize: 10,
     fontWeight: '700',
-    color: '#D4A017',
-    letterSpacing: 1
+    color: '#B5651D',
+    letterSpacing: 0.7,
   },
-  scrollView: {
-    flex: 1
-  },
+
   scrollContent: {
-    paddingBottom: 40
+    paddingBottom: 34,
   },
-  coverContainer: {
+  coverArea: {
     alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 40
+    paddingTop: 6,
+    paddingBottom: 18,
   },
-  coverWrapper: {
+  coverShadow: {
+    position: 'absolute',
+    top: 36,
+    width: COVER_WIDTH,
+    height: COVER_WIDTH * 1.35,
+    borderRadius: 16,
+    backgroundColor: '#000',
+    opacity: 0.08,
+    transform: [{ scale: 0.96 }, { translateY: 14 }],
+  },
+  coverBox: {
     width: COVER_WIDTH,
     aspectRatio: 2 / 3,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#e5e0dc',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12
+    backgroundColor: '#dcd6d0',
+    elevation: 12,
   },
   coverImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
   },
-  coverOverlay: {
+  playOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
-    alignItems: 'center'
-  },
-  titleContainer: {
-    paddingHorizontal: 24,
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 12
+  },
+  playCircle: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+
+  identityArea: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   title: {
-    fontFamily: 'Playfair Display',
-    fontSize: 24,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: '700',
     color: '#171412',
     textAlign: 'center',
-    marginBottom: 8
   },
   author: {
-    fontSize: 16,
+    marginTop: 4,
+    fontSize: 18,
     fontWeight: '500',
     color: '#B5651D',
-    textAlign: 'center'
+    textAlign: 'center',
   },
-  ratingContainer: {
+  ratingRow: {
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginBottom: 12
   },
   ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#171412',
-    marginLeft: 4
+    marginLeft: 6,
+    fontSize: 13,
+    color: '#6a5d50',
+    fontWeight: '700',
   },
-  metadataBadges: {
+
+  chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 24,
-    marginBottom: 16
+    paddingHorizontal: 18,
+    marginBottom: 16,
   },
-  metadataBadge: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    backgroundColor: '#fff7ee',
+    borderColor: '#f2dfc8',
     borderWidth: 1,
-    borderColor: '#e5e0dc'
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginHorizontal: 4,
+    marginVertical: 4,
   },
-  metadataBadgeText: {
+  chipText: {
+    marginLeft: 6,
     fontSize: 11,
-    fontWeight: '600',
-    color: '#867465',
-    letterSpacing: 0.5
+    fontWeight: '700',
+    color: '#B5651D',
+    letterSpacing: 0.6,
   },
-  narratorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 20
-  },
-  narratorText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#867465',
-    fontStyle: 'italic'
-  },
-  actionsContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 24
+
+  actionsArea: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#B5651D',
-    paddingVertical: 16,
-    borderRadius: 28,
-    shadowColor: '#B5651D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6
+    borderRadius: 999,
+    paddingVertical: 14,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.75,
   },
   primaryButtonText: {
+    marginLeft: 8,
     fontSize: 16,
-    fontWeight: '700',
     color: '#fff',
-    letterSpacing: 0.5
+    fontWeight: '700',
   },
-  secondaryActions: {
+  secondaryRow: {
+    marginTop: 10,
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12
   },
   secondaryButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#e5e0dc'
+    borderColor: '#f2dfc8',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    marginHorizontal: 4,
   },
   secondaryButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#B5651D'
-  },
-  lockedBadgeContainer: {
-    alignItems: 'center',
-    marginBottom: 24
-  },
-  lockedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFF3E6',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16
-  },
-  lockedBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#D4A017',
-    letterSpacing: 1
-  },
-  section: {
-    paddingHorizontal: 24,
-    marginBottom: 32
-  },
-  sectionTitle: {
-    fontFamily: 'Playfair Display',
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#171412',
-    marginBottom: 16
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 24,
-    color: '#3d3530',
-    textAlign: 'justify'
-  },
-  descriptionLocked: {
-    color: '#c4bdb7',
-    opacity: 0.6
-  },
-  readMoreLink: {
-    fontSize: 14,
-    fontWeight: '600',
+    marginLeft: 6,
     color: '#B5651D',
-    marginTop: 12
+    fontSize: 13,
+    fontWeight: '700',
   },
-  narratorCard: {
+
+  lockedLabelWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  lockedLabel: {
     flexDirection: 'row',
-    gap: 16,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E6',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  lockedLabelText: {
+    marginLeft: 6,
+    fontSize: 11,
+    color: '#D4A017',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  lockedHintText: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#867465',
+    textAlign: 'center',
+  },
+
+  card: {
+    marginHorizontal: 20,
+    marginBottom: 16,
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e0dc'
+    borderColor: '#e8ddcf',
+    backgroundColor: '#FFFDF5',
   },
-  narratorAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#f5f2ef',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  narratorInfo: {
-    flex: 1,
-    justifyContent: 'center'
-  },
-  narratorName: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#171412',
-    marginBottom: 4
+    marginBottom: 10,
   },
-  narratorBio: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#867465'
+  description: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: '#3d3530',
   },
-  chapterItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ebe6'
+  descriptionLocked: {
+    color: '#867465',
   },
-  chapterNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f5f2ef',
-    justifyContent: 'center',
-    alignItems: 'center'
+  descriptionFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 42,
   },
-  chapterNumberText: {
+  linkText: {
+    marginTop: 10,
     fontSize: 14,
     fontWeight: '700',
-    color: '#B5651D'
+    color: '#B5651D',
   },
-  chapterInfo: {
-    flex: 1
+
+  narrationHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  narratorAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#efe6dc',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  narratorMeta: {
+    marginLeft: 10,
+    flex: 1,
+  },
+  narratorLabel: {
+    fontSize: 11,
+    letterSpacing: 1,
+    color: '#B5651D',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  narratorName: {
+    fontSize: 17,
+    color: '#171412',
+    fontWeight: '700',
+  },
+  narratorQuote: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#6d6155',
+    fontStyle: 'italic',
+  },
+
+  chaptersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  chapterCount: {
+    fontSize: 12,
+    color: '#8c7f72',
+    fontWeight: '600',
+  },
+  chapterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0e7db',
+  },
+  chapterIndex: {
+    width: 28,
+    fontSize: 13,
+    color: '#B5651D',
+    fontWeight: '700',
+  },
+  chapterBody: {
+    flex: 1,
+    paddingRight: 6,
   },
   chapterTitle: {
     fontSize: 15,
+    color: '#1f1915',
     fontWeight: '600',
-    color: '#171412',
-    marginBottom: 2
   },
   chapterDuration: {
-    fontSize: 13,
-    color: '#867465'
+    fontSize: 12,
+    color: '#8c7f72',
+    marginTop: 2,
   },
-  technicalInfoContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e5e0dc',
-    overflow: 'hidden'
-  },
-  technicalInfoRow: {
+
+  metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 16
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0e7db',
   },
-  technicalInfoDivider: {
-    height: 1,
-    backgroundColor: '#f0ebe6',
-    marginHorizontal: 16
-  },
-  technicalInfoLabel: {
+  metaKey: {
     fontSize: 14,
+    color: '#8c7f72',
     fontWeight: '500',
-    color: '#867465'
   },
-  technicalInfoValue: {
+  metaValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#171412'
+    color: '#1f1915',
+    fontWeight: '700',
   },
-  lockedStatsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 24,
-    paddingVertical: 20,
+
+  lockedStatsCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e0dc',
-    marginBottom: 32
+    borderColor: '#e8ddcf',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    paddingVertical: 14,
   },
-  lockedStat: {
+  lockedStatCell: {
     flex: 1,
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#f0e7db',
   },
   lockedStatLabel: {
     fontSize: 12,
+    color: '#8c7f72',
     fontWeight: '500',
-    color: '#867465',
-    marginBottom: 8
+    marginBottom: 6,
   },
   lockedStatValue: {
-    fontSize: 16,
+    fontSize: 15,
+    color: '#171412',
     fontWeight: '700',
-    color: '#171412'
+    textAlign: 'center',
+    paddingHorizontal: 6,
   },
-  lockedStatDivider: {
-    width: 1,
-    backgroundColor: '#e5e0dc'
-  }
+
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0e7db',
+  },
+  optionText: {
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#2d2722',
+    fontWeight: '600',
+  },
 });

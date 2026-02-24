@@ -18,6 +18,8 @@ import {
 import { Search } from 'lucide-react';
 import { contentsService } from '../services/contents.service';
 import ContentCard from '../components/ContentCard';
+import * as authService from '../services/auth.service';
+import PublicHeader from '../components/PublicHeader';
 
 /**
  * Page de catalogue des contenus
@@ -27,12 +29,13 @@ export default function CatalogPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Filtres
   const [contentType, setContentType] = useState('');
   const [language, setLanguage] = useState('');
   const [category, setCategory] = useState('');
-  const [sortBy, setSortBy] = useState('published_at');
+  const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Pagination
@@ -40,6 +43,13 @@ export default function CatalogPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const limit = 12;
+
+  // Auth check
+  useEffect(() => {
+    authService.isAuthenticated()
+      .then((v) => setIsAuthenticated(Boolean(v)))
+      .catch(() => setIsAuthenticated(false));
+  }, []);
 
   // Charger les catégories au montage
   useEffect(() => {
@@ -85,7 +95,7 @@ export default function CatalogPage() {
         order: 'desc'
       };
 
-      if (contentType) params.content_type = contentType;
+      if (contentType) params.type = contentType;
       if (language) params.language = language;
       if (category) params.category = category;
 
@@ -107,26 +117,19 @@ export default function CatalogPage() {
     setError(null);
 
     try {
-      const params = {
-        limit: 20
-      };
-
-      // Ajouter les filtres à la recherche
-      const filters = [];
-      if (contentType) filters.push(`content_type = '${contentType}'`);
-      if (language) filters.push(`language = '${language}'`);
-      if (category) filters.push(`categories = '${category}'`);
-
-      if (filters.length > 0) {
-        params.filter = filters.join(' AND ');
-      }
+      const params = { limit };
+      if (contentType) params.type = contentType;
+      if (language) params.language = language;
+      if (category) params.category = category;
+      if (sortBy) params.sort = sortBy;
 
       const response = await contentsService.search(searchQuery, params);
 
       // Meilisearch retourne { hits: [...], estimatedTotalHits: number }
       setContents(response.hits || []);
-      setTotalItems(response.estimatedTotalHits || 0);
-      setTotalPages(1); // Meilisearch ne fait pas de pagination traditionnelle
+      const total = response.estimatedTotalHits || 0;
+      setTotalItems(total);
+      setTotalPages(Math.ceil(total / limit));
       setPage(1);
     } catch (err) {
       console.error('Erreur recherche:', err);
@@ -145,7 +148,7 @@ export default function CatalogPage() {
     setContentType('');
     setLanguage('');
     setCategory('');
-    setSortBy('published_at');
+    setSortBy('newest');
     setSearchQuery('');
     setPage(1);
   };
@@ -153,7 +156,10 @@ export default function CatalogPage() {
   const activeFiltersCount = [contentType, language, category].filter(Boolean).length;
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh' }}>
+      <PublicHeader activeKey="catalogue" isAuthenticated={isAuthenticated} background="#fcfaf8" />
+
+      <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* En-tête */}
       <Box sx={{ mb: 4 }}>
         <Typography
@@ -263,9 +269,9 @@ export default function CatalogPage() {
                   setPage(1);
                 }}
               >
-                <MenuItem value="published_at">Plus récents</MenuItem>
+                <MenuItem value="newest">Plus récents</MenuItem>
                 <MenuItem value="title">Titre (A-Z)</MenuItem>
-                <MenuItem value="created_at">Date d'ajout</MenuItem>
+                <MenuItem value="popular">Populaires</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -340,6 +346,7 @@ export default function CatalogPage() {
           />
         </Box>
       )}
-    </Container>
+      </Container>
+    </Box>
   );
 }

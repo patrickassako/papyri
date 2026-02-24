@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bibliotheque Num API
-  version: 2026-02-14
+  version: 2026-02-16
   description: API backend complète (état actuel du code)
 servers:
   - url: http://localhost:3001
@@ -157,6 +157,29 @@ paths:
                 new_password: { type: string, minLength: 8 }
       responses:
         '200': { description: OK }
+        '401': { description: Current password invalid }
+        '422': { description: Validation error (too short / same as current) }
+  /users/me/avatar:
+    post:
+      tags: [Users]
+      summary: Upload current user avatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '200': { description: Avatar uploaded and profile updated }
+        '400': { description: Missing file }
+        '401': { description: Unauthorized }
+        '422': { description: Invalid file type/size }
+        '503': { description: Storage not configured }
   /users/me/onboarding-complete:
     post:
       tags: [Users]
@@ -614,7 +637,8 @@ paths:
               required: [progress_percent]
               properties:
                 progress_percent: { type: number, minimum: 0, maximum: 100 }
-                last_position: { type: string, nullable: true }
+                last_position: { type: object, nullable: true }
+                total_time_seconds: { type: integer, minimum: 0 }
       responses:
         '200': { description: Updated }
         '201': { description: Created }
@@ -685,6 +709,212 @@ paths:
         '402': { description: Payment required }
         '403': { description: Subscription required }
         '404': { description: Content not found }
+  /api/reading/{content_id}/chapters/{chapter_id}/file-url:
+    get:
+      tags: [Reading History]
+      summary: Get signed stream URL for a specific audiobook chapter
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: chapter_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+        '402': { description: Payment required }
+        '403': { description: Subscription required }
+        '404': { description: Chapter or content not found }
+  /api/reading/{content_id}/file:
+    get:
+      tags: [Reading History]
+      summary: Proxy binary reading file (EPUB/PDF/Audio) to avoid browser CORS issues
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Binary file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401': { description: Unauthorized }
+        '402': { description: Payment required }
+        '403': { description: Subscription required }
+        '404': { description: Content not found }
+        '503': { description: Storage provider not configured }
+  /api/reading/{content_id}/highlights:
+    get:
+      tags: [Reading History]
+      summary: List highlights for a content
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+    post:
+      tags: [Reading History]
+      summary: Create highlight for a content
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, position]
+              properties:
+                text: { type: string }
+                cfi_range: { type: string, nullable: true }
+                position: { type: object }
+                color: { type: string, example: yellow }
+                note: { type: string, nullable: true }
+      responses:
+        '201': { description: Created }
+        '401': { description: Unauthorized }
+        '422': { description: Invalid payload }
+  /api/reading/{content_id}/highlights/{id}:
+    delete:
+      tags: [Reading History]
+      summary: Delete a highlight
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+        '401': { description: Unauthorized }
+        '404': { description: Not found }
+  /api/reading/{content_id}/bookmarks:
+    get:
+      tags: [Reading History]
+      summary: List bookmarks for a content
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+    post:
+      tags: [Reading History]
+      summary: Create bookmark for a content
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position]
+              properties:
+                position: { type: object }
+                label: { type: string, nullable: true }
+      responses:
+        '201': { description: Created }
+        '401': { description: Unauthorized }
+        '422': { description: Invalid payload }
+  /api/reading/{content_id}/bookmarks/{id}:
+    delete:
+      tags: [Reading History]
+      summary: Delete a bookmark
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+        '401': { description: Unauthorized }
+        '404': { description: Not found }
+  /api/reading/audio/playlist:
+    get:
+      tags: [Reading History]
+      summary: Get personal audiobook playlist
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+        '503': { description: Playlist table missing (migration required) }
+    post:
+      tags: [Reading History]
+      summary: Add audiobook to personal playlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_id]
+              properties:
+                content_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Already exists, playlist returned }
+        '201': { description: Added }
+        '401': { description: Unauthorized }
+        '404': { description: Content not found }
+        '422': { description: Invalid payload or non-audiobook content }
+        '503': { description: Playlist table missing (migration required) }
+  /api/reading/audio/playlist/reorder:
+    put:
+      tags: [Reading History]
+      summary: Reorder audiobook playlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_ids]
+              properties:
+                content_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Reordered }
+        '401': { description: Unauthorized }
+        '422': { description: Invalid reorder payload }
+        '503': { description: Playlist table missing (migration required) }
+  /api/reading/audio/playlist/{content_id}:
+    delete:
+      tags: [Reading History]
+      summary: Remove audiobook from playlist
+      parameters:
+        - in: path
+          name: content_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Removed }
+        '401': { description: Unauthorized }
+        '503': { description: Playlist table missing (migration required) }
 components:
   securitySchemes:
     bearerAuth:

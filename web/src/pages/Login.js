@@ -91,8 +91,8 @@ const Login = () => {
     try {
       await authService.login(formData.email, formData.password);
 
-      // Success - redirect to home
-      navigate('/');
+      // Success - redirect to user dashboard
+      navigate('/dashboard');
     } catch (error) {
       console.error('Login error:', error);
       setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');

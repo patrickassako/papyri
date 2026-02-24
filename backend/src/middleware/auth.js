@@ -55,6 +55,23 @@ async function verifyJWT(req, res, next) {
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
+
+    // Distinguish network/connectivity errors from real auth failures
+    const isNetworkError = error?.message?.includes('fetch failed')
+      || error?.message?.includes('TIMEOUT')
+      || error?.message?.includes('ECONNREFUSED')
+      || error?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT';
+
+    if (isNetworkError) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Service d\'authentification temporairement indisponible.'
+        }
+      });
+    }
+
     return res.status(401).json({
       success: false,
       error: {

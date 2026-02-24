@@ -1,6 +1,6 @@
 # Epic 2 - Abonnements & Paiements (Documentation Complète)
-Date: 2026-02-14
-Statut: In progress avance (base fonctionnelle en production locale)
+Date: 2026-02-16
+Statut: In progress avance (base fonctionnelle stable en environnement local)
 
 ## 1. Objectif Epic 2
 Mettre en place un systeme d'abonnement configurable avec paiement en ligne, activation d'acces, gestion famille/sieges, quotas par membre, bonus credits, historique des paiements, et logique de reduction sur contenus payants.
@@ -16,6 +16,10 @@ Mettre en place un systeme d'abonnement configurable avec paiement en ligne, act
 - Bonus credits avec expiration (12 mois configurable par plan).
 - Historique paiements (`payments`) pour abonnement et unlock contenu.
 - UI backoffice utilisateur: page abonnement complete.
+- Pricing dynamique connecte a `subscription_plans` (mensuel/annuel), FAQ/toggle fonctionnels.
+- Flux unlock contenu corrige: unlock cree uniquement si compteur quota/bonus est vraiment decremente.
+- Regle d'acces lecture alignee: abonnement actif != lecture directe, unlock obligatoire avant lecture.
+- UX pricing adaptee pour utilisateur connecte: plan actuel, upgrade, etat auth dans header.
 - Documentation OpenAPI exposee via `/docs` et `/openapi.yaml`.
 
 ## 3. Modele metier (regles)
@@ -42,12 +46,14 @@ Mettre en place un systeme d'abonnement configurable avec paiement en ligne, act
 - Quotas individuels par membre (meme pour plan famille).
 - Chaque cycle cree/maintient `member_cycle_usage`.
 - Deblocage contenu suit ordre: quota -> bonus -> paiement.
+- Le compteur quota/bonus est consomme au moment du `unlock` (pas pendant la simple lecture).
 - Bonus credits expirent selon `bonus_validity_days` du plan (ex: 365 jours).
 
 ### 3.4 Contenu payant et reduction abonnement
 - Si abonnement actif: reduction appliquee selon `subscription_discount_percent` contenu (ou regle plan, selon usage frontend/backend).
 - Si abonnement inactif: prix plein.
 - L'achat payant cree un unlock permanent pour l'utilisateur (`content_unlocks`).
+- Pour contenu abonnement, l'utilisateur doit d'abord effectuer un unlock (quota/bonus), puis lecture autorisee.
 
 ## 4. Schema de donnees (migrations cle)
 Migrations Epic 2 et extensions appliquees/prevues:
@@ -181,9 +187,13 @@ npm test
   - utiliser email depuis user auth (deja corrige)
 - callback qui ne passe pas
   - verifier `redirectBaseUrl` et port frontend (`3000/5173`)
+- `GET /api/subscriptions/plans` en 500
+  - verifier `subscriptions.controller.getPlans` (log parasite/variable non definie)
+- `POST /api/reading/:content_id/progress` en 500
+  - verifier schema `reading_history`/FK; fallback `skipped` est actif pour ne pas casser la lecture
 
 ## 12. Etat de completion Epic 2
-Etat actuel estime: 83%
+Etat actuel estime: 92%
 
 Done:
 - 2.1 Modele abonnement + page pricing connectee
@@ -192,9 +202,12 @@ Done:
 - 2.5 Verification abonnement/middleware d'acces
 - 2.7 Annulation/changement plan (planifie)
 - 2.8 Historique paiements
+- 2.9 Quotas individuels par membre + bonus credits consommes au unlock
+- 2.10 Unlock contenu (quota/bonus/paiement) avec verification paiement et idempotence
 
 In progress:
 - 2.6 Renouvellement automatique complet (scheduler/job + reminders)
+- 2.11 Hardening QA end-to-end (cas limites concurrency + retries paiement)
 
 Backlog:
 - 2.2 Stripe (si requis business)

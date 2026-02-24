@@ -57,7 +57,8 @@ function requireReadableContent(req, res, next) {
     return next();
   }
 
-  const statusCode = access.denial?.code === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402;
+  const denialCode = access.denial?.code;
+  const statusCode = ['NO_ACTIVE_SUBSCRIPTION', 'SUBSCRIPTION_UNLOCK_REQUIRED'].includes(denialCode) ? 403 : 402;
   return res.status(statusCode).json({
     success: false,
     error: {

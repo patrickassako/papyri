@@ -94,6 +94,91 @@ export async function updateUserProfile(updates) {
 }
 
 /**
+ * Change le mot de passe utilisateur
+ * @param {Object} payload
+ * @param {string} payload.current_password
+ * @param {string} payload.new_password
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function changePassword(payload) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/me/password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.success) {
+      throw new Error(result?.error?.message || result?.message || `HTTP ${response.status}`);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Error changing password:', error);
+    throw error;
+  }
+}
+
+/**
+ * Upload avatar utilisateur (multipart/form-data)
+ * @param {{ uri: string, name?: string, type?: string }} file
+ * @returns {Promise<Object>} Profil mis à jour
+ */
+export async function uploadAvatar(file) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Not authenticated');
+    }
+
+    if (!file?.uri) {
+      throw new Error('Fichier image manquant');
+    }
+
+    const form = new FormData();
+    const normalizedName = file.name || `avatar-${Date.now()}.jpg`;
+    const normalizedType = file.type || 'image/jpeg';
+
+    if (String(file.uri || '').startsWith('data:')) {
+      const blob = await fetch(file.uri).then((r) => r.blob());
+      form.append('avatar', blob, normalizedName);
+    } else {
+      form.append('avatar', {
+        uri: file.uri,
+        name: normalizedName,
+        type: normalizedType,
+      });
+    }
+
+    const response = await fetch(`${API_BASE_URL}/users/me/avatar`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: form,
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.success) {
+      throw new Error(result?.error?.message || result?.message || `HTTP ${response.status}`);
+    }
+
+    return result?.data || null;
+  } catch (error) {
+    console.error('Error uploading avatar:', error);
+    throw error;
+  }
+}
+
+/**
  * Marque l'onboarding comme terminé
  * @returns {Promise<Object>} Résultat
  */
@@ -137,7 +222,7 @@ export async function getSubscriptionStatus() {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`${API_BASE_URL}/subscriptions/status`, {
+    const response = await fetch(`${API_BASE_URL}/api/subscriptions/me`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -150,7 +235,7 @@ export async function getSubscriptionStatus() {
     }
 
     const result = await response.json();
-    return result.data;
+    return result;
   } catch (error) {
     console.error('Error fetching subscription status:', error);
     throw error;

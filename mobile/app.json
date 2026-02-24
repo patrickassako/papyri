@@ -14,13 +14,17 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bibliothequenumerique.app"
+      "bundleIdentifier": "com.bibliothequenumerique.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "package": "com.bibliothequenumerique.app"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      ["expo-av", { "microphonePermission": false }]
     ]
   }
 }

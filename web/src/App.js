@@ -5,11 +5,12 @@ import CssBaseline from '@mui/material/CssBaseline';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import theme from './theme/theme';
+import { AudioProvider } from './context/AudioContext';
+import MiniPlayer from './components/MiniPlayer';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import Home from './pages/Home';
 import LandingPage from './pages/LandingPage';
 import CatalogPage from './pages/CatalogPage';
 import ContentDetailPage from './pages/ContentDetailPage';
@@ -18,6 +19,10 @@ import SubscriptionCallbackPage from './pages/SubscriptionCallbackPage';
 import EReaderPage from './pages/EReaderPage';
 import AudiobookPlayerPage from './pages/AudiobookPlayerPage';
 import SubscriptionPage from './pages/SubscriptionPage';
+import DashboardPage from './pages/DashboardPage';
+import MyListPage from './pages/MyListPage';
+import HistoryPage from './pages/HistoryPage';
+import ProfilePage from './pages/ProfilePage';
 import * as authService from './services/auth.service';
 
 function ProtectedRoute({ children }) {
@@ -62,41 +67,78 @@ function App() {
     <BrowserRouter>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/catalogue" element={<CatalogPage />} />
-          <Route path="/catalogue/:id" element={<ContentDetailPage />} />
-          <Route path="/read/:id" element={<EReaderPage />} />
-          <Route path="/listen/:id" element={<AudiobookPlayerPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/subscription/callback" element={<SubscriptionCallbackPage />} />
+        <AudioProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/subscription"
-            element={
-              <ProtectedRoute>
-                <SubscriptionPage />
-              </ProtectedRoute>
-            }
-          />
+            {/* Catalogue & content */}
+            <Route path="/catalogue" element={<CatalogPage />} />
+            <Route path="/catalogue/:id" element={<ContentDetailPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/subscription/callback" element={<SubscriptionCallbackPage />} />
 
-          {/* Default redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Protected routes */}
+            <Route
+              path="/home"
+              element={<Navigate to="/dashboard" replace />}
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/my-list"
+              element={
+                <ProtectedRoute>
+                  <MyListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/subscription"
+              element={
+                <ProtectedRoute>
+                  <SubscriptionPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Full-screen players */}
+            <Route path="/listen/:id" element={<AudiobookPlayerPage />} />
+            <Route path="/read/:id" element={<EReaderPage />} />
+
+            {/* Default redirect */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+
+          {/* Mini-player global — visible on ALL pages when audio is loaded */}
+          <MiniPlayer />
+        </AudioProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

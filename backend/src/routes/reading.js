@@ -24,6 +24,38 @@ function isMissingReadingHistoryTable(error) {
   return false;
 }
 
+function isNoRowError(error) {
+  return Boolean(error && error.code === 'PGRST116');
+}
+
+function isMissingAudioPlaylistTable(error) {
+  if (!error) return false;
+  if (error.code === '42P01') return true;
+  const message = String(error.message || '').toLowerCase();
+  return message.includes('audio_playlist_items');
+}
+
+function isSkippableReadingHistoryError(error) {
+  if (!error) return false;
+
+  // Missing table handled separately, but keep extra guards for schema drift.
+  if (isMissingReadingHistoryTable(error)) return true;
+
+  // FK violations should NOT be silently skipped — log them so we can diagnose
+  if (error.code === '23503') {
+    console.error('[reading] FK violation on reading_history — user may not exist in legacy users table:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    // Return false so the caller can attempt to fix the FK issue and retry
+    return false;
+  }
+
+  return false;
+}
+
 async function upsertReadingProgress({
   userId,
   contentId,
@@ -52,6 +84,8 @@ async function upsertReadingProgress({
     };
   }
 
+  console.log('[upsertReadingProgress] userId=%s, contentId=%s, progress=%s', userId, contentId, progressPercent);
+
   // Check if reading history entry exists
   const { data: existingHistory, error: existingHistoryError } = await supabaseAdmin
     .from('reading_history')
@@ -61,6 +95,7 @@ async function upsertReadingProgress({
     .single();
 
   if (isMissingReadingHistoryTable(existingHistoryError)) {
+    console.warn('[upsertReadingProgress] reading_history table missing');
     return {
       ok: true,
       status: 200,
@@ -71,6 +106,11 @@ async function upsertReadingProgress({
         data: null,
       },
     };
+  }
+
+  if (existingHistoryError && !isNoRowError(existingHistoryError)) {
+    console.error('[upsertReadingProgress] Unexpected error checking existing history:', existingHistoryError);
+    throw existingHistoryError;
   }
 
   const now = new Date().toISOString();
@@ -85,20 +125,24 @@ async function upsertReadingProgress({
     last_position: normalizeLastPosition(lastPosition),
     last_read_at: now,
     updated_at: now,
+    is_completed: normalizedProgress >= 100,
   };
 
   if (Number.isFinite(normalizedTotalTime) && normalizedTotalTime >= 0) {
     updateData.total_time_seconds = Math.floor(normalizedTotalTime);
   }
 
-  // Set completion if progress >= 100
+  // Set completion timestamps consistently
   if (normalizedProgress >= 100) {
     updateData.is_completed = true;
     updateData.completed_at = now;
+  } else {
+    updateData.completed_at = null;
   }
 
   if (existingHistory) {
     // Update existing entry
+    console.log('[upsertReadingProgress] Updating existing history id=%s', existingHistory.id);
     const { data: updatedHistory, error: updateError } = await supabaseAdmin
       .from('reading_history')
       .update(updateData)
@@ -106,24 +150,12 @@ async function upsertReadingProgress({
       .select()
       .single();
 
-    if (isMissingReadingHistoryTable(updateError)) {
-      return {
-        ok: true,
-        status: 200,
-        payload: {
-          success: true,
-          skipped: true,
-          message: 'reading_history table not available; progress tracking skipped.',
-          data: null,
-        },
-      };
-    }
-
     if (updateError) {
-      console.error('Error updating reading history:', updateError);
+      console.error('[upsertReadingProgress] Update FAILED:', updateError);
       throw new Error('Failed to update reading history');
     }
 
+    console.log('[upsertReadingProgress] Update OK, last_position cfi=%s', updatedHistory?.last_position?.cfi?.slice(0, 50));
     return {
       ok: true,
       status: 200,
@@ -140,30 +172,81 @@ async function upsertReadingProgress({
     updateData.total_time_seconds = 0;
   }
 
+  console.log('[upsertReadingProgress] Inserting new history entry');
   const { data: newHistory, error: insertError } = await supabaseAdmin
     .from('reading_history')
     .insert(updateData)
     .select()
     .single();
 
-  if (isMissingReadingHistoryTable(insertError)) {
-    return {
-      ok: true,
-      status: 200,
-      payload: {
-        success: true,
-        skipped: true,
-        message: 'reading_history table not available; progress tracking skipped.',
-        data: null,
-      },
-    };
-  }
-
   if (insertError) {
-    console.error('Error creating reading history:', insertError);
+    console.error('[upsertReadingProgress] Insert FAILED:', {
+      code: insertError.code,
+      message: insertError.message,
+      details: insertError.details,
+      hint: insertError.hint,
+    });
+
+    // If FK violation on user_id, force-create legacy user row and retry once
+    if (insertError.code === '23503') {
+      console.log('[upsertReadingProgress] FK violation — force-creating legacy user row for', userId);
+      // Try upsert with all common columns
+      const { error: upsertErr } = await supabaseAdmin
+        .from('users')
+        .upsert({
+          id: userId,
+          email: `${userId}@supabase.auth`,
+          password_hash: 'SUPABASE_AUTH_USER',
+          full_name: 'Utilisateur',
+          language: 'fr',
+          role: 'user',
+          is_active: true,
+          onboarding_completed: true,
+        }, { onConflict: 'id', ignoreDuplicates: true });
+
+      if (upsertErr) {
+        console.error('[upsertReadingProgress] User upsert failed:', upsertErr.message, '— trying minimal insert');
+        // Fallback: minimal columns
+        await supabaseAdmin
+          .from('users')
+          .upsert({ id: userId, email: `${userId}@supabase.auth`, password_hash: 'X' },
+            { onConflict: 'id', ignoreDuplicates: true });
+      }
+
+      // Retry the reading_history insert
+      const { data: retryData, error: retryErr } = await supabaseAdmin
+        .from('reading_history')
+        .insert(updateData)
+        .select()
+        .single();
+
+      if (!retryErr && retryData) {
+        console.log('[upsertReadingProgress] Retry insert OK after user creation, id=%s', retryData.id);
+        return {
+          ok: true,
+          status: 201,
+          payload: { success: true, data: retryData },
+        };
+      }
+
+      console.error('[upsertReadingProgress] Retry still failed:', retryErr?.message);
+      return {
+        ok: false,
+        status: 500,
+        payload: {
+          success: false,
+          error: {
+            code: 'FK_VIOLATION',
+            message: `Contrainte FK: exécutez la migration 029_fix_reading_history_fk.sql. Détail: ${insertError.details || insertError.message}`,
+          },
+        },
+      };
+    }
+
     throw new Error('Failed to create reading history');
   }
 
+  console.log('[upsertReadingProgress] Insert OK, id=%s, cfi=%s', newHistory?.id, newHistory?.last_position?.cfi?.slice(0, 50));
   return {
     ok: true,
     status: 201,
@@ -183,16 +266,18 @@ async function ensureLegacyUserRow(user) {
       .maybeSingle();
 
     if (readError) {
+      const msg = String(readError.message || '').toLowerCase();
       // If legacy users table does not exist in this environment, ignore.
-      if (String(readError.message || '').toLowerCase().includes('relation') && String(readError.message || '').toLowerCase().includes('users')) {
+      if (msg.includes('relation') && msg.includes('users')) {
         return;
       }
+      console.warn('[ensureLegacyUserRow] Read error:', readError.message);
       return;
     }
     if (existing) return;
 
     const fallbackEmail = user.email || `${user.id}@local.invalid`;
-    await supabaseAdmin
+    const { error: insertError } = await supabaseAdmin
       .from('users')
       .insert({
         id: user.id,
@@ -204,9 +289,87 @@ async function ensureLegacyUserRow(user) {
         is_active: true,
         onboarding_completed: true,
       });
-  } catch (_) {
-    // Best effort only to support legacy FK on reading_history.user_id.
+
+    if (insertError) {
+      console.error('[ensureLegacyUserRow] Insert FAILED for user', user.id, ':', insertError.message, insertError.details || '');
+    } else {
+      console.log('[ensureLegacyUserRow] Created legacy user row for', user.id);
+    }
+  } catch (err) {
+    console.error('[ensureLegacyUserRow] Unexpected error:', err.message);
   }
+}
+
+async function getUserAudioPlaylist(userId) {
+  const { data: items, error: itemsError } = await supabaseAdmin
+    .from('audio_playlist_items')
+    .select(`
+      id,
+      content_id,
+      position_index,
+      created_at,
+      contents (
+        id,
+        title,
+        author,
+        content_type,
+        format,
+        cover_url,
+        duration_seconds,
+        language
+      )
+    `)
+    .eq('user_id', userId)
+    .order('position_index', { ascending: true });
+
+  if (itemsError) {
+    if (isMissingAudioPlaylistTable(itemsError)) {
+      return {
+        missingTable: true,
+        items: [],
+      };
+    }
+    throw itemsError;
+  }
+
+  const contentIds = (items || []).map((item) => item.content_id);
+  let progressByContentId = new Map();
+
+  if (contentIds.length > 0) {
+    const { data: progressRows, error: progressError } = await supabaseAdmin
+      .from('reading_history')
+      .select('content_id, progress_percent, last_position, last_read_at, is_completed')
+      .eq('user_id', userId)
+      .in('content_id', contentIds);
+
+    if (!progressError && Array.isArray(progressRows)) {
+      progressByContentId = new Map(progressRows.map((row) => [row.content_id, row]));
+    }
+  }
+
+  const playlist = (items || []).map((item) => {
+    const progress = progressByContentId.get(item.content_id) || null;
+    return {
+      id: item.id,
+      content_id: item.content_id,
+      position_index: Number(item.position_index || 0),
+      added_at: item.created_at,
+      content: item.contents || null,
+      progress: progress
+        ? {
+            progress_percent: Number(progress.progress_percent || 0),
+            last_position: progress.last_position || null,
+            last_read_at: progress.last_read_at || null,
+            is_completed: Boolean(progress.is_completed),
+          }
+        : null,
+    };
+  });
+
+  return {
+    missingTable: false,
+    items: playlist,
+  };
 }
 
 /**
@@ -238,7 +401,7 @@ router.get('/reading-history', verifyJWT, async (req, res, next) => {
           id,
           title,
           author,
-          type,
+          content_type,
           format,
           cover_url,
           duration_seconds
@@ -259,7 +422,7 @@ router.get('/reading-history', verifyJWT, async (req, res, next) => {
       content_id: item.content_id,
       title: item.contents?.title || 'Titre inconnu',
       author: item.contents?.author || 'Auteur inconnu',
-      content_type: item.contents?.type || 'unknown',
+      content_type: item.contents?.content_type || 'unknown',
       format: item.contents?.format || null,
       cover_url: item.contents?.cover_url || null,
       duration_seconds: item.contents?.duration_seconds || null,
@@ -360,12 +523,16 @@ router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next)
       content.content_type
     );
 
-    const { data: history } = await supabaseAdmin
+    const { data: history, error: historyError } = await supabaseAdmin
       .from('reading_history')
       .select('*')
       .eq('user_id', userId)
       .eq('content_id', contentId)
       .maybeSingle();
+
+    console.log('[session] userId=%s, contentId=%s, hasHistory=%s, historyError=%s, cfi=%s',
+      userId, contentId, !!history, historyError?.message || 'none',
+      history?.last_position?.cfi?.slice(0, 50) || 'none');
 
     return res.status(200).json({
       success: true,
@@ -489,31 +656,74 @@ router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next
     const content = accessContext.content;
     let chapters = [];
 
-    const metadataChapters = Array.isArray(content?.metadata?.chapters) ? content.metadata.chapters : null;
-    if (metadataChapters && metadataChapters.length > 0) {
-      chapters = metadataChapters;
-    } else if (content.content_type === 'audiobook') {
-      const total = Number(content.duration_seconds || 0);
-      const chunk = 600; // 10 min fallback
-      const count = Math.max(1, Math.ceil(total / chunk));
-      chapters = Array.from({ length: count }).map((_, idx) => {
-        const start = idx * chunk;
-        const end = Math.min(total, (idx + 1) * chunk);
-        return {
-          id: `ch-${idx + 1}`,
-          title: `Chapitre ${idx + 1}`,
-          start_seconds: start,
-          end_seconds: end,
-        };
-      });
-    } else {
-      chapters = [
-        {
-          id: 'intro',
-          title: 'Introduction',
-          index: 1,
-        },
-      ];
+    // Priority #1: Structured chapters from DB
+    if (content.content_type === 'audiobook') {
+      const { data: dbChapters, error: dbChaptersError } = await supabaseAdmin
+        .from('audiobook_chapters')
+        .select(`
+          id,
+          chapter_number,
+          title,
+          start_seconds,
+          end_seconds,
+          duration_seconds,
+          chapter_content_id,
+          chapter_file_key,
+          chapter_format
+        `)
+        .eq('parent_content_id', content.id)
+        .order('chapter_number', { ascending: true });
+
+      if (!dbChaptersError && Array.isArray(dbChapters) && dbChapters.length > 0) {
+        chapters = dbChapters.map((row) => ({
+          id: row.id,
+          index: Number(row.chapter_number || 0),
+          title: row.title || `Chapitre ${row.chapter_number || ''}`.trim(),
+          start_seconds: Number(row.start_seconds || 0),
+          end_seconds: row.end_seconds == null ? null : Number(row.end_seconds),
+          duration_seconds: row.duration_seconds == null ? null : Number(row.duration_seconds),
+          content_id: row.chapter_content_id || null,
+          file_key: row.chapter_file_key || null,
+          format: row.chapter_format || null,
+        }));
+      }
+    }
+
+    // Priority #2: metadata fallback
+    if (chapters.length === 0) {
+      const metadataChapters = Array.isArray(content?.metadata?.chapters)
+        ? content.metadata.chapters
+        : (Array.isArray(content?.metadata?.toc)
+          ? content.metadata.toc
+          : (Array.isArray(content?.metadata?.table_of_contents)
+            ? content.metadata.table_of_contents
+            : null));
+      if (metadataChapters && metadataChapters.length > 0) {
+        chapters = metadataChapters;
+      } else if (content.content_type === 'audiobook') {
+        // Priority #3: simple generated chunks fallback
+        const total = Number(content.duration_seconds || 0);
+        const chunk = 600; // 10 min fallback
+        const count = Math.max(1, Math.ceil(total / chunk));
+        chapters = Array.from({ length: count }).map((_, idx) => {
+          const start = idx * chunk;
+          const end = Math.min(total, (idx + 1) * chunk);
+          return {
+            id: `ch-${idx + 1}`,
+            title: `Chapitre ${idx + 1}`,
+            start_seconds: start,
+            end_seconds: end,
+          };
+        });
+      } else {
+        chapters = [
+          {
+            id: 'intro',
+            title: 'Introduction',
+            index: 1,
+          },
+        ];
+      }
     }
 
     return res.status(200).json({
@@ -534,6 +744,77 @@ router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next
         },
       });
     }
+    return next(error);
+  }
+});
+
+/**
+ * GET /api/reading/:content_id/chapters/:chapter_id/file-url
+ * Protected endpoint - Return signed URL for a structured audiobook chapter
+ */
+router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const chapterId = req.params.chapter_id;
+
+    const accessContext = await contentAccessService.resolveContentAccess({
+      userId,
+      contentId,
+    });
+
+    if (!accessContext.access.can_read) {
+      const statusCode = accessContext.access.denial?.code === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402;
+      return res.status(statusCode).json({
+        success: false,
+        error: {
+          code: accessContext.access.denial?.code || 'READING_ACCESS_DENIED',
+          message: accessContext.access.denial?.message || 'Accès refusé.',
+        },
+      });
+    }
+
+    let { data: chapter, error: chapterError } = await supabaseAdmin
+      .from('audiobook_chapters')
+      .select('id, parent_content_id, chapter_file_key, chapter_format')
+      .eq('id', chapterId)
+      .eq('parent_content_id', contentId)
+      .maybeSingle();
+
+    if (chapterError) throw chapterError;
+    // Fallback: tolerate legacy/changing parent linkage and resolve by chapter id only.
+    if (!chapter) {
+      const fallbackResult = await supabaseAdmin
+        .from('audiobook_chapters')
+        .select('id, parent_content_id, chapter_file_key, chapter_format')
+        .eq('id', chapterId)
+        .maybeSingle();
+      if (fallbackResult.error) throw fallbackResult.error;
+      chapter = fallbackResult.data || null;
+    }
+
+    if (!chapter) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'CHAPTER_NOT_FOUND',
+          message: 'Chapitre introuvable pour ce livre audio.',
+        },
+      });
+    }
+
+    const fileKey = chapter.chapter_file_key || accessContext.content.file_key;
+    const signedUrl = await contentsService.generateSignedUrl(fileKey, 3600, 'audiobook');
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        chapter_id: chapter.id,
+        url: signedUrl,
+        expires_in: 3600,
+      },
+    });
+  } catch (error) {
     return next(error);
   }
 });
@@ -616,7 +897,7 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
     const userId = req.user.id;
     const limit = parseInt(req.query.limit) || 10;
 
-    // Get incomplete reading history items
+    // Get currently in-progress reading history items
     const { data: history, error: historyError } = await supabaseAdmin
       .from('reading_history')
       .select(`
@@ -629,14 +910,15 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
           id,
           title,
           author,
-          type,
+          content_type,
           format,
           cover_url,
           duration_seconds
         )
       `)
       .eq('user_id', userId)
-      .eq('is_completed', false)
+      .gt('progress_percent', 0)
+      .lt('progress_percent', 100)
       .order('last_read_at', { ascending: false })
       .limit(limit);
 
@@ -651,7 +933,7 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
       content_id: item.content_id,
       title: item.contents?.title || 'Titre inconnu',
       author: item.contents?.author || 'Auteur inconnu',
-      content_type: item.contents?.type || 'unknown',
+      content_type: item.contents?.content_type || 'unknown',
       format: item.contents?.format || null,
       cover_url: item.contents?.cover_url || null,
       duration_seconds: item.contents?.duration_seconds || null,
@@ -666,6 +948,506 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ============================================
+// Highlights CRUD
+// ============================================
+
+/**
+ * GET /api/reading/:content_id/highlights
+ * Protected - List user highlights for a content
+ */
+router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { data, error } = await supabaseAdmin
+      .from('highlights')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('content_id', contentId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching highlights:', error);
+      throw new Error('Failed to fetch highlights');
+    }
+
+    return res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/:content_id/highlights
+ * Protected - Create a highlight
+ */
+router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const { text, cfi_range, position, color, note } = req.body;
+
+    if (!text || !cfi_range || !position) {
+      return res.status(422).json({
+        success: false,
+        error: { code: 'INVALID_HIGHLIGHT', message: 'text, cfi_range et position sont requis.' },
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('highlights')
+      .insert({
+        user_id: userId,
+        content_id: contentId,
+        text,
+        cfi_range,
+        position,
+        color: color || 'yellow',
+        note: note || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating highlight:', error);
+      throw new Error('Failed to create highlight');
+    }
+
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/:content_id/highlights/:id
+ * Protected - Delete a highlight
+ */
+router.delete('/api/reading/:content_id/highlights/:id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const highlightId = req.params.id;
+
+    const { error } = await supabaseAdmin
+      .from('highlights')
+      .delete()
+      .eq('id', highlightId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error deleting highlight:', error);
+      throw new Error('Failed to delete highlight');
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ============================================
+// Bookmarks CRUD
+// ============================================
+
+/**
+ * GET /api/reading/:content_id/bookmarks
+ * Protected - List user bookmarks for a content
+ */
+router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { data, error } = await supabaseAdmin
+      .from('bookmarks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('content_id', contentId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching bookmarks:', error);
+      throw new Error('Failed to fetch bookmarks');
+    }
+
+    return res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/:content_id/bookmarks
+ * Protected - Create a bookmark
+ */
+router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const { position, label } = req.body;
+
+    if (!position) {
+      return res.status(422).json({
+        success: false,
+        error: { code: 'INVALID_BOOKMARK', message: 'position est requis.' },
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('bookmarks')
+      .insert({
+        user_id: userId,
+        content_id: contentId,
+        position,
+        label: label || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating bookmark:', error);
+      throw new Error('Failed to create bookmark');
+    }
+
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/:content_id/bookmarks/:id
+ * Protected - Delete a bookmark
+ */
+router.delete('/api/reading/:content_id/bookmarks/:id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const bookmarkId = req.params.id;
+
+    const { error } = await supabaseAdmin
+      .from('bookmarks')
+      .delete()
+      .eq('id', bookmarkId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error deleting bookmark:', error);
+      throw new Error('Failed to delete bookmark');
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ============================================
+// Audio Playlist (Epic 5)
+// ============================================
+
+/**
+ * GET /api/reading/audio/playlist
+ * Protected - List user personal audiobook playlist
+ */
+router.get('/api/reading/audio/playlist', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const result = await getUserAudioPlaylist(userId);
+
+    if (result.missingTable) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'AUDIO_PLAYLIST_TABLE_MISSING',
+          message: 'La table audio_playlist_items est absente. Exécutez la migration 027_audio_playlist.sql.',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: result.items,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/audio/playlist
+ * Protected - Add an audiobook to personal playlist
+ */
+router.post('/api/reading/audio/playlist', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { content_id: contentId } = req.body || {};
+
+    if (!contentId) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'INVALID_CONTENT_ID',
+          message: 'content_id est requis.',
+        },
+      });
+    }
+
+    const { data: content, error: contentError } = await supabaseAdmin
+      .from('contents')
+      .select('id, content_type')
+      .eq('id', contentId)
+      .maybeSingle();
+
+    if (contentError || !content) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'CONTENT_NOT_FOUND',
+          message: 'Contenu non trouvé.',
+        },
+      });
+    }
+
+    if (content.content_type !== 'audiobook') {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'ONLY_AUDIOBOOK_ALLOWED',
+          message: 'Seuls les contenus audio peuvent être ajoutés à la playlist.',
+        },
+      });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('content_id', contentId)
+      .maybeSingle();
+
+    if (existing) {
+      const playlist = await getUserAudioPlaylist(userId);
+      return res.status(200).json({
+        success: true,
+        data: {
+          already_exists: true,
+          items: playlist.items,
+        },
+      });
+    }
+
+    const { data: lastItem, error: lastItemError } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .select('position_index')
+      .eq('user_id', userId)
+      .order('position_index', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastItemError && !isMissingAudioPlaylistTable(lastItemError)) {
+      throw lastItemError;
+    }
+
+    if (isMissingAudioPlaylistTable(lastItemError)) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'AUDIO_PLAYLIST_TABLE_MISSING',
+          message: 'La table audio_playlist_items est absente. Exécutez la migration 027_audio_playlist.sql.',
+        },
+      });
+    }
+
+    const nextPosition = Number(lastItem?.position_index ?? -1) + 1;
+    const { error: insertError } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .insert({
+        user_id: userId,
+        content_id: contentId,
+        position_index: nextPosition,
+      });
+
+    if (insertError) {
+      if (isMissingAudioPlaylistTable(insertError)) {
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: 'AUDIO_PLAYLIST_TABLE_MISSING',
+            message: 'La table audio_playlist_items est absente. Exécutez la migration 027_audio_playlist.sql.',
+          },
+        });
+      }
+      throw insertError;
+    }
+
+    const playlist = await getUserAudioPlaylist(userId);
+    return res.status(201).json({
+      success: true,
+      data: {
+        items: playlist.items,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * PUT /api/reading/audio/playlist/reorder
+ * Protected - Reorder full playlist by content ids
+ */
+router.put('/api/reading/audio/playlist/reorder', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { content_ids: contentIds } = req.body || {};
+
+    if (!Array.isArray(contentIds)) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'INVALID_PAYLOAD',
+          message: 'content_ids (array) est requis.',
+        },
+      });
+    }
+
+    const { data: currentItems, error: currentError } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .select('id, content_id')
+      .eq('user_id', userId)
+      .order('position_index', { ascending: true });
+
+    if (currentError) {
+      if (isMissingAudioPlaylistTable(currentError)) {
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: 'AUDIO_PLAYLIST_TABLE_MISSING',
+            message: 'La table audio_playlist_items est absente. Exécutez la migration 027_audio_playlist.sql.',
+          },
+        });
+      }
+      throw currentError;
+    }
+
+    const currentContentIds = (currentItems || []).map((item) => item.content_id);
+    const dedupRequested = Array.from(new Set(contentIds));
+
+    if (
+      dedupRequested.length !== currentContentIds.length ||
+      dedupRequested.some((contentId) => !currentContentIds.includes(contentId))
+    ) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'INVALID_REORDER_SET',
+          message: 'content_ids doit contenir exactement les éléments actuels de la playlist.',
+        },
+      });
+    }
+
+    // Phase 1: shift all indexes to avoid unique(user_id, position_index) conflicts
+    for (let idx = 0; idx < (currentItems || []).length; idx += 1) {
+      const item = currentItems[idx];
+      const { error: shiftError } = await supabaseAdmin
+        .from('audio_playlist_items')
+        .update({ position_index: idx + 1000 })
+        .eq('id', item.id)
+        .eq('user_id', userId);
+
+      if (shiftError) throw shiftError;
+    }
+
+    // Phase 2: write final order
+    for (let idx = 0; idx < dedupRequested.length; idx += 1) {
+      const contentId = dedupRequested[idx];
+      const { error: reorderError } = await supabaseAdmin
+        .from('audio_playlist_items')
+        .update({ position_index: idx })
+        .eq('user_id', userId)
+        .eq('content_id', contentId);
+
+      if (reorderError) throw reorderError;
+    }
+
+    const playlist = await getUserAudioPlaylist(userId);
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: playlist.items,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/audio/playlist/:content_id
+ * Protected - Remove audiobook from playlist
+ */
+router.delete('/api/reading/audio/playlist/:content_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .delete()
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
+
+    if (deleteError) {
+      if (isMissingAudioPlaylistTable(deleteError)) {
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: 'AUDIO_PLAYLIST_TABLE_MISSING',
+            message: 'La table audio_playlist_items est absente. Exécutez la migration 027_audio_playlist.sql.',
+          },
+        });
+      }
+      throw deleteError;
+    }
+
+    // Re-compact positions after delete
+    const { data: restItems, error: restError } = await supabaseAdmin
+      .from('audio_playlist_items')
+      .select('id')
+      .eq('user_id', userId)
+      .order('position_index', { ascending: true });
+
+    if (restError) {
+      throw restError;
+    }
+
+    for (let idx = 0; idx < (restItems || []).length; idx += 1) {
+      const item = restItems[idx];
+      const { error: compactError } = await supabaseAdmin
+        .from('audio_playlist_items')
+        .update({ position_index: idx })
+        .eq('id', item.id)
+        .eq('user_id', userId);
+
+      if (compactError) throw compactError;
+    }
+
+    const playlist = await getUserAudioPlaylist(userId);
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: playlist.items,
+      },
+    });
+  } catch (error) {
+    return next(error);
   }
 });
 

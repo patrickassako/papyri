@@ -1,8 +1,63 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs');
+const fs = require('fs/promises');
+const path = require('path');
+const formidable = require('express-formidable');
 const { supabase, supabaseAdmin } = require('../config/database');
+const config = require('../config/env');
 const { verifyJWT } = require('../middleware/auth');
+const r2Service = require('../services/r2.service');
+
+/**
+ * GET /users/lookup?email=
+ * Protected — Cherche un utilisateur par email (pour inviter un membre famille).
+ * Retourne { id, email, full_name, avatar_url } si trouvé, 404 sinon.
+ * Ne retourne pas le compte du requêtant lui-même.
+ */
+router.get('/lookup', verifyJWT, async (req, res, next) => {
+  try {
+    const requesterId = req.user.id;
+    const email = String(req.query.email || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Paramètre email requis.' });
+    }
+
+    // Recherche dans auth.users via l'API admin Supabase
+    const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listError) throw listError;
+
+    const found = (listData?.users || []).find(
+      (u) => u.email?.toLowerCase() === email
+    );
+
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'Aucun compte trouvé avec cet email.' });
+    }
+
+    if (found.id === requesterId) {
+      return res.status(400).json({ success: false, message: 'Vous ne pouvez pas vous ajouter vous-même.' });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', found.id)
+      .maybeSingle();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: found.id,
+        email: found.email,
+        full_name: profile?.full_name || null,
+        avatar_url: profile?.avatar_url || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /users/me
@@ -16,7 +71,7 @@ router.get('/me', verifyJWT, async (req, res, next) => {
     // Get user data from profiles table using admin client (bypasses RLS)
     const { data: user, error: userError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, language, onboarding_completed, created_at, updated_at')
+      .select('id, full_name, language, avatar_url, onboarding_completed, created_at, updated_at')
       .eq('id', userId)
       .single();
 
@@ -53,7 +108,7 @@ router.get('/me', verifyJWT, async (req, res, next) => {
         full_name: user.full_name,
         role: 'user', // Default role for Supabase Auth users
         language: user.language,
-        avatar_url: null, // Not in profiles table yet
+        avatar_url: user.avatar_url || null,
         onboarding_completed: user.onboarding_completed,
         created_at: user.created_at,
         updated_at: user.updated_at,
@@ -107,11 +162,11 @@ router.patch('/me', verifyJWT, async (req, res, next) => {
     if (avatar_url !== undefined) updates.avatar_url = avatar_url;
 
     // Update user profile
-    const { data: updatedUser, error: updateError } = await supabase
+    const { data: updatedUser, error: updateError } = await supabaseAdmin
       .from('profiles')
       .update(updates)
       .eq('id', userId)
-      .select('id, full_name, language, onboarding_completed, created_at, updated_at')
+      .select('id, full_name, language, avatar_url, onboarding_completed, created_at, updated_at')
       .single();
 
     if (updateError) {
@@ -120,7 +175,7 @@ router.patch('/me', verifyJWT, async (req, res, next) => {
     }
 
     // Get email from Supabase Auth for response
-    const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
 
     res.status(200).json({
       success: true,
@@ -128,13 +183,115 @@ router.patch('/me', verifyJWT, async (req, res, next) => {
         ...updatedUser,
         email: authUser?.user?.email || null,
         role: 'user',
-        avatar_url: null
       }
     });
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * POST /users/me/avatar
+ * Protected endpoint - Upload avatar image
+ * multipart/form-data: avatar=<file>
+ */
+router.post(
+  '/me/avatar',
+  verifyJWT,
+  formidable({ multiples: false, maxFileSize: 5 * 1024 * 1024 }),
+  async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      const avatarFile = req.files?.avatar;
+
+      if (!avatarFile) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'MISSING_FILE',
+            message: 'Fichier avatar requis.',
+          },
+        });
+      }
+
+      const mimeType = String(avatarFile.type || '').toLowerCase();
+      if (!mimeType.startsWith('image/')) {
+        return res.status(422).json({
+          success: false,
+          error: {
+            code: 'INVALID_FILE_TYPE',
+            message: 'Le fichier doit être une image.',
+          },
+        });
+      }
+
+      const size = Number(avatarFile.size || 0);
+      if (size <= 0 || size > 5 * 1024 * 1024) {
+        return res.status(422).json({
+          success: false,
+          error: {
+            code: 'INVALID_FILE_SIZE',
+            message: 'Image invalide (max 5MB).',
+          },
+        });
+      }
+
+      const tmpPath = avatarFile.path || avatarFile.filepath;
+      const fileBuffer = await fs.readFile(tmpPath);
+
+      const extensionFromName = path.extname(avatarFile.name || avatarFile.originalFilename || '').toLowerCase();
+      const extensionFromType = mimeType.split('/')[1] || 'jpg';
+      const ext = extensionFromName || `.${extensionFromType}`;
+      const safeExt = ext.startsWith('.') ? ext : `.${ext}`;
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`;
+      let publicUrl = null;
+
+      if (r2Service.isConfigured()) {
+        const key = `avatars/${userId}/${fileName}`;
+        await r2Service.uploadBuffer(fileBuffer, key, {
+          bucket: config.r2.bucketCovers,
+          contentType: mimeType,
+          cacheControl: 'public, max-age=31536000',
+        });
+        publicUrl = r2Service.getPublicUrl(key, config.r2.bucketCovers);
+      } else {
+        // Dev fallback: store avatars locally when R2 is not configured.
+        const localDir = path.join(__dirname, '..', '..', 'uploads', 'avatars', userId);
+        await fs.mkdir(localDir, { recursive: true });
+        const localFilePath = path.join(localDir, fileName);
+        await fs.writeFile(localFilePath, fileBuffer);
+        publicUrl = `${req.protocol}://${req.get('host')}/uploads/avatars/${userId}/${fileName}`;
+      }
+
+      const { data: updatedUser, error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+        .select('id, full_name, language, avatar_url, onboarding_completed, created_at, updated_at')
+        .single();
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          ...updatedUser,
+          email: authUser?.user?.email || null,
+          role: 'user',
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * PUT /users/me/password
@@ -167,14 +324,10 @@ router.put('/me/password', verifyJWT, async (req, res, next) => {
       });
     }
 
-    // Get user's current password hash
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
+    const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const userEmail = authUserData?.user?.email || null;
 
-    if (userError || !user) {
+    if (authUserError || !userEmail) {
       return res.status(404).json({
         success: false,
         error: {
@@ -184,9 +337,13 @@ router.put('/me/password', verifyJWT, async (req, res, next) => {
       });
     }
 
-    // Verify current password
-    const isValidPassword = await bcrypt.compare(current_password, user.password_hash);
-    if (!isValidPassword) {
+    // Verify current password via Supabase Auth sign-in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userEmail,
+      password: current_password,
+    });
+
+    if (signInError) {
       return res.status(401).json({
         success: false,
         error: {
@@ -196,17 +353,19 @@ router.put('/me/password', verifyJWT, async (req, res, next) => {
       });
     }
 
-    // Hash new password
-    const newPasswordHash = await bcrypt.hash(new_password, 12);
+    if (current_password === new_password) {
+      return res.status(422).json({
+        success: false,
+        error: {
+          code: 'PASSWORD_SAME_AS_CURRENT',
+          message: 'Le nouveau mot de passe doit être différent de l\'actuel.'
+        }
+      });
+    }
 
-    // Update password
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({
-        password_hash: newPasswordHash,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId);
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: new_password,
+    });
 
     if (updateError) {
       console.error('Error updating password:', updateError);

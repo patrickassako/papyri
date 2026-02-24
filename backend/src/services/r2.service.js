@@ -140,6 +140,42 @@ async function getObjectBuffer(fileKey, bucket = null) {
 }
 
 /**
+ * Upload a buffer to R2
+ * @param {Buffer|Uint8Array} body
+ * @param {string} fileKey
+ * @param {Object} options
+ * @param {string|null} options.bucket
+ * @param {string} options.contentType
+ * @param {string|null} options.cacheControl
+ * @returns {Promise<{key: string, bucket: string}>}
+ */
+async function uploadBuffer(body, fileKey, options = {}) {
+  const client = getClient();
+  if (!client) {
+    throw new Error('R2_NOT_CONFIGURED');
+  }
+
+  const bucketName = options.bucket || config.r2.bucketContent;
+  const contentType = options.contentType || 'application/octet-stream';
+  const cacheControl = options.cacheControl || null;
+
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: fileKey,
+    Body: body,
+    ContentType: contentType,
+    ...(cacheControl ? { CacheControl: cacheControl } : {}),
+  });
+
+  await client.send(command);
+
+  return {
+    key: fileKey,
+    bucket: bucketName,
+  };
+}
+
+/**
  * Get public URL for a file (for covers bucket)
  * @param {string} fileKey - File key in R2
  * @param {string} bucket - Bucket name (default: covers bucket)
@@ -174,6 +210,7 @@ module.exports = {
   generatePresignedUrl,
   generateUploadUrl,
   getObjectBuffer,
+  uploadBuffer,
   getPublicUrl,
   isConfigured,
   getClient,

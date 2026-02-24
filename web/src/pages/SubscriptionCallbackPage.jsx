@@ -10,14 +10,21 @@ export default function SubscriptionCallbackPage() {
   const [error, setError] = useState('');
   const [verified, setVerified] = useState(false);
 
+  // Common params
   const status = searchParams.get('status');
+  const provider = searchParams.get('provider'); // 'stripe' | null (Flutterwave)
+
+  // Flutterwave params
   const reference = searchParams.get('tx_ref');
   const transactionId = searchParams.get('transaction_id');
 
-  const isSuccessCallback = useMemo(
-    () => status === 'successful' && Boolean(reference) && Boolean(transactionId),
-    [status, reference, transactionId]
-  );
+  // Stripe params
+  const sessionId = searchParams.get('session_id');
+
+  const isStripe = provider === 'stripe' && Boolean(sessionId) && status === 'successful';
+  const isFlutterwave = !provider && Boolean(reference) && Boolean(transactionId) && status === 'successful';
+
+  const isSuccessCallback = isStripe || isFlutterwave;
 
   useEffect(() => {
     const verify = async () => {
@@ -28,10 +35,11 @@ export default function SubscriptionCallbackPage() {
       }
 
       try {
-        await subscriptionsService.verifyPayment({
-          transactionId,
-          reference,
-        });
+        if (isStripe) {
+          await subscriptionsService.verifyStripeSession(sessionId);
+        } else {
+          await subscriptionsService.verifyPayment({ transactionId, reference });
+        }
         setVerified(true);
       } catch (err) {
         setError(err.message || 'Impossible de confirmer le paiement.');
@@ -41,14 +49,22 @@ export default function SubscriptionCallbackPage() {
     };
 
     verify();
-  }, [isSuccessCallback, reference, transactionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const providerLabel = isStripe ? 'Stripe (carte bancaire)' : 'Flutterwave (mobile money)';
 
   return (
     <Container maxWidth="sm" sx={{ py: 10 }}>
       <Box sx={{ bgcolor: '#fff', border: '1px solid #ece8e1', borderRadius: 3, p: 4 }}>
-        <Typography sx={{ fontSize: '1.8rem', fontWeight: 800, mb: 1.5 }}>
-          Callback abonnement
+        <Typography sx={{ fontSize: '1.8rem', fontWeight: 800, mb: 0.5 }}>
+          Confirmation paiement
         </Typography>
+        {!loading && (
+          <Typography sx={{ color: '#aaa', fontSize: '0.85rem', mb: 2 }}>
+            via {providerLabel}
+          </Typography>
+        )}
 
         {loading ? (
           <Stack spacing={2} sx={{ alignItems: 'center', py: 3 }}>
@@ -57,7 +73,9 @@ export default function SubscriptionCallbackPage() {
           </Stack>
         ) : verified ? (
           <Stack spacing={2.5}>
-            <Alert severity="success">Paiement confirmé. Ton abonnement est actif.</Alert>
+            <Alert severity="success">
+              Paiement confirmé. Ton abonnement est actif.
+            </Alert>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               <Button variant="contained" onClick={() => navigate('/catalogue')}>
                 Aller au catalogue
@@ -69,7 +87,7 @@ export default function SubscriptionCallbackPage() {
           </Stack>
         ) : (
           <Stack spacing={2.5}>
-            <Alert severity="error">{error || 'Le paiement n’a pas pu être validé.'}</Alert>
+            <Alert severity="error">{error || 'Le paiement n\'a pas pu être validé.'}</Alert>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               <Button variant="contained" onClick={() => navigate('/pricing')}>
                 Retour aux tarifs

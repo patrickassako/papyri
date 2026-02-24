@@ -16,6 +16,7 @@
     "@tiptap/extension-horizontal-rule": "2.27.2"
   },
   "dependencies": {
+    "@adminjs/bundler": "^3.0.0",
     "@adminjs/express": "^5.1.0",
     "@adminjs/sql": "^2.2.6",
     "@aws-sdk/client-s3": "^3.989.0",
@@ -35,7 +36,11 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "meilisearch": "^0.55.0",
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
+    "pdfkit": "^0.17.2",
     "pg": "^8.18.0",
+    "stripe": "^20.3.1",
     "tslib": "^2.8.1"
   },
   "devDependencies": {

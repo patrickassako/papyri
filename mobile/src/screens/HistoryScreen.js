@@ -12,12 +12,12 @@ import {
   Button,
   SegmentedButtons,
 } from 'react-native-paper';
+import API_BASE_URL from '../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ContentCardWithProgress from '../components/ContentCardWithProgress';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
-const API_URL = 'http://localhost:3001'; // TODO: Configure via environment
 
 const HistoryScreen = ({ navigation }) => {
   const [history, setHistory] = useState([]);
@@ -50,7 +50,7 @@ const HistoryScreen = ({ navigation }) => {
       }
 
       const response = await fetch(
-        `${API_URL}/reading-history?page=${page}&limit=20`,
+        `${API_BASE_URL}/reading-history?page=${page}&limit=20`,
         {
           method: 'GET',
           headers: {
