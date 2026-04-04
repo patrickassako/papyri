@@ -22,6 +22,7 @@ backend/.adminjs/
 *.jpg
 *.jpeg
 !web/public/**
+!web/src/assets/**
 
 # iOS
 mobile/ios/Pods/
