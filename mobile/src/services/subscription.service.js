@@ -3,6 +3,28 @@ import { supabase } from '../config/supabase';
 import { apiClient } from './api.client';
 
 /**
+ * Appel interne : GET /api/subscriptions/me → retourne le payload brut ou null
+ */
+const _fetchSubscriptionPayload = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return null;
+
+  const response = await fetch(`${API_BASE_URL}/api/subscriptions/me`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
+  if (!payload?.success) return null;
+  return payload;
+};
+
+/**
  * Service pour gérer les abonnements
  */
 export const subscriptionService = {
@@ -12,33 +34,10 @@ export const subscriptionService = {
    */
   getCurrentSubscription: async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        return null;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/subscriptions/me`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data?.success) {
-        if (data.subscription) return data.subscription;
-        if (data.data?.subscription) return data.data.subscription;
-        return null;
-      }
-      return null;
+      const payload = await _fetchSubscriptionPayload();
+      if (!payload) return null;
+      return payload.subscription ?? payload.data?.subscription ?? null;
     } catch (error) {
-      // Si 404, l'utilisateur n'a pas d'abonnement
       console.error('Error getting subscription:', error);
       return null;
     }
@@ -50,25 +49,7 @@ export const subscriptionService = {
    */
   getMySubscriptionStatus: async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return null;
-
-      const response = await fetch(`${API_BASE_URL}/api/subscriptions/me`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
-      }
-
-      if (!payload?.success) return null;
-      return payload;
+      return await _fetchSubscriptionPayload();
     } catch (error) {
       console.error('Error getting subscription status:', error);
       return null;
@@ -176,5 +157,62 @@ export const subscriptionService = {
       console.error('Error getting payment history:', error);
       return [];
     }
+  },
+
+  /**
+   * Valider un code promo avant le paiement
+   * Returns { code, discountType, discountValue, discountCents, finalAmountCents, originalAmountCents }
+   */
+  validatePromoCode: async ({ code, planId, planCode, usersLimit }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Non authentifié');
+
+    const response = await fetch(`${API_BASE_URL}/api/subscriptions/promo/validate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ code: code?.trim().toUpperCase(), planId, planCode, usersLimit }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || data?.error || 'Code promo invalide.');
+    }
+    return data;
+  },
+
+  /**
+   * Initier un paiement d'abonnement (Flutterwave ou Stripe)
+   * Returns { paymentLink, provider, reference, subscription }
+   */
+  checkout: async ({ planId, planCode, usersLimit, provider = 'flutterwave', promoCode } = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Non authentifié');
+
+    const response = await fetch(`${API_BASE_URL}/api/subscriptions/checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        planId,
+        planCode,
+        usersLimit,
+        provider,
+        promoCode: promoCode ? promoCode.trim().toUpperCase() : undefined,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.success) {
+      if (response.status === 503) {
+        throw new Error(data?.message || 'Paiement indisponible : fournisseur non configuré.');
+      }
+      throw new Error(data?.message || data?.error || 'Échec du paiement.');
+    }
+    return data;
   },
 };

@@ -31,6 +31,7 @@ import {
   Users,
 } from 'lucide-react';
 import { subscriptionsService } from '../services/subscriptions.service';
+import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 
@@ -136,6 +137,7 @@ export default function SubscriptionPage() {
 
   const hasActive = Boolean(status?.isActive);
   const subscription = status?.subscription || null;
+  const isStripe = subscription?.provider === 'stripe';
 
   const availablePlanOptions = useMemo(() => {
     const currentPlanId = subscription?.plan_id || subscription?.plan_snapshot?.id;
@@ -331,16 +333,16 @@ export default function SubscriptionPage() {
           >
             <Box>
               <Typography sx={{ fontWeight: 800, color: '#222', fontSize: { xs: '1.9rem', md: '2.2rem' } }}>
-                Subscription Overview
+                Aperçu de votre abonnement
               </Typography>
-              <Typography sx={{ color: '#918a80' }}>Manage your plan, track usage, and view billing history.</Typography>
+              <Typography sx={{ color: '#918a80' }}>Gérez votre plan, suivez votre utilisation et consultez l'historique de facturation.</Typography>
             </Box>
             <Stack direction="row" spacing={1.2}>
               <Button variant="outlined" sx={{ borderColor: '#d7d7d7', color: '#555', textTransform: 'none', borderRadius: 3 }} onClick={loadData}>
-                Refresh
+                Actualiser
               </Button>
               <Button variant="contained" sx={{ bgcolor: '#f1a10a', textTransform: 'none', borderRadius: 3, '&:hover': { bgcolor: '#d9900a' } }} onClick={() => navigate('/pricing')}>
-                Upgrade / Change Plan
+                Changer de plan
               </Button>
             </Stack>
           </Stack>
@@ -358,7 +360,7 @@ export default function SubscriptionPage() {
                 <Box>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.6 }}>
                     <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.4rem', md: '1.8rem' }, color: '#1f1f1f' }}>
-                      {subscription?.plan_snapshot?.name || subscription?.plan_type || 'No Plan'}
+                      {subscription?.plan_snapshot?.name || subscription?.plan_type || 'Aucun plan'}
                     </Typography>
                     <Box sx={{ px: 1.1, py: 0.2, borderRadius: 99, bgcolor: hasActive ? '#f6ead4' : '#f7d7d7', color: hasActive ? '#b5770c' : '#b42318', fontSize: '0.72rem', fontWeight: 700 }}>
                       {activeLabel}
@@ -370,25 +372,43 @@ export default function SubscriptionPage() {
                       : 'Abonnement inactif ou expiré. Reprenez un plan pour réactiver tous les accès.'}
                   </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ color: '#6a665f', fontSize: '0.9rem' }}>
-                    <Typography>Renews on <b>{formatDate(subscription?.current_period_end)}</b></Typography>
-                    <Typography>Users limit <b>{usersLimit}</b></Typography>
+                    <Typography>
+                      {subscription?.cancel_at_period_end
+                        ? <>Expire le <b>{formatDate(subscription?.current_period_end)}</b> <span style={{ color: '#e65100', fontWeight: 700 }}>(annulation programmée)</span></>
+                        : <>Renouvellement le <b>{formatDate(subscription?.current_period_end)}</b></>}
+                    </Typography>
+                    <Typography>Utilisateurs <b>{usersLimit}</b></Typography>
                   </Stack>
                 </Box>
               </Stack>
               <Box sx={{ minWidth: 170, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 } }}>
-                <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>NEXT PAYMENT</Typography>
+                <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>PROCHAIN PAIEMENT</Typography>
                 <Typography sx={{ fontSize: '2.1rem', color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1 }}>
                   {subscription ? formatMoney(subscription.amount, subscription.currency || 'USD') : '-'}
                 </Typography>
                 <Typography sx={{ color: '#b5770c', fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }} onClick={() => navigate('/pricing')}>
-                  Manage Plan
+                  Gérer mon plan
                 </Typography>
               </Box>
             </Stack>
 
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.1} sx={{ mt: 2.4 }}>
-              <Button disabled={busy || !subscription} variant="contained" sx={{ bgcolor: '#f1a10a', textTransform: 'none', '&:hover': { bgcolor: '#d9900a' } }} onClick={() => runAction(() => subscriptionsService.renew(), 'Renouvellement initié, redirection paiement.')}>Renouveler</Button>
-              <Button disabled={busy || !subscription?.cancel_at_period_end} variant="outlined" sx={{ textTransform: 'none' }} onClick={() => runAction(() => subscriptionsService.resume(), 'Abonnement repris.')}>Reprendre</Button>
+              {/* "Renouveler" only shown for Flutterwave subs — Stripe handles renewals automatically */}
+              {!isStripe && (
+                <Button disabled={busy || !subscription} variant="contained" sx={{ bgcolor: '#f1a10a', textTransform: 'none', '&:hover': { bgcolor: '#d9900a' } }} onClick={() => runAction(() => subscriptionsService.renew(), 'Renouvellement initié, redirection paiement.')}>Renouveler</Button>
+              )}
+              {/* "Réactiver" — restores auto-renewal for Stripe / cancel-at-period-end for others */}
+              <Button
+                disabled={busy || !subscription?.cancel_at_period_end}
+                variant="outlined"
+                sx={{ textTransform: 'none' }}
+                onClick={() => runAction(
+                  () => isStripe ? subscriptionsService.reactivate() : subscriptionsService.resume(),
+                  'Renouvellement automatique rétabli.'
+                )}
+              >
+                Réactiver
+              </Button>
               <Button disabled={busy || !subscription} variant="outlined" color="warning" sx={{ textTransform: 'none' }} onClick={() => runAction(() => subscriptionsService.cancel({ immediately: false }), 'Annulation en fin de période activée.')}>Annuler fin période</Button>
               <Button disabled={busy || !subscription} variant="outlined" color="error" sx={{ textTransform: 'none' }} onClick={() => runAction(() => subscriptionsService.cancel({ immediately: true }), 'Abonnement annulé immédiatement.')}>Annuler maintenant</Button>
             </Stack>
@@ -396,9 +416,9 @@ export default function SubscriptionPage() {
 
           {/* Usage ring cards */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mb: 2.5 }}>
-            <RingCard title="Text unlocks" value={`${textUsed}`} hint={`${textUsed} sur ${textQuota} ce cycle`} pct={progressValue(textUsed, textQuota)} />
-            <RingCard title="Active devices" value={`${Math.min(activeMembersCount, usersLimit)}`} hint={`${activeMembersCount} membres actifs sur ${usersLimit}`} pct={progressValue(activeMembersCount, usersLimit)} />
-            <RingCard title="Bonus credits" value={`${bonusAvailableTotal}`} hint="Crédits bonus restants" pct={progressValue(bonusAvailableTotal, Math.max(1, usageData.bonus_quota || bonusAvailableTotal || 1))} />
+            <RingCard title="Déblocages texte" value={`${textUsed}`} hint={`${textUsed} sur ${textQuota} ce cycle`} pct={progressValue(textUsed, textQuota)} />
+            <RingCard title="Appareils actifs" value={`${Math.min(activeMembersCount, usersLimit)}`} hint={`${activeMembersCount} membres actifs sur ${usersLimit}`} pct={progressValue(activeMembersCount, usersLimit)} />
+            <RingCard title="Crédits bonus" value={`${bonusAvailableTotal}`} hint="Crédits bonus restants" pct={progressValue(bonusAvailableTotal, Math.max(1, usageData.bonus_quota || bonusAvailableTotal || 1))} />
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1.4fr' }, gap: 2 }}>
@@ -406,7 +426,7 @@ export default function SubscriptionPage() {
             <Stack spacing={2}>
               {/* Active Perks + Change Plan */}
               <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid #ece7dd' }}>
-                <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>Active Perks</Typography>
+                <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>Avantages actifs</Typography>
                 <Stack spacing={1.2}>
                   <Typography sx={{ color: '#4f4f4f' }}>- Réduction livres payants: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
                   <Typography sx={{ color: '#4f4f4f' }}>- Quota texte: <b>{textQuota}</b></Typography>
@@ -491,6 +511,7 @@ export default function SubscriptionPage() {
                               <span>
                                 <IconButton
                                   size="small"
+                                  aria-label="Ajouter une place"
                                   disabled={busy}
                                   onClick={() => setSeatDialog({ open: true, providerBusy: '' })}
                                   sx={{ border: '1px solid #f1a10a', bgcolor: '#fff9ec', color: '#b87c00', '&:hover': { bgcolor: '#f6ead4' } }}
@@ -639,6 +660,7 @@ export default function SubscriptionPage() {
                             <Tooltip title="Retirer ce membre">
                               <IconButton
                                 size="small"
+                                aria-label="Retirer ce membre"
                                 disabled={busy}
                                 onClick={() => runMemberAction(() => subscriptionsService.removeMember(m.user_id), 'Membre retiré.')}
                                 sx={{ color: '#ccc', '&:hover': { color: '#d32f2f' } }}
@@ -667,8 +689,8 @@ export default function SubscriptionPage() {
             {/* Right panel — invoices */}
             <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid #ece7dd', overflow: 'hidden', alignSelf: 'start' }}>
               <Box sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #efefef' }}>
-                <Typography sx={{ fontWeight: 800, color: '#262626' }}>Recent Invoices</Typography>
-                <Typography sx={{ color: '#f1a10a', fontWeight: 700 }}>View All</Typography>
+                <Typography sx={{ fontWeight: 800, color: '#262626' }}>Historique de facturation</Typography>
+                <Typography sx={{ color: '#f1a10a', fontWeight: 700 }}>Tout voir</Typography>
               </Box>
               <Box sx={{ overflowX: 'auto' }}>
                 <Box sx={{ minWidth: 500 }}>
@@ -699,12 +721,12 @@ export default function SubscriptionPage() {
                               display: 'inline-flex',
                               cursor: canDownload ? 'pointer' : 'default',
                               opacity: canDownload ? 1 : 0.35,
-                              '&:hover': canDownload ? { color: '#B5651D' } : {},
+                              '&:hover': canDownload ? { color: tokens.colors.primary } : {},
                             }}
                             onClick={canDownload ? () => handleDownloadInvoice(p.id) : undefined}
                           >
                             {isBusy
-                              ? <CircularProgress size={16} sx={{ color: '#B5651D' }} />
+                              ? <CircularProgress size={16} sx={{ color: tokens.colors.primary }} />
                               : <Download size={16} color="#8c8c8c" />}
                           </Box>
                         </Tooltip>

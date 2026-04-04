@@ -29,6 +29,8 @@ import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined';
 import EventAvailableOutlined from '@mui/icons-material/EventAvailableOutlined';
 import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
+import LocalFireDepartmentOutlined from '@mui/icons-material/LocalFireDepartmentOutlined';
+import DonutLargeOutlined from '@mui/icons-material/DonutLargeOutlined';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
@@ -167,8 +169,11 @@ function HistoryCard({ item, onResume }) {
   }
 
   const handleAction = () => {
+    const fmt = String(item.format || '').toLowerCase();
     if (isAudio) {
       navigate(`/listen/${item.content_id}`);
+    } else if (fmt === 'pdf') {
+      navigate(`/pdf/${item.content_id}`);
     } else {
       navigate(`/read/${item.content_id}`);
     }
@@ -450,6 +455,9 @@ export default function HistoryPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   // Load user
   useEffect(() => {
@@ -459,32 +467,49 @@ export default function HistoryPage() {
     });
   }, [navigate]);
 
-  // Load history
+  // Load history + stats in parallel
   useEffect(() => {
-    async function loadHistory() {
+    async function loadAll() {
       setLoading(true);
+      setStatsLoading(true);
       setError(null);
+      const [historyRes, statsRes] = await Promise.allSettled([
+        authFetch(`${API_URL}/reading-history?page=1&limit=20`),
+        authFetch(`${API_URL}/reading-history/stats`),
+      ]);
+
+      // History
       try {
-        const response = await authFetch(`${API_URL}/reading-history?page=1&limit=20`);
-        if (response.ok) {
-          const data = await response.json();
+        if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
+          const data = await historyRes.value.json();
           const items = Array.isArray(data?.data) ? data.data : [];
           setHistory(items.map(normalizeHistoryItem));
           setPage(1);
           setHasMore((data?.pagination?.total_pages || 1) > 1);
         } else {
           setHistory([]);
-          setError('Impossible de charger l’historique.');
+          setError("Impossible de charger l'historique.");
         }
       } catch (err) {
         console.warn('Failed to load history:', err.message);
         setHistory([]);
-        setError('Impossible de charger l’historique.');
+        setError("Impossible de charger l'historique.");
       } finally {
         setLoading(false);
       }
+
+      // Stats
+      try {
+        if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+          const sd = await statsRes.value.json();
+          setStats(sd?.data || null);
+        }
+      } catch (e) { console.error('loadStats:', e); }
+      finally {
+        setStatsLoading(false);
+      }
     }
-    loadHistory();
+    loadAll();
   }, []);
 
   // Load more
@@ -516,8 +541,22 @@ export default function HistoryPage() {
   // Clear all history
   const handleClearAll = async () => {
     setClearDialogOpen(false);
-    // Endpoint DELETE /reading-history not available for now.
-    setError('Suppression complète non disponible pour le moment.');
+    setClearing(true);
+    try {
+      const res = await authFetch(`${API_URL}/reading-history`, { method: 'DELETE' });
+      if (res.ok) {
+        setHistory([]);
+        setStats(null);
+        setHasMore(false);
+      } else {
+        setError("Impossible d'effacer l'historique. Réessayez.");
+      }
+    } catch (err) {
+      console.warn('Clear history error:', err.message);
+      setError("Impossible d'effacer l'historique. Réessayez.");
+    } finally {
+      setClearing(false);
+    }
   };
 
   // Filtered + searched items
@@ -613,8 +652,9 @@ export default function HistoryPage() {
 
           <Button
             variant="text"
-            startIcon={<DeleteSweepOutlined />}
+            startIcon={clearing ? <CircularProgress size={16} sx={{ color: tokens.colors.semantic.error }} /> : <DeleteSweepOutlined />}
             onClick={() => setClearDialogOpen(true)}
+            disabled={clearing}
             sx={{
               color: '#9c7e49',
               textTransform: 'none',
@@ -628,9 +668,121 @@ export default function HistoryPage() {
               },
             }}
           >
-            Tout effacer
+            {clearing ? 'Suppression...' : 'Tout effacer'}
           </Button>
         </Box>
+
+        {/* Stats banner */}
+        {(stats || statsLoading) && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mb: 4 }}>
+            {[
+              {
+                icon: <MenuBookOutlined sx={{ fontSize: 22, color: tokens.colors.primary }} />,
+                label: 'Livres lus',
+                value: statsLoading ? '—' : (stats?.total_books ?? 0),
+                sub: statsLoading ? '' : `${stats?.completed ?? 0} terminés`,
+              },
+              {
+                icon: <TimelapseOutlined sx={{ fontSize: 22, color: '#5E8A6E' }} />,
+                label: 'Temps total',
+                value: statsLoading ? '—' : formatTotalTime(stats?.total_time_seconds),
+                sub: statsLoading ? '' : `dont ${formatTotalTime(stats?.audio_time_seconds)} audio`,
+              },
+              {
+                icon: <LocalFireDepartmentOutlined sx={{ fontSize: 22, color: '#E65100' }} />,
+                label: 'Série actuelle',
+                value: statsLoading ? '—' : `${stats?.streak_days ?? 0}j`,
+                sub: 'jours consécutifs',
+              },
+              {
+                icon: <DonutLargeOutlined sx={{ fontSize: 22, color: tokens.colors.secondary }} />,
+                label: 'Taux de complétion',
+                value: statsLoading ? '—' : `${stats?.completion_rate ?? 0}%`,
+                sub: statsLoading ? '' : `${stats?.in_progress ?? 0} en cours`,
+              },
+            ].map((card) => (
+              <Paper
+                key={card.label}
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: '16px',
+                  border: `1px solid ${tokens.colors.surfaces.light.variant}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  {card.icon}
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49', fontWeight: 600 }}>
+                    {card.label}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
+                  {card.value}
+                </Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: '#9c7e49' }}>
+                  {card.sub}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+        )}
+
+        {/* Activity chart — 30-day bar chart */}
+        {stats?.daily_activity?.length > 0 && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              mb: 4,
+              borderRadius: '16px',
+              border: `1px solid ${tokens.colors.surfaces.light.variant}`,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <CalendarMonthOutlined sx={{ fontSize: 18, color: tokens.colors.primary }} />
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: tokens.colors.onBackground.light }}>
+                Activité — 30 derniers jours
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: 56 }}>
+              {(() => {
+                const maxCount = Math.max(...stats.daily_activity.map((d) => d.count), 1);
+                return stats.daily_activity.map((day) => {
+                const heightPct = day.count > 0 ? Math.max(10, (day.count / maxCount) * 100) : 3;
+                const isToday = day.date === new Date().toISOString().slice(0, 10);
+                return (
+                  <Box
+                    key={day.date}
+                    title={`${day.date}: ${day.count} lecture(s)`}
+                    sx={{
+                      flex: 1,
+                      height: `${heightPct}%`,
+                      bgcolor: day.count > 0 ? tokens.colors.primary : tokens.colors.surfaces.light.variant,
+                      borderRadius: '3px 3px 0 0',
+                      opacity: isToday ? 1 : day.count > 0 ? 0.75 : 0.4,
+                      cursor: 'default',
+                      transition: 'opacity 0.15s',
+                      '&:hover': { opacity: 1 },
+                      outline: isToday ? `2px solid ${tokens.colors.primary}` : 'none',
+                    }}
+                  />
+                );
+              });
+              })()}
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+              <Typography sx={{ fontSize: '0.65rem', color: '#9c7e49' }}>
+                {stats.daily_activity[0]?.date}
+              </Typography>
+              <Typography sx={{ fontSize: '0.65rem', color: '#9c7e49' }}>
+                Aujourd'hui
+              </Typography>
+            </Box>
+          </Paper>
+        )}
 
         {/* Filters row */}
         <Box

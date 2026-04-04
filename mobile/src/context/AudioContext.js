@@ -3,6 +3,8 @@ import { Audio } from 'expo-av';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readingService } from '../services/reading.service';
+import { getLocalFilePath, isOnline } from '../services/offline.service';
+import { apiClient } from '../services/api.client';
 
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 const PLAYBACK_RATE_KEY = 'audiobook_playback_rate';
@@ -26,6 +28,7 @@ export function AudioProvider({ children }) {
   const [playlist, setPlaylist] = useState([]);
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [playlistError, setPlaylistError] = useState('');
+  const [playlistActionLoading, setPlaylistActionLoading] = useState(false);
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -180,13 +183,22 @@ export function AudioProvider({ children }) {
     if (!chapter.id && !contentId) return;
 
     try {
-      let url;
-      if (chapter.id) {
-        const streamData = await readingService.getChapterFileUrl(contentId, chapter.id);
-        url = streamData?.url;
-      } else {
-        const session = await readingService.getSession(contentId);
-        url = session?.stream?.url;
+      // Check for offline local file first (single-file audiobooks)
+      let url = await getLocalFilePath(contentId);
+
+      if (!url) {
+        const online = await isOnline();
+        if (!online) {
+          console.warn('Hors-ligne et aucun fichier local disponible.');
+          return;
+        }
+        if (chapter.id) {
+          const streamData = await readingService.getChapterFileUrl(contentId, chapter.id);
+          url = streamData?.url;
+        } else {
+          const session = await readingService.getSession(contentId);
+          url = session?.stream?.url;
+        }
       }
 
       if (!url) return;
@@ -203,9 +215,9 @@ export function AudioProvider({ children }) {
       );
       soundRef.current = sound;
 
-      // Initial seek for saved position
-      if (!initialSeekDoneRef.current && savedPositionSeconds > 0 && chapterIndex === activeChapterIndex) {
-        await sound.setPositionAsync(savedPositionSeconds * 1000);
+      // Initial seek for saved position (only on first load, not on chapter navigation)
+      if (!initialSeekDoneRef.current && savedPositionSeconds > 0 && !autoplay) {
+        await sound.setPositionAsync(savedPositionSeconds * 1000).catch(() => {});
         initialSeekDoneRef.current = true;
       }
     } catch (err) {
@@ -237,7 +249,6 @@ export function AudioProvider({ children }) {
       const [contentData, session, chaptersData] = await Promise.all([
         // We need a contents service for mobile — use apiClient directly
         (async () => {
-          const { apiClient } = require('../services/api.client');
           const { data } = await apiClient.get(`/api/contents/${id}`);
           if (!data?.success) throw new Error(data?.message || 'Contenu introuvable');
           return data.data;
@@ -335,6 +346,37 @@ export function AudioProvider({ children }) {
     }
   }, []);
 
+  const handleAddOrRemovePlaylist = useCallback(async () => {
+    if (!content || playlistActionLoading) return;
+    setPlaylistActionLoading(true);
+    setPlaylistError('');
+    try {
+      const result = isInPlaylist
+        ? await readingService.removeFromAudioPlaylist(content.id)
+        : await readingService.addToAudioPlaylist(content.id);
+      setPlaylist(Array.isArray(result?.items) ? result.items : []);
+    } catch (err) {
+      setPlaylistError(err?.message || 'Action playlist impossible.');
+    } finally {
+      setPlaylistActionLoading(false);
+    }
+  }, [content, playlistActionLoading, isInPlaylist]);
+
+  const movePlaylistItem = useCallback(async (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= playlist.length || fromIndex === toIndex) return;
+    const cloned = [...playlist];
+    const [moved] = cloned.splice(fromIndex, 1);
+    cloned.splice(toIndex, 0, moved);
+    setPlaylist(cloned);
+    try {
+      const result = await readingService.reorderAudioPlaylist(cloned.map((item) => item.content_id));
+      setPlaylist(Array.isArray(result?.items) ? result.items : []);
+    } catch (err) {
+      setPlaylistError(err?.message || 'Réordonnancement impossible.');
+      loadPlaylist();
+    }
+  }, [playlist, loadPlaylist]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -355,6 +397,7 @@ export function AudioProvider({ children }) {
     playlist,
     playlistLoading,
     playlistError,
+    playlistActionLoading,
     isPlaying,
     isBuffering,
     progress,
@@ -377,14 +420,17 @@ export function AudioProvider({ children }) {
     goNextChapter,
     setPlaybackRate,
     loadPlaylist,
+    handleAddOrRemovePlaylist,
+    movePlaylistItem,
   }), [
     content, contentId, loading, error, canRead, accessHint,
-    chapters, playlist, playlistLoading, playlistError,
+    chapters, playlist, playlistLoading, playlistError, playlistActionLoading,
     isPlaying, isBuffering, progress, duration, currentTime,
     playbackRate, currentChapterIndex, currentChapter,
     isInPlaylist, playlistIndex, nextPlaylistItem,
     loadContent, play, pause, togglePlayPause, seekToPercent, shiftTime,
     goToChapter, goPrevChapter, goNextChapter, setPlaybackRate, loadPlaylist,
+    handleAddOrRemovePlaylist, movePlaylistItem,
   ]);
 
   return (

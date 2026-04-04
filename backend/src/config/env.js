@@ -34,15 +34,30 @@ module.exports = {
 
   // Firebase
   firebase: {
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY
+    projectId:   process.env.FIREBASE_PROJECT_ID,
+    privateKey:  process.env.FIREBASE_PRIVATE_KEY,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
   },
 
-  // Brevo
+  // Email (provider-agnostic)
+  email: {
+    provider: process.env.EMAIL_PROVIDER || 'brevo', // 'brevo' | 'ses'
+    senderEmail: process.env.SENDER_EMAIL || process.env.BREVO_SENDER_EMAIL || 'noreply@papyri.com',
+    senderName: process.env.SENDER_NAME || process.env.BREVO_SENDER_NAME || 'Papyri',
+  },
+
+  // Brevo (used when EMAIL_PROVIDER=brevo)
   brevo: {
     apiKey: process.env.BREVO_API_KEY,
-    senderEmail: process.env.BREVO_SENDER_EMAIL || 'noreply@bibliotheque.com',
-    senderName: process.env.BREVO_SENDER_NAME || 'Bibliothèque Numérique'
+    senderEmail: process.env.BREVO_SENDER_EMAIL || 'noreply@papyri.com',
+    senderName: process.env.BREVO_SENDER_NAME || 'Papyri',
+  },
+
+  // AWS SES (used when EMAIL_PROVIDER=ses)
+  ses: {
+    region: process.env.AWS_SES_REGION || 'us-east-1',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 
   // Meilisearch

@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 
 const primary = '#f4a825';
 
@@ -36,19 +37,27 @@ export default function PublicHeader({
       }}
     >
       <Container maxWidth="lg" sx={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontWeight: 800, fontSize: '1.03rem', cursor: 'pointer' }} onClick={() => navigate('/')}>
-          Papyri
-        </Typography>
+        <Box
+          component="img"
+          src={papyriWordmark}
+          alt="Papyri"
+          onClick={() => navigate('/')}
+          sx={{ width: '150px', height: '50px', objectFit: 'contain', objectPosition: 'left center', display: 'block', cursor: 'pointer' }}
+        />
 
         <Stack direction="row" spacing={3} sx={{ display: { xs: 'none', md: 'flex' } }}>
           <Typography sx={navTextSx(activeKey === 'catalogue')} onClick={activeKey === 'catalogue' ? undefined : () => navigate('/catalogue')}>
             Bibliothèque
           </Typography>
-          <Typography sx={navTextSx(false)}>Nouveautés</Typography>
+          <Typography sx={navTextSx(activeKey === 'nouveautes')} onClick={activeKey === 'nouveautes' ? undefined : () => navigate('/catalogue?sort=newest')}>
+            Nouveautés
+          </Typography>
           <Typography sx={navTextSx(activeKey === 'pricing')} onClick={activeKey === 'pricing' ? undefined : () => navigate('/pricing')}>
             Tarifs
           </Typography>
-          <Typography sx={navTextSx(false)}>À propos</Typography>
+          <Typography sx={navTextSx(activeKey === 'login')} onClick={activeKey === 'login' ? undefined : () => navigate('/login')}>
+            Se connecter
+          </Typography>
         </Stack>
 
         <Button

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -16,7 +16,14 @@ import {
   HelperText,
   Banner,
   ActivityIndicator,
+  Switch,
+  List,
 } from 'react-native-paper';
+import {
+  getPreferences,
+  updatePreferences,
+  registerForPushNotifications,
+} from '../services/notifications.service';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_BASE_URL from '../config/api';
@@ -27,6 +34,10 @@ const tokens = require('../config/tokens');
 const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Notification preferences
+  const [notifPrefs, setNotifPrefs] = useState(null);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -53,6 +64,12 @@ const ProfileScreen = ({ navigation }) => {
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState(null);
+
+  // RGPD
+  const [exportLoading, setExportLoading]         = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [deleteConfirm, setDeleteConfirm]         = useState('');
+  const [deleteLoading, setDeleteLoading]         = useState(false);
 
   // Language Selector Dialog
   const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
@@ -214,6 +231,60 @@ const ProfileScreen = ({ navigation }) => {
       console.error('Change password error:', err);
       setPasswordError(err.message);
       setPasswordLoading(false);
+    }
+  };
+
+  // Charger les préférences de notification
+  useEffect(() => {
+    getPreferences().then((prefs) => { if (prefs) setNotifPrefs(prefs); }).catch(() => {});
+    // Enregistrer le token push si pas encore fait
+    registerForPushNotifications().catch(() => {});
+  }, []);
+
+  const handleToggleNotif = useCallback(async (key, value) => {
+    if (!notifPrefs) return;
+    const updated = { ...notifPrefs, [key]: value };
+    setNotifPrefs(updated);
+    try {
+      await updatePreferences({ [key]: value });
+    } catch {
+      setNotifPrefs(notifPrefs); // rollback
+    }
+  }, [notifPrefs]);
+
+  // RGPD — export données
+  const handleDataExport = async () => {
+    setExportLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const r = await fetch(`${API_BASE_URL}/users/me/data-export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error('Erreur export');
+      setSuccess('Export demandé. Les données seront disponibles par email ou téléchargement.');
+    } catch (e) {
+      setError('Erreur lors de l\'export des données.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // RGPD — suppression compte
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm !== 'SUPPRIMER') return;
+    setDeleteLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const r = await fetch(`${API_BASE_URL}/users/me`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error('Erreur suppression');
+      await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
+      navigation.replace('Login');
+    } catch (e) {
+      setError('Erreur lors de la suppression du compte.');
+      setDeleteLoading(false);
     }
   };
 
@@ -416,7 +487,73 @@ const ProfileScreen = ({ navigation }) => {
 
         <Divider style={styles.divider} />
 
+        {/* Notifications Section */}
+        <Divider style={styles.divider} />
+        <View style={styles.section}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            🔔 Notifications
+          </Text>
+          {notifPrefs ? (
+            <>
+              <List.Item
+                title="Notifications push"
+                description="Activer/désactiver toutes les notifications"
+                left={(p) => <List.Icon {...p} icon="bell" color={tokens.colors.primary} />}
+                right={() => (
+                  <Switch
+                    value={Boolean(notifPrefs.push_enabled)}
+                    onValueChange={(v) => handleToggleNotif('push_enabled', v)}
+                    color={tokens.colors.primary}
+                  />
+                )}
+              />
+              <List.Item
+                title="Nouveaux contenus"
+                description="Alertes lors de l'ajout de nouveaux livres"
+                left={(p) => <List.Icon {...p} icon="book-plus" color="#B5651D" />}
+                right={() => (
+                  <Switch
+                    value={Boolean(notifPrefs.new_content)}
+                    onValueChange={(v) => handleToggleNotif('new_content', v)}
+                    color={tokens.colors.primary}
+                    disabled={!notifPrefs.push_enabled}
+                  />
+                )}
+              />
+              <List.Item
+                title="Rappels de lecture"
+                description="Rappels pour reprendre votre lecture"
+                left={(p) => <List.Icon {...p} icon="book-open-variant" color="#2E4057" />}
+                right={() => (
+                  <Switch
+                    value={Boolean(notifPrefs.reading_reminders)}
+                    onValueChange={(v) => handleToggleNotif('reading_reminders', v)}
+                    color={tokens.colors.primary}
+                    disabled={!notifPrefs.push_enabled}
+                  />
+                )}
+              />
+              <List.Item
+                title="Abonnement"
+                description="Expiration, renouvellement, promotions"
+                left={(p) => <List.Icon {...p} icon="credit-card" color="#D4A017" />}
+                right={() => (
+                  <Switch
+                    value={Boolean(notifPrefs.subscription_updates)}
+                    onValueChange={(v) => handleToggleNotif('subscription_updates', v)}
+                    color={tokens.colors.primary}
+                    disabled={!notifPrefs.push_enabled}
+                  />
+                )}
+              />
+            </>
+          ) : (
+            <ActivityIndicator size="small" color={tokens.colors.primary} />
+          )}
+        </View>
+
         {/* Security Section */}
+        <Divider style={styles.divider} />
         <View style={styles.section}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Sécurité
@@ -430,6 +567,61 @@ const ProfileScreen = ({ navigation }) => {
           >
             Changer le mot de passe
           </Button>
+        </View>
+
+        <Divider style={styles.divider} />
+
+        {/* RGPD Section */}
+        <View style={styles.section}>
+          <Text variant="labelLarge" style={styles.sectionTitle}>Données &amp; confidentialité</Text>
+          <Text style={styles.rgpdInfo}>
+            Conformément au RGPD, vous pouvez télécharger vos données ou supprimer votre compte.
+          </Text>
+          <Button
+            mode="outlined"
+            icon="download"
+            onPress={handleDataExport}
+            loading={exportLoading}
+            disabled={exportLoading}
+            style={styles.rgpdButton}
+            textColor={tokens.colors.primary}
+          >
+            Télécharger mes données
+          </Button>
+          <Button
+            mode="outlined"
+            icon="delete-forever"
+            onPress={() => setDeleteDialogVisible(true)}
+            style={[styles.rgpdButton, styles.deleteButton]}
+            textColor={tokens.colors.semantic.error}
+          >
+            Supprimer mon compte
+          </Button>
+        </View>
+
+        <Divider style={styles.divider} />
+
+        {/* Légal Section */}
+        <View style={styles.section}>
+          <Text variant="labelLarge" style={styles.sectionTitle}>Mentions légales</Text>
+          {[
+            { label: "Conditions Générales d'Utilisation", type: 'cgu', icon: 'file-document-outline' },
+            { label: 'Conditions Générales de Vente', type: 'cgv', icon: 'receipt' },
+            { label: 'Politique de confidentialité', type: 'privacy', icon: 'shield-lock-outline' },
+            { label: 'Politique de cookies', type: 'cookies', icon: 'cookie-outline' },
+            { label: 'Mentions légales', type: 'mentions', icon: 'information-outline' },
+            { label: 'Copyright & Signalement', type: 'copyright', icon: 'copyright' },
+          ].map((item) => (
+            <List.Item
+              key={item.type}
+              title={item.label}
+              titleStyle={styles.listItemTitle}
+              left={(props) => <List.Icon {...props} icon={item.icon} color={tokens.colors.primary} />}
+              right={(props) => <List.Icon {...props} icon="chevron-right" color="#9c7e49" />}
+              onPress={() => navigation.navigate('Legal', { type: item.type })}
+              style={styles.listItem}
+            />
+          ))}
         </View>
 
         <Divider style={styles.divider} />
@@ -502,6 +694,42 @@ const ProfileScreen = ({ navigation }) => {
               </Button>
             ))}
           </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* Delete Account Confirmation Dialog */}
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }}>
+          <Dialog.Title>Supprimer mon compte</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ fontSize: 14, color: '#374151', marginBottom: 12 }}>
+              Cette action est irréversible. Votre compte, vos données de lecture et vos informations personnelles seront supprimés définitivement.
+            </Text>
+            <Text style={{ fontSize: 14, color: '#374151', marginBottom: 8 }}>
+              Tapez <Text style={{ fontWeight: '700', color: '#B91C1C' }}>SUPPRIMER</Text> pour confirmer :
+            </Text>
+            <TextInput
+              mode="outlined"
+              value={deleteConfirm}
+              onChangeText={setDeleteConfirm}
+              placeholder="SUPPRIMER"
+              autoCapitalize="characters"
+              style={{ marginBottom: 4 }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }} disabled={deleteLoading}>
+              Annuler
+            </Button>
+            <Button
+              onPress={handleDeleteAccount}
+              disabled={deleteConfirm !== 'SUPPRIMER' || deleteLoading}
+              loading={deleteLoading}
+              textColor="#B91C1C"
+            >
+              Supprimer
+            </Button>
+          </Dialog.Actions>
         </Dialog>
       </Portal>
 
@@ -693,6 +921,28 @@ const styles = StyleSheet.create({
   },
   languageOption: {
     marginBottom: 8,
+  },
+  rgpdInfo: {
+    fontSize: 13,
+    color: tokens.colors.onSurface.light,
+    opacity: 0.7,
+    marginBottom: 12,
+    lineHeight: 19,
+  },
+  rgpdButton: {
+    marginBottom: 8,
+    borderColor: tokens.colors.primary,
+  },
+  deleteButton: {
+    borderColor: tokens.colors.semantic.error,
+  },
+  listItem: {
+    paddingHorizontal: 0,
+    paddingVertical: 2,
+  },
+  listItemTitle: {
+    fontSize: 14,
+    color: tokens.colors.onSurface.light,
   },
 });
 

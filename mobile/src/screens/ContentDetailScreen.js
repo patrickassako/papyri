@@ -9,12 +9,19 @@ import {
   Alert,
   Linking,
 } from 'react-native';
-import { Text, ActivityIndicator } from 'react-native-paper';
+import { Text, ActivityIndicator, ProgressBar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { contentsService } from '../services/contents.service';
 import { subscriptionService } from '../services/subscription.service';
+import {
+  isContentDownloaded,
+  downloadContent,
+  deleteDownloadedContent,
+  getDownloadedContents,
+  formatBytes,
+} from '../services/offline.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_WIDTH = Math.min(SCREEN_WIDTH * 0.58, 260);
@@ -25,6 +32,19 @@ function formatDuration(seconds) {
   const h = Math.floor(value / 3600);
   const m = Math.floor((value % 3600) / 60);
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+function formatMoney(cents, currency = 'USD') {
+  const amount = Number(cents || 0) / 100;
+  try {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
 }
 
 function formatYear(dateString) {
@@ -54,6 +74,13 @@ export default function ContentDetailScreen({ route, navigation }) {
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [recommendations, setRecommendations] = useState({ sameGenre: [], youllLike: [] });
+
+  // Offline download state
+  const [downloadState, setDownloadState] = useState('idle'); // 'idle' | 'downloading' | 'downloaded'
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadSize, setDownloadSize] = useState(null);
+  const [downloadExpiry, setDownloadExpiry] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -94,6 +121,11 @@ export default function ContentDetailScreen({ route, navigation }) {
         }
 
         await refreshAccessAndUsage();
+
+        // Load recommendations non-blocking
+        contentsService.getRecommendations(contentId).then((recs) => {
+          if (alive) setRecommendations(recs);
+        }).catch(() => {});
       } catch (err) {
         console.error('Error loading content detail:', err);
         if (alive) setError('Impossible de charger ce contenu.');
@@ -112,6 +144,19 @@ export default function ContentDetailScreen({ route, navigation }) {
     return () => {
       alive = false;
     };
+  }, [contentId]);
+
+  // Check if already downloaded + load size/expiry
+  useEffect(() => {
+    if (!contentId) return;
+    getDownloadedContents().then((list) => {
+      const entry = list.find((e) => e.contentId === contentId);
+      if (entry) {
+        setDownloadState('downloaded');
+        if (entry.fileSize) setDownloadSize(entry.fileSize);
+        if (entry.expiresAt) setDownloadExpiry(new Date(entry.expiresAt));
+      }
+    });
   }, [contentId]);
 
   const isAudiobook = useMemo(
@@ -191,12 +236,8 @@ export default function ContentDetailScreen({ route, navigation }) {
       navigation.navigate('AudioPlayer', { contentId: content.id || contentId });
       return;
     }
-    const format = String(content?.format || '').toLowerCase();
-    if (format === 'pdf') {
-      navigation.navigate('BookReader', { contentId: content.id || contentId });
-      return;
-    }
-    navigation.navigate('Reader', { contentId: content.id || contentId });
+    // All ebook formats (epub, pdf) go to BookReaderScreen (WebView-based)
+    navigation.navigate('BookReader', { contentId: content.id || contentId });
   };
 
   const handleLockedPrimaryAction = async () => {
@@ -272,17 +313,64 @@ export default function ContentDetailScreen({ route, navigation }) {
   };
 
   const handleDownload = async () => {
+    if (downloadState === 'downloading') return;
+
+    // If already downloaded, confirm delete
+    if (downloadState === 'downloaded') {
+      Alert.alert(
+        'Supprimer le fichier',
+        'Supprimer ce contenu du stockage local ?',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          {
+            text: 'Supprimer',
+            style: 'destructive',
+            onPress: async () => {
+              await deleteDownloadedContent(content.id || contentId).catch(() => {});
+              setDownloadState('idle');
+              setDownloadSize(null);
+              setDownloadExpiry(null);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     try {
+      setDownloadState('downloading');
+      setDownloadProgress(0);
+
       const payload = await contentsService.getContentFileUrl(content.id || contentId);
       const signedUrl = payload?.data?.url || payload?.url || null;
       if (!signedUrl) {
+        setDownloadState('idle');
         Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
         return;
       }
-      Alert.alert('Téléchargement', 'Le téléchargement est prêt.');
+
+      const format = isAudiobook ? 'audio' : (content.format || 'epub');
+      const filePath = await downloadContent({
+        contentId: content.id || contentId,
+        url: signedUrl,
+        format,
+        title: content.title || 'Contenu',
+        type: isAudiobook ? 'audiobook' : 'ebook',
+        onProgress: (pct) => setDownloadProgress(pct / 100),
+      });
+
+      // Get file size + expiry from stored metadata
+      const allDownloads = await getDownloadedContents();
+      const entry = allDownloads.find((e) => e.contentId === (content.id || contentId));
+      if (entry?.fileSize) setDownloadSize(entry.fileSize);
+      if (entry?.expiresAt) setDownloadExpiry(new Date(entry.expiresAt));
+
+      setDownloadState('downloaded');
+      setDownloadProgress(1);
     } catch (err) {
       console.error('Download error:', err);
-      Alert.alert('Erreur', 'Impossible de préparer le téléchargement.');
+      setDownloadState('idle');
+      Alert.alert('Erreur', 'Téléchargement échoué. Veuillez réessayer.');
     }
   };
 
@@ -432,6 +520,19 @@ export default function ContentDetailScreen({ route, navigation }) {
               <Text style={styles.chipText}>{content.page_count} PAGES</Text>
             </View>
           )}
+          {(() => {
+            const priceCents = content.localized_price?.price_cents ?? content.price_cents;
+            const currency = content.localized_price?.currency || content.price_currency || 'USD';
+            if (!priceCents || Number(priceCents) <= 0) return null;
+            return (
+              <View style={[styles.chip, { backgroundColor: '#D4A01722', borderColor: '#D4A017' }]}>
+                <MaterialCommunityIcons name="tag-outline" size={14} color="#D4A017" />
+                <Text style={[styles.chipText, { color: '#D4A017', fontWeight: 'bold' }]}>
+                  {formatMoney(priceCents, currency)}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
 
         <View style={styles.actionsArea}>
@@ -447,17 +548,53 @@ export default function ContentDetailScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {!isLocked && (
-            <View style={styles.secondaryRow}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleDownload}>
-                <MaterialCommunityIcons name="download" size={18} color="#B5651D" />
-                <Text style={styles.secondaryButtonText}>Télécharger</Text>
-              </TouchableOpacity>
-
-              {isAudiobook && (
-                <TouchableOpacity style={styles.secondaryButton} onPress={handlePlaylist}>
-                  <MaterialCommunityIcons name="playlist-plus" size={18} color="#B5651D" />
-                  <Text style={styles.secondaryButtonText}>Playlist</Text>
+            <View>
+              <View style={styles.secondaryRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButton,
+                    downloadState === 'downloaded' && styles.secondaryButtonDone,
+                    downloadState === 'downloading' && styles.secondaryButtonDisabled,
+                  ]}
+                  onPress={handleDownload}
+                  disabled={downloadState === 'downloading'}
+                >
+                  <MaterialCommunityIcons
+                    name={downloadState === 'downloaded' ? 'check-circle' : 'download'}
+                    size={18}
+                    color={downloadState === 'downloaded' ? '#4caf50' : '#B5651D'}
+                  />
+                  <Text style={[
+                    styles.secondaryButtonText,
+                    downloadState === 'downloaded' && { color: '#4caf50' },
+                  ]}>
+                    {downloadState === 'downloading'
+                      ? `${Math.round(downloadProgress * 100)}%`
+                      : downloadState === 'downloaded'
+                        ? [
+                            downloadSize ? `Hors-ligne · ${formatBytes(downloadSize)}` : 'Hors-ligne',
+                            downloadExpiry
+                              ? ` · exp. ${downloadExpiry.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}`
+                              : '',
+                          ].join('')
+                        : 'Télécharger'}
+                  </Text>
                 </TouchableOpacity>
+
+                {isAudiobook && (
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handlePlaylist}>
+                    <MaterialCommunityIcons name="playlist-plus" size={18} color="#B5651D" />
+                    <Text style={styles.secondaryButtonText}>Playlist</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {downloadState === 'downloading' && (
+                <ProgressBar
+                  progress={downloadProgress}
+                  color="#B5651D"
+                  style={styles.downloadProgressBar}
+                />
               )}
             </View>
           )}
@@ -615,6 +752,56 @@ export default function ContentDetailScreen({ route, navigation }) {
               <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#c44" />
               <Text style={styles.optionText}>Signaler un problème</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Dans le même genre ── */}
+        {recommendations.sameGenre.length > 0 && (
+          <View style={styles.recSection}>
+            <Text style={styles.recTitle}>Dans le même genre</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recRow}>
+              {recommendations.sameGenre.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.recCard}
+                  activeOpacity={0.8}
+                  onPress={() => navigation.push('ContentDetail', { contentId: item.id })}
+                >
+                  <Image
+                    source={{ uri: item.cover_url || 'https://placehold.co/100x140/ece4d7/6b5840?text=Livre' }}
+                    style={styles.recCover}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.recCardTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.recCardAuthor} numberOfLines={1}>{item.author}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── Vous aimerez aussi (même auteur) ── */}
+        {recommendations.youllLike.length > 0 && (
+          <View style={styles.recSection}>
+            <Text style={styles.recTitle}>Vous aimerez aussi</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recRow}>
+              {recommendations.youllLike.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.recCard}
+                  activeOpacity={0.8}
+                  onPress={() => navigation.push('ContentDetail', { contentId: item.id })}
+                >
+                  <Image
+                    source={{ uri: item.cover_url || 'https://placehold.co/100x140/ece4d7/6b5840?text=Livre' }}
+                    style={styles.recCover}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.recCardTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.recCardAuthor} numberOfLines={1}>{item.author}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -1032,5 +1219,57 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#2d2722',
     fontWeight: '600',
+  },
+
+  secondaryButtonDone: {
+    borderColor: '#c8e6c9',
+    backgroundColor: '#f1f8f1',
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.7,
+  },
+  downloadProgressBar: {
+    marginTop: 8,
+    marginHorizontal: 4,
+    borderRadius: 4,
+    height: 4,
+  },
+
+  // Recommendations
+  recSection: {
+    marginTop: 24,
+    paddingBottom: 8,
+  },
+  recTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2E4057',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  recRow: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  recCard: {
+    width: 110,
+  },
+  recCover: {
+    width: 110,
+    height: 154,
+    borderRadius: 10,
+    backgroundColor: '#ece4d7',
+  },
+  recCardTitle: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2E4057',
+    lineHeight: 16,
+  },
+  recCardAuthor: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#9c7e49',
   },
 });

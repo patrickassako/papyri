@@ -12,6 +12,7 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import * as authService from '../services/auth.service';
+import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -91,11 +92,27 @@ const Login = () => {
     try {
       await authService.login(formData.email, formData.password);
 
-      // Success - redirect to user dashboard
-      navigate('/dashboard');
+      // Check if MFA verification is required before full access
+      const mfaRequired = await authService.checkMfaRequired();
+      if (mfaRequired) {
+        navigate('/mfa-verify');
+        return;
+      }
+
+      // Redirection selon le rôle
+      const user = await authService.getUser();
+      const role = user?.role;
+      if (role === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (role === 'publisher') {
+        navigate('/publisher/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       console.error('Login error:', error);
       setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');
+    } finally {
       setLoading(false);
     }
   };
@@ -119,11 +136,22 @@ const Login = () => {
           maxWidth: '400px',
         }}
       >
+        {/* Logo */}
+        <Box sx={{ textAlign: 'center', marginBottom: '32px' }}>
+          <Box
+            component="img"
+            src={papyriLogo}
+            alt="Papyri"
+            onClick={() => navigate('/')}
+            sx={{ height: 44, objectFit: 'contain', cursor: 'pointer', display: 'inline-block' }}
+          />
+        </Box>
+
         {/* Header */}
         <Typography
           variant="h1"
           sx={{
-            fontSize: { xs: '28px', sm: '32px' },
+            fontSize: { xs: '24px', sm: '28px' },
             fontWeight: 600,
             color: 'text.primary',
             marginBottom: '32px',
@@ -254,11 +282,16 @@ const Login = () => {
         {/* Forgot Password Link */}
         <Box sx={{ marginBottom: '24px', textAlign: 'right' }}>
           <Link
-            href="/forgot-password"
+            component="button"
+            type="button"
+            onClick={() => navigate('/forgot-password')}
             sx={{
               color: 'primary.main',
               textDecoration: 'none',
               fontSize: '14px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
               '&:hover': {
                 textDecoration: 'underline'
               }
@@ -305,17 +338,39 @@ const Login = () => {
         >
           Vous n'avez pas encore de compte ?{' '}
           <Link
-            href="/register"
+            component="button"
+            type="button"
+            onClick={() => navigate('/register')}
             sx={{
               color: 'primary.main',
               textDecoration: 'none',
               fontWeight: 600,
-              '&:hover': {
-                textDecoration: 'underline'
-              }
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { textDecoration: 'underline' }
             }}
           >
             Créer un compte
+          </Link>
+        </Typography>
+
+        {/* Back to home */}
+        <Typography sx={{ fontSize: '13px', color: 'text.secondary', textAlign: 'center', marginTop: '16px' }}>
+          <Link
+            component="button"
+            type="button"
+            onClick={() => navigate('/')}
+            sx={{
+              color: 'text.secondary',
+              textDecoration: 'none',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { color: 'primary.main', textDecoration: 'underline' }
+            }}
+          >
+            ← Retour à l'accueil
           </Link>
         </Typography>
       </Box>

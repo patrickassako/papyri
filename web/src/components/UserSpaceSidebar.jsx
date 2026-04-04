@@ -13,6 +13,8 @@ import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
 import PhotoCameraOutlined from '@mui/icons-material/PhotoCameraOutlined';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
+import NotificationBell from './NotificationBell';
+import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const navItems = [
   { label: 'Vue d\'ensemble', icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
@@ -20,8 +22,8 @@ const navItems = [
   { label: 'Statistiques', icon: AnalyticsOutlined, key: 'stats', route: '/history' },
   { label: 'Préférences', icon: SettingsOutlined, key: 'preferences', route: '/profile' },
   { label: 'Abonnement', icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
-  { label: 'Appareils', icon: DevicesOutlined, key: 'devices', disabled: true },
-  { label: 'Sécurité', icon: SecurityOutlined, key: 'security', disabled: true },
+  { label: 'Appareils', icon: DevicesOutlined, key: 'devices', route: '/devices' },
+  { label: 'Sécurité', icon: SecurityOutlined, key: 'security', route: '/security' },
 ];
 
 export default function UserSpaceSidebar({
@@ -59,7 +61,15 @@ export default function UserSpaceSidebar({
         overflow: 'auto',
       }}
     >
-      <Box sx={{ p: 3, textAlign: 'center', borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}` }}>
+      {/* Logo */}
+      <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box component="img" src={papyriLogo} alt="Papyri" sx={{ height: 36, objectFit: 'contain' }} />
+      </Box>
+
+      <Box sx={{ p: 3, textAlign: 'center', borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}`, position: 'relative' }}>
+        <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+          <NotificationBell />
+        </Box>
         <Box sx={{ position: 'relative', display: 'inline-block', mb: 1.5 }}>
           <Avatar
             src={userAvatar}
@@ -77,6 +87,7 @@ export default function UserSpaceSidebar({
           </Avatar>
           <IconButton
             size="small"
+            aria-label="Modifier la photo de profil"
             sx={{
               position: 'absolute',
               bottom: 0,
@@ -182,6 +193,26 @@ export default function UserSpaceSidebar({
         >
           Déconnexion
         </Button>
+
+        {/* Legal links */}
+        <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${tokens.colors.surfaces.light.variant}`, display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+          {[
+            { label: 'CGU', path: '/cgu' },
+            { label: 'CGV', path: '/cgv' },
+            { label: 'Confidentialité', path: '/privacy' },
+            { label: 'Cookies', path: '/cookies' },
+            { label: 'Mentions légales', path: '/mentions-legales' },
+            { label: 'Copyright', path: '/copyright' },
+          ].map(link => (
+            <Typography
+              key={link.path}
+              onClick={() => navigate(link.path)}
+              sx={{ fontSize: '0.72rem', color: '#9c7e49', cursor: 'pointer', '&:hover': { color: tokens.colors.primary, textDecoration: 'underline' } }}
+            >
+              {link.label}
+            </Typography>
+          ))}
+        </Box>
       </Box>
     </Box>
   );

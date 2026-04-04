@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from '../config/storage';
 
-// Configuration de l'URL de base de l'API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '../config/api';
 
 /**
  * Instance Axios configurée pour l'API

@@ -7,7 +7,6 @@ import {
   Modal,
   Platform,
   Switch,
-  Linking,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +15,7 @@ import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { readingService } from '../services/reading.service';
 import { parseEpubArrayBuffer } from '../services/epub.service';
+import { useReadingLock } from '../hooks/useReadingLock';
 
 const FONT_OPTIONS = [
   {
@@ -97,6 +97,7 @@ function buildFallbackParagraphs() {
 
 export default function ReaderScreen({ route, navigation }) {
   const { contentId } = route.params || {};
+  const { lockState, reacquire } = useReadingLock(contentId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [session, setSession] = useState(null);
@@ -104,12 +105,17 @@ export default function ReaderScreen({ route, navigation }) {
   const [contentUnavailableReason, setContentUnavailableReason] = useState('');
   const [chapters, setChapters] = useState([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  // Bookmarks — persisted in DB
+  const [bookmarks, setBookmarks] = useState([]); // [{id, position, label, created_at}]
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+
   const [showSettings, setShowSettings] = useState(false);
   const [showChapters, setShowChapters] = useState(false);
   const [progress, setProgress] = useState(0);
   const [binaryFormatLabel, setBinaryFormatLabel] = useState('');
   const [highlightMode, setHighlightMode] = useState(false);
+  // highlights — {[cfiRange]: {id?, paragraphIndex, color, textPreview}} — synced with DB
   const [highlights, setHighlights] = useState({});
 
   const [fontSize, setFontSize] = useState(22);
@@ -164,13 +170,11 @@ export default function ReaderScreen({ route, navigation }) {
     async (nextProgress) => {
       if (!contentId || !canAutoSaveRef.current) return;
       try {
-        const serializedHighlights = Object.values(highlights);
         await readingService.saveProgress(contentId, {
           progressPercent: Number(nextProgress.toFixed(2)),
           lastPosition: {
             progress: Number(nextProgress.toFixed(2)),
             chapter_title: chapterTitle,
-            highlights: serializedHighlights,
             settings: {
               font_size: fontSize,
               font_key: fontKey,
@@ -185,7 +189,7 @@ export default function ReaderScreen({ route, navigation }) {
         console.warn('Reader progress save failed:', saveError?.message || saveError);
       }
     },
-    [brightness, chapterTitle, contentId, fontKey, fontSize, highlights, nightMode, themeKey]
+    [brightness, chapterTitle, contentId, fontKey, fontSize, nightMode, themeKey]
   );
 
   useEffect(() => {
@@ -272,9 +276,6 @@ export default function ReaderScreen({ route, navigation }) {
         setProgress(Math.max(0, Math.min(100, savedProgress)));
 
         const savedSettings = sessionData?.progress?.last_position?.settings || {};
-        const savedHighlights = Array.isArray(sessionData?.progress?.last_position?.highlights)
-          ? sessionData.progress.last_position.highlights
-          : [];
         if (Number.isFinite(Number(savedSettings.font_size))) {
           setFontSize(Number(savedSettings.font_size));
         }
@@ -290,25 +291,12 @@ export default function ReaderScreen({ route, navigation }) {
         if (Number.isFinite(Number(savedSettings.brightness))) {
           setBrightness(Number(savedSettings.brightness));
         }
-        if (savedHighlights.length > 0) {
-          const nextMap = {};
-          savedHighlights.forEach((entry) => {
-            const idx = Number(entry?.paragraphIndex);
-            if (!Number.isFinite(idx) || idx < 0) return;
-            nextMap[idx] = {
-              paragraphIndex: idx,
-              color: entry?.color || '#F9E27D',
-              textPreview: String(entry?.textPreview || ''),
-            };
-          });
-          setHighlights(nextMap);
-        } else {
-          setHighlights({});
-        }
 
-        const [contentPayload, chaptersResult] = await Promise.all([
+        const [contentPayload, chaptersResult, bookmarksResult, highlightsResult] = await Promise.all([
           loadReadableContent(sessionData),
           readingService.getChapters(contentId).catch(() => null),
+          readingService.getBookmarks(contentId).catch(() => []),
+          readingService.getHighlights(contentId).catch(() => []),
         ]);
         if (!mounted) return;
         setParagraphs(contentPayload?.paragraphs || []);
@@ -320,6 +308,27 @@ export default function ReaderScreen({ route, navigation }) {
         } else {
           setChapters([{ id: 'chapter-1', title: 'Chapitre 1' }]);
         }
+
+        // Load bookmarks from API
+        setBookmarks(Array.isArray(bookmarksResult) ? bookmarksResult : []);
+
+        // Load highlights from API — keyed by cfi_range (paragraph-N)
+        const nextHighlights = {};
+        if (Array.isArray(highlightsResult)) {
+          highlightsResult.forEach((h) => {
+            const idx = h?.position?.paragraphIndex;
+            if (Number.isFinite(idx)) {
+              nextHighlights[idx] = {
+                id: h.id,
+                paragraphIndex: idx,
+                color: h.color === 'yellow' ? '#F9E27D' : h.color,
+                textPreview: h.text || '',
+              };
+            }
+          });
+        }
+        setHighlights(nextHighlights);
+
         hasAppliedInitialScrollRef.current = false;
         canAutoSaveRef.current = true;
       } catch (loadError) {
@@ -434,22 +443,53 @@ export default function ReaderScreen({ route, navigation }) {
     return Math.min(0.35, 1 - brightness);
   }, [brightness]);
 
-  const toggleParagraphHighlight = useCallback((paragraphIndex) => {
-    setHighlights((prev) => {
-      const next = { ...prev };
-      if (next[paragraphIndex]) {
+  const toggleParagraphHighlight = useCallback(async (paragraphIndex) => {
+    const existing = highlights[paragraphIndex];
+    if (existing) {
+      // Remove optimistically then confirm via API
+      setHighlights((prev) => {
+        const next = { ...prev };
         delete next[paragraphIndex];
         return next;
+      });
+      if (existing.id && contentId) {
+        readingService.deleteHighlight(contentId, existing.id).catch((err) => {
+          console.warn('deleteHighlight failed:', err?.message);
+          // Restore on failure
+          setHighlights((prev) => ({ ...prev, [paragraphIndex]: existing }));
+        });
       }
-      const paragraphText = String(paragraphs[paragraphIndex] || '');
-      next[paragraphIndex] = {
-        paragraphIndex,
-        color: '#F9E27D',
-        textPreview: paragraphText.slice(0, 120),
-      };
-      return next;
-    });
-  }, [paragraphs]);
+      return;
+    }
+
+    // Add optimistically
+    const paragraphText = String(paragraphs[paragraphIndex] || '');
+    const optimistic = { paragraphIndex, color: '#F9E27D', textPreview: paragraphText.slice(0, 120) };
+    setHighlights((prev) => ({ ...prev, [paragraphIndex]: optimistic }));
+
+    if (!contentId) return;
+    try {
+      const created = await readingService.addHighlight(contentId, {
+        text: paragraphText.slice(0, 500) || `Paragraphe ${paragraphIndex + 1}`,
+        cfiRange: `paragraph-${paragraphIndex}`,
+        position: { paragraphIndex, chapter_label: chapterTitle },
+        color: 'yellow',
+      });
+      // Store the DB id so we can delete later
+      setHighlights((prev) => ({
+        ...prev,
+        [paragraphIndex]: { ...optimistic, id: created?.id },
+      }));
+    } catch (err) {
+      console.warn('addHighlight failed:', err?.message);
+      // Rollback
+      setHighlights((prev) => {
+        const next = { ...prev };
+        delete next[paragraphIndex];
+        return next;
+      });
+    }
+  }, [highlights, paragraphs, contentId, chapterTitle]);
 
   if (loading) {
     return (
@@ -463,6 +503,40 @@ export default function ReaderScreen({ route, navigation }) {
     return (
       <SafeAreaView style={[styles.loadingWrap, { backgroundColor: '#F7F4EF' }]} edges={['top', 'bottom']}>
         <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.errorBackBtn}>
+          <Text style={styles.errorBackText}>Retour</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (lockState === 'displaced') {
+    return (
+      <SafeAreaView style={[styles.loadingWrap, { backgroundColor: '#F7F4EF' }]} edges={['top', 'bottom']}>
+        <MaterialCommunityIcons name="cellphone-arrow-down" size={48} color="#2E4057" />
+        <Text style={[styles.errorText, { textAlign: 'center', marginTop: 12 }]}>
+          Un autre appareil a repris la lecture.
+        </Text>
+        <TouchableOpacity
+          onPress={reacquire}
+          style={[styles.errorBackBtn, { backgroundColor: '#B5651D', marginBottom: 10 }]}
+        >
+          <Text style={styles.errorBackText}>Reprendre ici</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.errorBackBtn}>
+          <Text style={styles.errorBackText}>Retour</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (lockState === 'device_limit') {
+    return (
+      <SafeAreaView style={[styles.loadingWrap, { backgroundColor: '#F7F4EF' }]} edges={['top', 'bottom']}>
+        <MaterialCommunityIcons name="lock-outline" size={48} color="#B5651D" />
+        <Text style={[styles.errorText, { textAlign: 'center', marginTop: 12 }]}>
+          Limite de 3 appareils atteinte.{'\n'}Supprimez un appareil depuis votre profil.
+        </Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.errorBackBtn}>
           <Text style={styles.errorBackText}>Retour</Text>
         </TouchableOpacity>
@@ -489,9 +563,33 @@ export default function ReaderScreen({ route, navigation }) {
           >
             <MaterialCommunityIcons name="marker" size={22} color={activeTheme.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setIsBookmarked((v) => !v)}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            disabled={bookmarkLoading}
+            onPress={async () => {
+              if (!contentId) return;
+              // If there's already a bookmark near current position, show list; else add one
+              if (bookmarks.length > 0) {
+                setShowBookmarks(true);
+                return;
+              }
+              setBookmarkLoading(true);
+              try {
+                const created = await readingService.addBookmark(
+                  contentId,
+                  { percent: Math.round(progress), chapter_label: chapterTitle },
+                  `Page ${Math.round(progress)}%`
+                );
+                setBookmarks((prev) => [created, ...prev]);
+              } catch (err) {
+                console.warn('addBookmark failed:', err?.message);
+              } finally {
+                setBookmarkLoading(false);
+              }
+            }}
+          >
             <MaterialCommunityIcons
-              name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+              name={bookmarks.length > 0 ? 'bookmark' : 'bookmark-outline'}
               size={22}
               color={activeTheme.text}
             />
@@ -561,19 +659,13 @@ export default function ReaderScreen({ route, navigation }) {
             <Text style={[styles.emptyReaderText, { color: activeTheme.subtleText }]}>
               {contentUnavailableReason || 'Le texte intégral de ce livre ne peut pas être affiché dans ce lecteur.'}
             </Text>
-            {!!session?.stream?.url && !!binaryFormatLabel && (
+            {!!binaryFormatLabel && (
               <TouchableOpacity
                 style={styles.openBinaryButton}
-                onPress={async () => {
-                  try {
-                    await Linking.openURL(session.stream.url);
-                  } catch (openError) {
-                    setError(`Impossible d'ouvrir le fichier ${binaryFormatLabel}.`);
-                  }
-                }}
+                onPress={() => navigation.replace('BookReader', { contentId })}
               >
-                <MaterialCommunityIcons name="open-in-new" size={18} color="#FFFFFF" />
-                <Text style={styles.openBinaryButtonText}>Ouvrir le fichier {binaryFormatLabel}</Text>
+                <MaterialCommunityIcons name="book-open-variant" size={18} color="#FFFFFF" />
+                <Text style={styles.openBinaryButtonText}>Ouvrir dans le lecteur {binaryFormatLabel}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -794,6 +886,93 @@ export default function ReaderScreen({ route, navigation }) {
                 />
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Bookmarks modal ─────────────────── */}
+      <Modal
+        visible={showBookmarks}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBookmarks(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowBookmarks(false)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Marque-pages</Text>
+              <TouchableOpacity onPress={() => setShowBookmarks(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#6E6860" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Add bookmark at current position */}
+            <TouchableOpacity
+              style={[styles.chapterItem, { marginBottom: 12, backgroundColor: '#FFF5EA', borderColor: '#C9741A', borderWidth: 1 }]}
+              disabled={bookmarkLoading}
+              onPress={async () => {
+                if (!contentId) return;
+                setBookmarkLoading(true);
+                try {
+                  const created = await readingService.addBookmark(
+                    contentId,
+                    { percent: Math.round(progress), chapter_label: chapterTitle },
+                    `${chapterTitle} — ${Math.round(progress)}%`
+                  );
+                  setBookmarks((prev) => [created, ...prev]);
+                } catch (err) {
+                  console.warn('addBookmark failed:', err?.message);
+                } finally {
+                  setBookmarkLoading(false);
+                }
+              }}
+            >
+              <MaterialCommunityIcons name="bookmark-plus-outline" size={18} color="#C9741A" />
+              <Text style={[styles.chapterItemTitle, { color: '#C9741A', marginLeft: 8 }]}>
+                Marquer ici ({Math.round(progress)}%)
+              </Text>
+            </TouchableOpacity>
+
+            {bookmarks.length === 0 ? (
+              <Text style={[styles.emptyReaderText, { color: '#9A8F86', textAlign: 'center', paddingVertical: 16 }]}>
+                Aucun marque-page pour ce livre.
+              </Text>
+            ) : (
+              bookmarks.map((bm) => (
+                <View key={bm.id} style={[styles.chapterItem, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => {
+                      const targetPercent = Number(bm.position?.percent || 0);
+                      setProgress(targetPercent);
+                      scrollToProgress(targetPercent);
+                      setShowBookmarks(false);
+                    }}
+                  >
+                    <Text style={styles.chapterItemTitle}>
+                      {bm.label || `${bm.position?.chapter_label || 'Position'} — ${bm.position?.percent || 0}%`}
+                    </Text>
+                    <Text style={styles.chapterItemPercent}>{bm.position?.chapter_label || ''}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ padding: 8 }}
+                    onPress={async () => {
+                      const prev = bookmarks;
+                      setBookmarks((b) => b.filter((x) => x.id !== bm.id));
+                      try {
+                        await readingService.deleteBookmark(contentId, bm.id);
+                      } catch (err) {
+                        console.warn('deleteBookmark failed:', err?.message);
+                        setBookmarks(prev);
+                      }
+                    }}
+                  >
+                    <MaterialCommunityIcons name="trash-can-outline" size={18} color="#B07050" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </View>
         </View>
       </Modal>

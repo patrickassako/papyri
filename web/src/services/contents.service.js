@@ -2,7 +2,7 @@
 import { apiClient } from './api.client';
 import { authFetch } from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '../config/api';
 
 /**
  * Service de gestion des contenus (catalogue)
@@ -44,6 +44,12 @@ export const contentsService = {
     return response.data.data || response.data;
   },
 
+  async getContentRecommendations(id) {
+    const response = await apiClient.get(`/api/contents/${id}/recommendations`);
+    const data = response.data.data || {};
+    return { sameGenre: data.sameGenre || [], youllLike: data.youllLike || [] };
+  },
+
   /**
    * Récupère les informations d'accès du contenu pour l'utilisateur connecté
    * @param {string} id - ID du contenu
@@ -63,13 +69,15 @@ export const contentsService = {
    * @param {string} id - ID du contenu
    * @returns {Promise<Object>}
    */
-  async unlockContent(id) {
+  async unlockContent(id, { provider } = {}) {
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        ...(provider ? { provider } : {}),
+      }),
     });
 
     const data = await response.json();
@@ -100,7 +108,7 @@ export const contentsService = {
    * @param {{transactionId: string, reference: string}} params
    * @returns {Promise<Object>}
    */
-  async verifyUnlockPayment(id, { transactionId, reference }) {
+  async verifyUnlockPayment(id, { transactionId, reference, provider, sessionId }) {
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock/verify-payment`, {
       method: 'POST',
       headers: {
@@ -109,6 +117,8 @@ export const contentsService = {
       body: JSON.stringify({
         transactionId,
         reference,
+        provider,
+        sessionId,
       }),
     });
 
@@ -153,6 +163,18 @@ export const contentsService = {
   },
 
   /**
+   * Récupère les recommandations personnalisées pour l'utilisateur connecté
+   * @param {number} [limit=12] - Nombre de résultats
+   * @returns {Promise<Array>}
+   */
+  async getRecommendations(limit = 12) {
+    const response = await authFetch(`${API_BASE_URL}/api/recommendations?limit=${limit}`);
+    const data = await response.json();
+    if (!response.ok) return [];
+    return Array.isArray(data?.data) ? data.data : [];
+  },
+
+  /**
    * Recherche des contenus avec Meilisearch
    * @param {string} query - Terme de recherche
    * @param {Object} params - Filtres additionnels
@@ -162,13 +184,28 @@ export const contentsService = {
     const response = await apiClient.get('/api/search', {
       params: { q: query, ...params }
     });
-    // L'API retourne { success: true, data: { results: [...], total: X } }
     if (response.data.data) {
       return {
         hits: response.data.data.results || [],
-        estimatedTotalHits: response.data.data.total || 0
+        estimatedTotalHits: response.data.data.total || 0,
+        engine: response.data.data.engine,
       };
     }
     return response.data;
-  }
+  },
+
+  /**
+   * Autocomplete suggestions
+   * @param {string} query
+   * @returns {Promise<Array>}
+   */
+  async suggest(query) {
+    if (!query || query.length < 2) return [];
+    try {
+      const response = await apiClient.get('/api/search/suggest', { params: { q: query } });
+      return response.data?.data || [];
+    } catch {
+      return [];
+    }
+  },
 };

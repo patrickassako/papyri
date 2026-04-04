@@ -1,45 +1,32 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Avatar,
   Button,
   Paper,
   LinearProgress,
   Chip,
   IconButton,
+  Skeleton,
 } from '@mui/material';
-import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
-import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined';
-import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
-import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
-import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
-import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
-import SecurityOutlined from '@mui/icons-material/SecurityOutlined';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import HeadphonesOutlined from '@mui/icons-material/HeadphonesOutlined';
+import MenuBookRounded from '@mui/icons-material/MenuBookRounded';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
-import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import LocalFireDepartmentOutlined from '@mui/icons-material/LocalFireDepartmentOutlined';
 import TrackChangesOutlined from '@mui/icons-material/TrackChangesOutlined';
-import PhotoCameraOutlined from '@mui/icons-material/PhotoCameraOutlined';
 
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
+import { contentsService } from '../services/contents.service';
+import UserSpaceSidebar from '../components/UserSpaceSidebar';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-const sidebarNavItems = [
-  { label: 'Vue d\'ensemble', icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
-  { label: 'Ma bibliothèque', icon: AutoStoriesOutlined, key: 'library', route: '/my-list' },
-  { label: 'Statistiques', icon: AnalyticsOutlined, key: 'stats', route: '/history' },
-  { label: 'Préférences', icon: SettingsOutlined, key: 'preferences', route: '/profile' },
-  { label: 'Abonnement', icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
-  { label: 'Appareils', icon: DevicesOutlined, key: 'devices' },
-  { label: 'Sécurité', icon: SecurityOutlined, key: 'security' },
-];
 
 const emptyStats = {
   books_read: 0,
@@ -149,15 +136,134 @@ function computeStats(historyItems) {
   };
 }
 
+function scroll(ref, direction) {
+  if (!ref.current) return;
+  ref.current.scrollBy({ left: direction * 280, behavior: 'smooth' });
+}
+
+function ContentCard({ book, onClick }) {
+  const isAudio = String(book.content_type || '').toLowerCase() === 'audiobook'
+    || ['mp3', 'm4a'].includes(String(book.format || '').toLowerCase());
+  return (
+    <Paper
+      elevation={0}
+      onClick={onClick}
+      sx={{
+        flexShrink: 0,
+        width: 130,
+        borderRadius: '10px',
+        overflow: 'hidden',
+        border: `1px solid ${tokens.colors.surfaces.light.variant}`,
+        bgcolor: '#fff',
+        cursor: 'pointer',
+        transition: 'transform 0.18s, box-shadow 0.18s',
+        '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 6px 20px rgba(0,0,0,0.09)' },
+      }}
+    >
+      <Box sx={{ position: 'relative', width: 130, height: 174, bgcolor: tokens.colors.surfaces.light.variant, overflow: 'hidden' }}>
+        <Box
+          component="img"
+          src={book.cover_url || book.cover_image_url || ''}
+          alt={book.title}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            bgcolor: isAudio ? tokens.colors.secondary : tokens.colors.primary,
+            borderRadius: '6px',
+            p: '2px 5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.3,
+          }}
+        >
+          {isAudio
+            ? <HeadphonesOutlined sx={{ fontSize: 11, color: '#fff' }} />
+            : <MenuBookRounded sx={{ fontSize: 11, color: '#fff' }} />}
+        </Box>
+      </Box>
+      <Box sx={{ p: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.3, fontSize: '0.75rem' }}>
+          {book.title}
+        </Typography>
+        <Typography variant="caption" sx={{ color: '#9c7e49', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.68rem', mt: 0.25 }}>
+          {book.author_name || book.author || ''}
+        </Typography>
+      </Box>
+    </Paper>
+  );
+}
+
+function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavigate }) {
+  const navigate = onNavigate;
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
+          {title}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <IconButton size="small" aria-label="Faire défiler à gauche" onClick={() => scroll(scrollRef, -1)} sx={{ color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+          <IconButton size="small" aria-label="Faire défiler à droite" onClick={() => scroll(scrollRef, 1)} sx={{ color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+          <Button
+            onClick={() => navigate(viewAllPath)}
+            sx={{ textTransform: 'none', color: tokens.colors.primary, fontWeight: 600, fontSize: '0.8rem', minWidth: 0, ml: 0.5, '&:hover': { bgcolor: `${tokens.colors.primary}0D` } }}
+          >
+            Voir tout
+          </Button>
+        </Box>
+      </Box>
+      <Box
+        ref={scrollRef}
+        sx={{
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: 1.5,
+          overflowX: 'auto',
+          pb: 1,
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}
+      >
+        {loading
+          ? Array.from({ length: 5 }).map((_, i) => (
+            <Box key={i} sx={{ flexShrink: 0, width: 130 }}>
+              <Skeleton variant="rectangular" width={130} height={174} sx={{ borderRadius: '10px' }} />
+              <Skeleton width="80%" height={14} sx={{ mt: 0.75 }} />
+              <Skeleton width="55%" height={12} sx={{ mt: 0.25 }} />
+            </Box>
+          ))
+          : items.map((book) => (
+            <ContentCard key={book.id} book={book} onClick={() => navigate(`/catalogue/${book.id}`)} />
+          ))}
+      </Box>
+    </Box>
+  );
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(emptyStats);
   const [continueReading, setContinueReading] = useState([]);
+  const [nouveautes, setNouveautes] = useState([]);
+  const [populaires, setPopulaires] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [sectionsLoading, setSectionsLoading] = useState(true);
   const [activity, setActivity] = useState({ labels: ['L', 'M', 'M', 'J', 'V', 'S', 'D'], values: [0, 0, 0, 0, 0, 0, 0] });
-  const [activeNav, setActiveNav] = useState('overview');
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [subscriptionLabel, setSubscriptionLabel] = useState('Aucun abonnement actif');
+  const nouveautesRef = useRef(null);
+  const populairesRef = useRef(null);
+  const recommendationsRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -167,10 +273,13 @@ export default function DashboardPage() {
         const userData = await authService.getUser();
         if (alive && userData) setUser(userData);
 
-        const [historyRes, continueRes, subscriptionRes] = await Promise.allSettled([
+        const [historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/reading-history/continue?limit=3`),
           authFetch(`${API_URL}/api/subscriptions/me`),
+          contentsService.getContents({ sort: 'newest', limit: 12 }),
+          contentsService.getContents({ sort: 'popular', limit: 12 }),
+          contentsService.getRecommendations(12),
         ]);
 
         let historyItems = [];
@@ -214,8 +323,22 @@ export default function DashboardPage() {
           setHasActiveSubscription(false);
           setSubscriptionLabel('Aucun abonnement actif');
         }
+
+        if (alive) {
+          if (nouveautesRes.status === 'fulfilled') {
+            setNouveautes(Array.isArray(nouveautesRes.value?.data) ? nouveautesRes.value.data : []);
+          }
+          if (populairesRes.status === 'fulfilled') {
+            setPopulaires(Array.isArray(populairesRes.value?.data) ? populairesRes.value.data : []);
+          }
+          if (recoRes.status === 'fulfilled') {
+            setRecommendations(Array.isArray(recoRes.value) ? recoRes.value : []);
+          }
+          setSectionsLoading(false);
+        }
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
+        setSectionsLoading(false);
       }
     };
 
@@ -223,22 +346,7 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await authService.logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-  };
-
-  const handleNavClick = (item) => {
-    setActiveNav(item.key);
-    if (item.route) navigate(item.route);
-  };
-
   const userName = user?.full_name || 'Utilisateur';
-  const userEmail = user?.email || '';
-  const userAvatar = user?.avatar_url || '';
 
   const statCards = useMemo(() => ([
     { label: 'Livres lus', value: stats.books_read, icon: MenuBookOutlined, color: tokens.colors.primary },
@@ -253,124 +361,7 @@ export default function DashboardPage() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light }}>
-      <Box
-        sx={{
-          width: '25%',
-          maxWidth: 320,
-          minWidth: 260,
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
-          bgcolor: '#fff',
-          borderRight: `1px solid ${tokens.colors.surfaces.light.variant}`,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'auto',
-        }}
-      >
-        <Box sx={{ p: 3, textAlign: 'center', borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}` }}>
-          <Box sx={{ position: 'relative', display: 'inline-block', mb: 1.5 }}>
-            <Avatar
-              src={userAvatar}
-              alt={userName}
-              sx={{ width: 80, height: 80, bgcolor: tokens.colors.primaryLight, fontSize: '2rem', color: '#fff', fontWeight: 600 }}
-            >
-              {userName.charAt(0).toUpperCase()}
-            </Avatar>
-            <IconButton
-              size="small"
-              sx={{
-                position: 'absolute',
-                bottom: 0,
-                right: -4,
-                bgcolor: tokens.colors.primary,
-                color: '#fff',
-                width: 28,
-                height: 28,
-                '&:hover': { bgcolor: tokens.colors.primaryDark },
-              }}
-            >
-              <PhotoCameraOutlined sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, lineHeight: 1.3 }}>
-            {userName}
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#9c7e49', mt: 0.25 }}>
-            {userEmail}
-          </Typography>
-        </Box>
-
-        <Box sx={{ flex: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {sidebarNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeNav === item.key;
-            return (
-              <Button
-                key={item.key}
-                onClick={() => handleNavClick(item)}
-                disabled={!item.route}
-                startIcon={<Icon />}
-                fullWidth
-                sx={{
-                  justifyContent: 'flex-start',
-                  borderRadius: '12px',
-                  px: 2,
-                  py: 1.25,
-                  textTransform: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: isActive ? 700 : 500,
-                  color: isActive ? tokens.colors.primary : tokens.colors.onBackground.light,
-                  bgcolor: isActive ? `${tokens.colors.primary}1A` : 'transparent',
-                  '&:hover': { bgcolor: isActive ? `${tokens.colors.primary}1A` : tokens.colors.surfaces.light.variant },
-                  '&.Mui-disabled': {
-                    color: '#b5b0a7',
-                    bgcolor: 'transparent',
-                    cursor: 'not-allowed',
-                  },
-                  gap: 1,
-                }}
-              >
-                {item.label}
-              </Button>
-            );
-          })}
-        </Box>
-
-        <Box sx={{ p: 2, borderTop: `1px solid ${tokens.colors.surfaces.light.variant}` }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: `${tokens.colors.secondary}1A`, borderRadius: '12px', px: 2, py: 1.25, mb: 1.5 }}>
-            <WorkspacePremiumOutlined sx={{ color: tokens.colors.secondary, fontSize: 22 }} />
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, lineHeight: 1.2 }}>
-                Membre Premium
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#9c7e49' }}>
-                {subscriptionLabel}
-              </Typography>
-            </Box>
-          </Box>
-
-          <Button
-            onClick={handleLogout}
-            startIcon={<LogoutOutlined />}
-            fullWidth
-            sx={{
-              justifyContent: 'flex-start',
-              borderRadius: '12px',
-              px: 2,
-              py: 1.25,
-              textTransform: 'none',
-              fontSize: '0.9rem',
-              fontWeight: 500,
-              color: tokens.colors.semantic.error,
-              '&:hover': { bgcolor: `${tokens.colors.semantic.error}0D` },
-              gap: 1,
-            }}
-          >
-            Déconnexion
-          </Button>
-        </Box>
-      </Box>
+      <UserSpaceSidebar user={user} activeKey="overview" subscriptionLabel={subscriptionLabel} />
 
       <Box sx={{ flex: 1, p: 4, overflow: 'auto' }}>
         <Box sx={{ background: `linear-gradient(135deg, ${tokens.colors.primary} 0%, ${tokens.colors.primaryDark} 100%)`, borderRadius: '16px', p: 4, mb: 3, position: 'relative', overflow: 'hidden' }}>
@@ -387,6 +378,56 @@ export default function DashboardPage() {
             sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: '0.85rem', height: 32, position: 'relative', zIndex: 1 }}
           />
         </Box>
+
+        {/* Bannière abonnement — visible uniquement sans abonnement actif */}
+        {!hasActiveSubscription && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              bgcolor: '#FFF8F0',
+              border: `1px solid ${tokens.colors.primary}40`,
+              borderRadius: '12px',
+              px: 3,
+              py: 2,
+              mb: 3,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <WorkspacePremiumOutlined sx={{ color: tokens.colors.primary, fontSize: 28 }} />
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 700, color: tokens.colors.accent, lineHeight: 1.2 }}>
+                  Passez à l'abonnement pour accéder à tout le catalogue
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Ebooks + Audio · 5€/mois ou 50€/an · Annulez à tout moment
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => navigate('/pricing')}
+              sx={{
+                bgcolor: tokens.colors.primary,
+                color: '#fff',
+                borderRadius: '20px',
+                px: 2.5,
+                py: 0.8,
+                textTransform: 'none',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                '&:hover': { bgcolor: tokens.colors.primaryDark },
+              }}
+            >
+              Voir les offres
+            </Button>
+          </Box>
+        )}
 
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2.5, mb: 3 }}>
           {statCards.map((stat) => {
@@ -410,7 +451,7 @@ export default function DashboardPage() {
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2.5 }}>
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
                 Continuer la lecture
@@ -426,9 +467,10 @@ export default function DashboardPage() {
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 {continueReading.map((book) => {
                   const contentId = book.content_id || book.id;
+                  const fmt = String(book.format || '').toLowerCase();
                   const isAudio = String(book.content_type || '').toLowerCase() === 'audiobook'
-                    || ['mp3', 'm4a'].includes(String(book.format || '').toLowerCase());
-                  const targetRoute = isAudio ? `/listen/${contentId}` : `/read/${contentId}`;
+                    || ['mp3', 'm4a'].includes(fmt);
+                  const targetRoute = isAudio ? `/listen/${contentId}` : fmt === 'pdf' ? `/pdf/${contentId}` : `/read/${contentId}`;
                   return (
                   <Paper
                     key={book.id}
@@ -487,6 +529,35 @@ export default function DashboardPage() {
                   Aucune lecture en cours pour le moment.
                 </Typography>
               </Paper>
+            )}
+
+            <HScrollSection
+              title="Nouveautés"
+              viewAllPath="/catalogue?sort=newest"
+              items={nouveautes}
+              loading={sectionsLoading}
+              scrollRef={nouveautesRef}
+              onNavigate={navigate}
+            />
+
+            <HScrollSection
+              title="Populaires"
+              viewAllPath="/catalogue?sort=popular"
+              items={populaires}
+              loading={sectionsLoading}
+              scrollRef={populairesRef}
+              onNavigate={navigate}
+            />
+
+            {(sectionsLoading || recommendations.length > 0) && (
+              <HScrollSection
+                title="Ça peut vous intéresser"
+                viewAllPath="/catalogue"
+                items={recommendations}
+                loading={sectionsLoading}
+                scrollRef={recommendationsRef}
+                onNavigate={navigate}
+              />
             )}
           </Box>
 

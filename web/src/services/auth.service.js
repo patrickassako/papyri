@@ -30,6 +30,10 @@ async function parseAuthResponse(response) {
   return payload.data;
 }
 
+export async function syncSession(session) {
+  return syncClientSession(session);
+}
+
 async function syncClientSession(session) {
   if (!session?.access_token || !session?.refresh_token) {
     return;
@@ -194,7 +198,7 @@ export async function getSession() {
       language: profile?.language,
       avatar_url: profile?.avatar_url,
       onboarding_completed: profile?.onboarding_completed,
-      role: data.session.user.user_metadata?.role || 'user',
+      role: profile?.role || data.session.user.user_metadata?.role || 'user',
     },
   };
 }
@@ -233,6 +237,50 @@ export async function getAccessToken() {
 
   const sessionData = await getSession();
   return sessionData?.session?.access_token || null;
+}
+
+/**
+ * Update current user's password
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
+/**
+ * Check if the current session requires MFA step-up (aal1 → aal2).
+ * Returns true when the user has enrolled TOTP but hasn't verified yet this session.
+ */
+export async function checkMfaRequired() {
+  try {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    return data?.nextLevel === 'aal2' && data?.currentLevel === 'aal1';
+  } catch (_) {
+    return false;
+  }
+}
+
+export async function updatePassword(currentPassword, newPassword) {
+  if (!currentPassword || !newPassword) {
+    throw new Error('Veuillez renseigner le mot de passe actuel et le nouveau mot de passe.');
+  }
+  if (newPassword.length < 8) {
+    throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
+  }
+
+  const response = await authFetch(`${API_URL}/users/me/password`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.error?.message || 'Impossible de modifier le mot de passe.');
+  }
+
+  return payload;
 }
 
 /**

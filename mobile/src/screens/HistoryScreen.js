@@ -4,133 +4,175 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import {
   Text,
   ActivityIndicator,
-  Banner,
   Button,
-  SegmentedButtons,
+  Snackbar,
+  Surface,
 } from 'react-native-paper';
-import API_BASE_URL from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readingService } from '../services/reading.service';
+import { authFetch } from '../services/auth.service';
+import API_URL from '../config/api';
 import ContentCardWithProgress from '../components/ContentCardWithProgress';
 
-// Import shared design tokens
 const tokens = require('../config/tokens');
 
-const HistoryScreen = ({ navigation }) => {
-  const [history, setHistory] = useState([]);
+const FILTERS = [
+  { key: 'all', label: 'Tous' },
+  { key: 'ebook', label: 'Ebooks' },
+  { key: 'audiobook', label: 'Audio' },
+  { key: 'completed', label: 'Terminés' },
+];
+
+function formatTime(seconds) {
+  if (!seconds || seconds <= 0) return '0m';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h${m > 0 ? ` ${m}m` : ''}`;
+  return `${m}m`;
+}
+
+function StatsBar({ stats, loading }) {
+  const cards = [
+    { label: 'Livres lus', value: loading ? '…' : String(stats?.total_books ?? 0), icon: '📚' },
+    { label: 'Temps total', value: loading ? '…' : formatTime(stats?.total_time_seconds), icon: '⏱️' },
+    { label: 'Série', value: loading ? '…' : `${stats?.streak_days ?? 0}j`, icon: '🔥' },
+    { label: 'Terminés', value: loading ? '…' : String(stats?.completed ?? 0), icon: '✅' },
+  ];
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.statsBar}
+      style={{ flexGrow: 0 }}
+    >
+      {cards.map((s) => (
+        <Surface key={s.label} style={styles.statCard} elevation={0}>
+          <Text style={styles.statIcon}>{s.icon}</Text>
+          <Text style={styles.statValue}>{s.value}</Text>
+          <Text style={styles.statLabel}>{s.label}</Text>
+        </Surface>
+      ))}
+    </ScrollView>
+  );
+}
+
+function FilterTabs({ active, onChange }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterRow}
+      style={{ flexGrow: 0 }}
+    >
+      {FILTERS.map((f) => {
+        const isActive = active === f.key;
+        return (
+          <TouchableOpacity
+            key={f.key}
+            onPress={() => onChange(f.key)}
+            style={[styles.filterChip, isActive && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterLabel, isActive && styles.filterLabelActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+export default function HistoryScreen({ navigation }) {
+  const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all'); // 'all', 'ebook', 'audiobook', 'completed'
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    total_pages: 0,
-  });
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
-  // Fetch reading history
-  const fetchHistory = async (page = 1, append = false) => {
+  const fetchStats = useCallback(async () => {
     try {
-      if (!append) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
+      setStatsLoading(true);
+      const res = await authFetch(`${API_URL}/reading-history/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data?.data || null);
       }
+    } catch (_) {}
+    finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchHistory = useCallback(async (page = 1, append = false) => {
+    try {
+      if (page === 1 && !append) setLoading(true);
+      else if (append) setLoadingMore(true);
       setError(null);
 
-      const token = await AsyncStorage.getItem('access_token');
-      if (!token) {
+      const result = await readingService.getHistory({ page });
+
+      if (append) {
+        setItems((prev) => [...prev, ...result.items]);
+      } else {
+        setItems(result.items);
+      }
+      setPagination(result.pagination);
+    } catch (err) {
+      if (err?.response?.status === 401) {
         navigation.replace('Login');
         return;
       }
-
-      const response = await fetch(
-        `${API_BASE_URL}/reading-history?page=${page}&limit=20`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          await AsyncStorage.removeItem('access_token');
-          await AsyncStorage.removeItem('refresh_token');
-          navigation.replace('Login');
-          return;
-        }
-        throw new Error(data.error?.message || 'Erreur lors du chargement de l\'historique.');
-      }
-
-      if (append) {
-        setHistory((prev) => [...prev, ...(data.data || [])]);
-      } else {
-        setHistory(data.data || []);
-      }
-      setPagination(data.pagination);
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    } catch (err) {
-      console.error('Fetch history error:', err);
-      setError(err.message);
+      setError(err.message || 'Erreur lors du chargement');
+    } finally {
       setLoading(false);
       setRefreshing(false);
       setLoadingMore(false);
     }
-  };
+  }, [navigation]);
 
   useEffect(() => {
     fetchHistory(1);
-  }, []);
+    fetchStats();
+  }, [fetchHistory, fetchStats]);
 
-  // Handle refresh
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchHistory(1);
-  }, []);
+    fetchStats();
+  }, [fetchHistory, fetchStats]);
 
-  // Handle load more (pagination)
   const handleLoadMore = () => {
     if (!loadingMore && pagination.page < pagination.total_pages) {
       fetchHistory(pagination.page + 1, true);
     }
   };
 
-  // Filter history items
-  const filteredHistory = history.filter((item) => {
-    if (filter === 'all') return true;
+  const handleContinue = (contentId, lastPosition, item) => {
+    const type = String(item?.content_type || '').toLowerCase();
+    if (type === 'audiobook') {
+      navigation.navigate('AudioPlayer', { contentId });
+    } else {
+      navigation.navigate('BookReader', { contentId });
+    }
+  };
+
+  const filtered = items.filter((item) => {
     if (filter === 'ebook') return item.content_type === 'ebook';
     if (filter === 'audiobook') return item.content_type === 'audiobook';
     if (filter === 'completed') return item.is_completed;
     return true;
   });
 
-  // Handle continue reading
-  const handleContinue = (contentId, lastPosition) => {
-    // Navigate to reader with saved position
-    navigation.navigate('Reader', {
-      contentId,
-      position: lastPosition,
-    });
-  };
-
-  // Handle card press (navigate to content detail)
-  const handleCardPress = (contentId) => {
-    navigation.navigate('ContentDetail', { contentId });
-  };
-
-  // Render item
   const renderItem = ({ item }) => (
     <ContentCardWithProgress
       content_id={item.content_id}
@@ -143,12 +185,11 @@ const HistoryScreen = ({ navigation }) => {
       is_completed={item.is_completed}
       last_position={item.last_position}
       variant="list"
-      onContinue={handleContinue}
-      onPress={() => handleCardPress(item.content_id)}
+      onContinue={(id, pos) => handleContinue(id, pos, item)}
+      onPress={() => navigation.navigate('ContentDetail', { contentId: item.content_id })}
     />
   );
 
-  // Render footer
   const renderFooter = () => {
     if (!loadingMore) return null;
     return (
@@ -158,32 +199,38 @@ const HistoryScreen = ({ navigation }) => {
     );
   };
 
-  // Render empty
   const renderEmpty = () => {
     if (loading) return null;
     return (
       <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>📭</Text>
         <Text variant="titleMedium" style={styles.emptyTitle}>
-          Aucun contenu dans votre historique
+          {filter === 'all'
+            ? 'Aucun contenu dans votre historique'
+            : `Aucun contenu "${FILTERS.find(f => f.key === filter)?.label}" trouvé`}
         </Text>
         <Text variant="bodyMedium" style={styles.emptyText}>
-          Commencez à lire ou écouter des contenus pour les voir apparaître ici
+          {filter === 'all'
+            ? 'Commencez à lire ou écouter pour que vos contenus apparaissent ici'
+            : 'Essayez un autre filtre'}
         </Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('Catalogue')}
-          style={styles.emptyButton}
-          buttonColor={tokens.colors.primary}
-        >
-          Découvrir le catalogue
-        </Button>
+        {filter === 'all' && (
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate('Catalog')}
+            style={styles.emptyButton}
+            buttonColor={tokens.colors.primary}
+          >
+            Découvrir le catalogue
+          </Button>
+        )}
       </View>
     );
   };
 
-  if (loading && history.length === 0) {
+  if (loading && items.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={tokens.colors.primary} />
       </View>
     );
@@ -191,71 +238,34 @@ const HistoryScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Error Banner */}
-      {error && (
-        <Banner
-          visible={!!error}
-          icon="alert-circle"
-          style={styles.errorBanner}
-          actions={[
-            {
-              label: 'Fermer',
-              onPress: () => setError(null),
-            },
-          ]}
-        >
-          {error}
-        </Banner>
-      )}
-
       {/* Header */}
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
-          Mon Historique
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          Retrouvez tous les contenus que vous avez lus ou écoutés
+        <Text variant="headlineMedium" style={styles.title}>Mon Historique</Text>
+        <Text variant="bodySmall" style={styles.subtitle}>
+          {pagination.total > 0
+            ? `${pagination.total} contenu${pagination.total > 1 ? 's' : ''} lu${pagination.total > 1 ? 's' : ''}`
+            : 'Vos lectures et écoutes récentes'}
         </Text>
       </View>
 
-      {/* Filter Buttons */}
-      <View style={styles.filterContainer}>
-        <SegmentedButtons
-          value={filter}
-          onValueChange={setFilter}
-          buttons={[
-            {
-              value: 'all',
-              label: 'Tous',
-            },
-            {
-              value: 'ebook',
-              label: 'Ebooks',
-            },
-            {
-              value: 'audiobook',
-              label: 'Audio',
-            },
-            {
-              value: 'completed',
-              label: 'Terminés',
-            },
-          ]}
-          style={styles.segmentedButtons}
-        />
-      </View>
+      {/* Stats */}
+      <StatsBar stats={stats} loading={statsLoading} />
 
-      {/* History List */}
+      {/* Filters */}
+      <FilterTabs active={filter} onChange={setFilter} />
+
+      {/* List */}
       <FlatList
-        data={filteredHistory}
+        data={filtered}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        keyExtractor={(item) => item.id || item.content_id}
+        contentContainerStyle={[styles.list, filtered.length === 0 && { flex: 1 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
           />
         }
         onEndReached={handleLoadMore}
@@ -264,91 +274,136 @@ const HistoryScreen = ({ navigation }) => {
         ListEmptyComponent={renderEmpty}
       />
 
-      {/* Stats Footer */}
-      {filteredHistory.length > 0 && (
-        <View style={styles.statsFooter}>
-          <Text variant="bodySmall" style={styles.statsText}>
-            Total : {pagination.total} contenus dans votre historique
-          </Text>
-        </View>
-      )}
+      <Snackbar
+        visible={!!error}
+        onDismiss={() => setError(null)}
+        duration={4000}
+        action={{ label: 'Réessayer', onPress: () => fetchHistory(1) }}
+      >
+        {error}
+      </Snackbar>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: tokens.colors.backgrounds.light,
   },
-  loadingContainer: {
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: tokens.colors.backgrounds.light,
   },
-  errorBanner: {
-    backgroundColor: '#FFEBEE',
-  },
   header: {
-    padding: 24,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
-    color: tokens.colors.onSurface.light,
-    marginBottom: 4,
+    fontWeight: '700',
+    color: tokens.colors.onBackground.light,
+    marginBottom: 2,
   },
   subtitle: {
+    color: tokens.colors.primaryLight,
+    fontSize: 13,
+  },
+  // Stats
+  statsBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  statCard: {
+    width: 90,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    backgroundColor: tokens.colors.surfaces.light.variant,
+  },
+  statIcon: {
+    fontSize: 18,
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: tokens.colors.primary,
+    lineHeight: 24,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: tokens.colors.onSurface.light,
+    opacity: 0.7,
+    marginTop: 1,
+  },
+  // Filters
+  filterRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    backgroundColor: tokens.colors.surfaces.light.variant,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    backgroundColor: tokens.colors.primary,
+    borderColor: tokens.colors.primary,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '500',
     color: tokens.colors.onSurface.light,
   },
-  filterContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
+  filterLabelActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
-  segmentedButtons: {
-    backgroundColor: 'white',
-  },
-  listContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
+  // List
+  list: {
+    paddingHorizontal: 16,
     paddingBottom: 24,
   },
   loadingMore: {
     paddingVertical: 16,
     alignItems: 'center',
   },
+  // Empty
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingVertical: 64,
+    paddingVertical: 60,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
   },
   emptyTitle: {
-    color: tokens.colors.onSurface.light,
+    color: tokens.colors.onBackground.light,
+    fontWeight: '700',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptyText: {
     color: tokens.colors.onSurface.light,
-    marginBottom: 24,
     textAlign: 'center',
+    opacity: 0.7,
+    marginBottom: 24,
   },
   emptyButton: {
-    marginTop: 8,
-  },
-  statsFooter: {
-    padding: 16,
-    paddingHorizontal: 24,
-    backgroundColor: tokens.colors.backgrounds.surface,
-    borderTopWidth: 1,
-    borderTopColor: tokens.colors.neutral[200],
-  },
-  statsText: {
-    color: tokens.colors.onSurface.light,
+    borderRadius: 24,
   },
 });
-
-export default HistoryScreen;

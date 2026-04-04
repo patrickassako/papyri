@@ -23,12 +23,12 @@ const screens = [
     illustration: (
       <svg width="100%" height="100%" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Books illustration */}
-        <rect x="80" y="100" width="60" height="80" fill="#B5651D" rx="4" />
-        <rect x="150" y="80" width="60" height="100" fill="#D4A017" rx="4" />
-        <rect x="220" y="90" width="60" height="90" fill="#2E4057" rx="4" />
-        <rect x="290" y="110" width="60" height="70" fill="#B5651D" opacity="0.7" rx="4" />
-        <circle cx="200" cy="50" r="30" fill="#D4A017" opacity="0.3" />
-        <text x="200" y="260" textAnchor="middle" fill="#B5651D" fontSize="48" fontWeight="bold">📚</text>
+        <rect x="80" y="100" width="60" height="80" fill={tokens.colors.primary} rx="4" />
+        <rect x="150" y="80" width="60" height="100" fill={tokens.colors.secondary} rx="4" />
+        <rect x="220" y="90" width="60" height="90" fill={tokens.colors.accent} rx="4" />
+        <rect x="290" y="110" width="60" height="70" fill={tokens.colors.primary} opacity="0.7" rx="4" />
+        <circle cx="200" cy="50" r="30" fill={tokens.colors.secondary} opacity="0.3" />
+        <text x="200" y="260" textAnchor="middle" fill={tokens.colors.primary} fontSize="48" fontWeight="bold">📚</text>
       </svg>
     ),
     cta: 'Suivant',
@@ -41,13 +41,13 @@ const screens = [
     illustration: (
       <svg width="100%" height="100%" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Multi-device illustration */}
-        <rect x="80" y="80" width="100" height="140" fill="#2E4057" rx="8" />
+        <rect x="80" y="80" width="100" height="140" fill={tokens.colors.accent} rx="8" />
         <rect x="90" y="90" width="80" height="120" fill="#FBF7F2" rx="4" />
-        <rect x="220" y="60" width="140" height="100" fill="#B5651D" rx="8" />
+        <rect x="220" y="60" width="140" height="100" fill={tokens.colors.primary} rx="8" />
         <rect x="230" y="70" width="120" height="80" fill="#FBF7F2" rx="4" />
-        <circle cx="350" cy="120" r="15" fill="#D4A017" />
-        <path d="M 180 150 Q 210 130 220 120" stroke="#D4A017" strokeWidth="3" fill="none" />
-        <text x="200" y="260" textAnchor="middle" fill="#B5651D" fontSize="48" fontWeight="bold">🔄</text>
+        <circle cx="350" cy="120" r="15" fill={tokens.colors.secondary} />
+        <path d="M 180 150 Q 210 130 220 120" stroke={tokens.colors.secondary} strokeWidth="3" fill="none" />
+        <text x="200" y="260" textAnchor="middle" fill={tokens.colors.primary} fontSize="48" fontWeight="bold">🔄</text>
       </svg>
     ),
     cta: 'Suivant',
@@ -59,11 +59,11 @@ const screens = [
     illustration: (
       <svg width="100%" height="100%" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Happy reader illustration */}
-        <circle cx="200" cy="120" r="60" fill="#D4A017" opacity="0.3" />
-        <circle cx="200" cy="110" r="45" fill="#B5651D" />
-        <rect x="170" y="160" width="60" height="90" fill="#2E4057" rx="8" />
-        <rect x="140" y="180" width="50" height="70" fill="#B5651D" rx="4" />
-        <text x="200" y="270" textAnchor="middle" fill="#B5651D" fontSize="48" fontWeight="bold">✨</text>
+        <circle cx="200" cy="120" r="60" fill={tokens.colors.secondary} opacity="0.3" />
+        <circle cx="200" cy="110" r="45" fill={tokens.colors.primary} />
+        <rect x="170" y="160" width="60" height="90" fill={tokens.colors.accent} rx="8" />
+        <rect x="140" y="180" width="50" height="70" fill={tokens.colors.primary} rx="4" />
+        <text x="200" y="270" textAnchor="middle" fill={tokens.colors.primary} fontSize="48" fontWeight="bold">✨</text>
       </svg>
     ),
     cta: 'Commencer à lire',

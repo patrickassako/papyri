@@ -150,4 +150,59 @@ export const readingService = {
     }
     return payload.data;
   },
+
+  async getHistory({ page = 1, limit = 20 } = {}) {
+    const payload = await request(`/reading-history?page=${page}&limit=${limit}`, { method: 'GET' });
+    return {
+      items: payload.data || [],
+      pagination: payload.pagination || { page, limit, total: 0, total_pages: 0 },
+      stats: payload.stats || null,
+    };
+  },
+
+  // ── Bookmarks ──────────────────────────────────────────
+
+  async getBookmarks(contentId) {
+    const payload = await request(`/api/reading/${contentId}/bookmarks`, { method: 'GET' });
+    if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de charger les marque-pages.');
+    return payload.data;
+  },
+
+  async addBookmark(contentId, position, label) {
+    const payload = await request(`/api/reading/${contentId}/bookmarks`, {
+      method: 'POST',
+      body: JSON.stringify({ position, label: label || null }),
+    });
+    if (!payload?.success) throw new Error(payload?.error?.message || "Impossible d'ajouter le marque-page.");
+    return payload.data;
+  },
+
+  async deleteBookmark(contentId, bookmarkId) {
+    const payload = await request(`/api/reading/${contentId}/bookmarks/${bookmarkId}`, { method: 'DELETE' });
+    if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de supprimer le marque-page.');
+    return payload.data;
+  },
+
+  // ── Highlights ─────────────────────────────────────────
+
+  async getHighlights(contentId) {
+    const payload = await request(`/api/reading/${contentId}/highlights`, { method: 'GET' });
+    if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de charger les surlignages.');
+    return payload.data;
+  },
+
+  async addHighlight(contentId, { text, cfiRange, position, color, note }) {
+    const payload = await request(`/api/reading/${contentId}/highlights`, {
+      method: 'POST',
+      body: JSON.stringify({ text, cfi_range: cfiRange, position, color: color || 'yellow', note: note || null }),
+    });
+    if (!payload?.success) throw new Error(payload?.error?.message || "Impossible d'ajouter le surlignage.");
+    return payload.data;
+  },
+
+  async deleteHighlight(contentId, highlightId) {
+    const payload = await request(`/api/reading/${contentId}/highlights/${highlightId}`, { method: 'DELETE' });
+    if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de supprimer le surlignage.');
+    return payload.data;
+  },
 };

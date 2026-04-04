@@ -8,11 +8,15 @@ import {
   InputAdornment,
   Alert,
   LinearProgress,
-  Link
+  Link,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import * as authService from '../services/auth.service';
+import tokens from '../config/tokens';
+import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -27,6 +31,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [cguAccepted, setCguAccepted] = useState(false);
 
   // Email validation
   const validateEmail = (email) => {
@@ -62,7 +67,7 @@ const Register = () => {
     if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
 
     if (score <= 2) return { score: 33, label: 'Faible', color: '#C25450' };
-    if (score <= 3) return { score: 66, label: 'Moyen', color: '#D4A017' };
+    if (score <= 3) return { score: 66, label: 'Moyen', color: tokens.colors.secondary };
     return { score: 100, label: 'Fort', color: '#4A7C59' };
   };
 
@@ -94,7 +99,8 @@ const Register = () => {
       !validateFullName(formData.full_name) &&
       formData.email &&
       formData.password &&
-      formData.full_name
+      formData.full_name &&
+      cguAccepted
     );
   };
 
@@ -123,8 +129,8 @@ const Register = () => {
     try {
       await authService.register(formData.email, formData.password, formData.full_name);
 
-      // Success - redirect to pricing selection
-      navigate('/pricing');
+      // Success - redirect to onboarding
+      navigate('/onboarding');
     } catch (error) {
       console.error('Registration error:', error);
       setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');
@@ -151,11 +157,22 @@ const Register = () => {
           maxWidth: '400px',
         }}
       >
+        {/* Logo */}
+        <Box sx={{ textAlign: 'center', marginBottom: '32px' }}>
+          <Box
+            component="img"
+            src={papyriLogo}
+            alt="Papyri"
+            onClick={() => navigate('/')}
+            sx={{ height: 44, objectFit: 'contain', cursor: 'pointer', display: 'inline-block' }}
+          />
+        </Box>
+
         {/* Header */}
         <Typography
           variant="h1"
           sx={{
-            fontSize: { xs: '28px', sm: '32px' },
+            fontSize: { xs: '24px', sm: '28px' },
             fontWeight: 600,
             color: 'text.primary',
             marginBottom: '32px',
@@ -368,6 +385,31 @@ const Register = () => {
           </Box>
         )}
 
+        {/* CGU acceptance */}
+        <FormControlLabel
+          sx={{ mb: 2, alignItems: 'flex-start' }}
+          control={
+            <Checkbox
+              checked={cguAccepted}
+              onChange={(e) => setCguAccepted(e.target.checked)}
+              size="small"
+              sx={{ mt: '-2px', color: 'primary.main', '&.Mui-checked': { color: 'primary.main' } }}
+            />
+          }
+          label={
+            <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary', lineHeight: 1.5 }}>
+              J'ai lu et j'accepte les{' '}
+              <Link href="/cgu" target="_blank" sx={{ color: 'primary.main', fontWeight: 600 }}>
+                Conditions Générales d'Utilisation
+              </Link>
+              {' '}et la{' '}
+              <Link href="/privacy" target="_blank" sx={{ color: 'primary.main', fontWeight: 600 }}>
+                Politique de confidentialité
+              </Link>
+            </Typography>
+          }
+        />
+
         {/* Submit Button */}
         <Button
           type="submit"
@@ -396,26 +438,40 @@ const Register = () => {
         </Button>
 
         {/* Login Link */}
-        <Typography
-          sx={{
-            fontSize: '14px',
-            color: 'text.secondary',
-            textAlign: 'center'
-          }}
-        >
+        <Typography sx={{ fontSize: '14px', color: 'text.secondary', textAlign: 'center' }}>
           Vous avez déjà un compte ?{' '}
           <Link
-            href="/login"
+            component="button"
+            onClick={() => navigate('/login')}
             sx={{
               color: 'primary.main',
               textDecoration: 'none',
               fontWeight: 600,
-              '&:hover': {
-                textDecoration: 'underline'
-              }
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { textDecoration: 'underline' }
             }}
           >
             Se connecter
+          </Link>
+        </Typography>
+
+        {/* Back to home */}
+        <Typography sx={{ fontSize: '13px', color: 'text.secondary', textAlign: 'center', marginTop: '16px' }}>
+          <Link
+            component="button"
+            onClick={() => navigate('/')}
+            sx={{
+              color: 'text.secondary',
+              textDecoration: 'none',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { color: 'primary.main', textDecoration: 'underline' }
+            }}
+          >
+            ← Retour à l'accueil
           </Link>
         </Typography>
       </Box>

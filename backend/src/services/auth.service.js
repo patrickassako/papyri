@@ -4,6 +4,7 @@
  */
 
 const { supabase, supabaseAdmin } = require('../config/database');
+const { sendWelcomeEmail } = require('./email.service');
 
 function makeError(code, message = code) {
   const error = new Error(message);
@@ -54,6 +55,11 @@ async function register(email, password, full_name, language = 'fr') {
       })
       .eq('id', data.user.id);
   }
+
+  // Envoyer l'email de bienvenue (non-bloquant)
+  sendWelcomeEmail(email, full_name).catch((err) =>
+    console.error('[auth] sendWelcomeEmail error:', err.message)
+  );
 
   return {
     user: {

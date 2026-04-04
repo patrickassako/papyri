@@ -6,7 +6,9 @@
 const flutterwaveService = require('../services/flutterwave.service');
 const stripeService = require('../services/stripe.service');
 const subscriptionsService = require('../services/subscriptions.service');
-const { sendPaymentConfirmationEmail } = require('../services/email.service');
+const { sendPaymentConfirmationEmail, sendSubscriptionConfirmationEmail, sendInvoiceEmail, sendRenewalReminderEmail, sendPaymentFailedEmail } = require('../services/email.service');
+const { generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/invoice.service');
+const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
 
 /**
@@ -205,13 +207,31 @@ async function handleChargeCompleted(data, eventId) {
 
       if (profile) {
         const planName = updatedSubscription.plan_snapshot?.name || updatedSubscription.plan_type || 'Abonnement';
-        await sendPaymentConfirmationEmail(
-          profile.email,
-          profile.full_name || profile.email,
+        // Confirmation paiement
+        sendPaymentConfirmationEmail(
+          profile.email, profile.full_name || profile.email, planName, amount, currency
+        ).catch(e => console.error('📧 sendPaymentConfirmation:', e.message));
+
+        // Confirmation abonnement
+        sendSubscriptionConfirmationEmail(profile.email, profile.full_name || profile.email, {
           planName,
-          amount,
-          currency
-        );
+          amount: (amount / 100).toFixed(2),
+          currency,
+          endDate: updatedSubscription.end_date,
+        }).catch(e => console.error('📧 sendSubscriptionConfirmation:', e.message));
+
+        // Facture PDF par email
+        getSettings().then(settings =>
+          generateInvoicePDFBuffer({
+            payment: { id: payment.id, amount: amount / 100, currency, status: 'succeeded', paid_at: new Date().toISOString(), provider: 'stripe', metadata: payment.metadata || {} },
+            user: { email: profile.email, full_name: profile.full_name },
+            subscription: updatedSubscription,
+            settings,
+          }).then(pdfBuffer => {
+            const invoiceNumber = buildInvoiceNumber(payment.id, new Date().toISOString(), settings.invoice_prefix || 'INV');
+            return sendInvoiceEmail(profile.email, profile.full_name, { invoiceNumber, pdfBuffer });
+          })
+        ).catch(e => console.error('📧 sendInvoiceEmail:', e.message));
       }
     } catch (emailErr) {
       console.error('📧 Email sending failed (non-blocking):', emailErr.message);
@@ -247,6 +267,45 @@ async function handleChargeFailed(data, eventId) {
 
     if (payment.status !== 'failed') {
       await subscriptionsService.updatePaymentStatus(payment.id, 'failed', 'Payment failed');
+    }
+
+    // Track failure in subscription metadata + notify user
+    if (payment.user_id) {
+      // Update subscription metadata with payment_failed_at
+      if (payment.subscription_id) {
+        const { data: sub } = await supabaseAdmin
+          .from('subscriptions')
+          .select('metadata')
+          .eq('id', payment.subscription_id)
+          .maybeSingle();
+        if (sub) {
+          const existingMeta = sub.metadata || {};
+          await supabaseAdmin
+            .from('subscriptions')
+            .update({
+              metadata: {
+                ...existingMeta,
+                payment_failed_at: existingMeta.payment_failed_at || new Date().toISOString(),
+                failure_count: (existingMeta.failure_count || 0) + 1,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', payment.subscription_id);
+        }
+      }
+
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', payment.user_id)
+        .maybeSingle();
+      if (profile?.email) {
+        const retryUrl = `${require('../config/env').frontendUrl || 'http://localhost:3000'}/subscription`;
+        sendPaymentFailedEmail(profile.email, profile.full_name || profile.email, {
+          planName: payment.metadata?.plan_name || 'Abonnement',
+          retryUrl,
+        }).catch(e => console.error('📧 sendPaymentFailedEmail (Flutterwave):', e.message));
+      }
     }
 
     console.log('📧 Payment failure recorded for', txRef);
@@ -309,6 +368,26 @@ async function handleStripeWebhook(req, res) {
 
       case 'checkout.session.expired':
         await handleStripeCheckoutExpired(event.data.object);
+        break;
+
+      // Subscription renewed — Stripe automatically charged the card
+      case 'invoice.payment_succeeded':
+        await handleStripeInvoicePaymentSucceeded(event.data.object);
+        break;
+
+      // Renewal failed — Stripe will retry, notify user
+      case 'invoice.payment_failed':
+        await handleStripeInvoicePaymentFailed(event.data.object);
+        break;
+
+      // Subscription cancelled (end of period or immediately)
+      case 'customer.subscription.deleted':
+        await handleStripeSubscriptionDeleted(event.data.object);
+        break;
+
+      // cancel_at_period_end toggled
+      case 'customer.subscription.updated':
+        await handleStripeSubscriptionUpdated(event.data.object);
         break;
 
       default:
@@ -429,6 +508,221 @@ async function handleStripeCheckoutExpired(session) {
   if (payment && payment.status === 'pending') {
     await subscriptionsService.updatePaymentStatus(payment.id, 'failed', 'Stripe session expired');
   }
+}
+
+/**
+ * Handle invoice.payment_succeeded
+ * Fired on initial payment AND every automatic renewal.
+ * For renewals: extend subscription period in DB + send confirmation email + invoice.
+ */
+async function handleStripeInvoicePaymentSucceeded(invoice) {
+  // billing_reason: 'subscription_create' (initial) | 'subscription_cycle' (renewal) | 'subscription_update'
+  const billingReason = invoice.billing_reason;
+  const stripeSubId = invoice.subscription;
+  const customerId = invoice.customer;
+
+  console.log(`💳 Stripe invoice paid — reason: ${billingReason}, sub: ${stripeSubId}`);
+
+  // Skip initial creation — handled by checkout.session.completed
+  if (billingReason === 'subscription_create') {
+    console.log('ℹ️  Initial subscription payment — handled by checkout.session.completed');
+    return;
+  }
+
+  if (!stripeSubId) {
+    console.log('ℹ️  No subscription linked to invoice, skipping');
+    return;
+  }
+
+  // Find internal subscription by provider_subscription_id
+  const { data: subscription } = await supabaseAdmin
+    .from('subscriptions')
+    .select('*')
+    .eq('provider_subscription_id', stripeSubId)
+    .maybeSingle();
+
+  if (!subscription) {
+    console.error('❌ No internal subscription found for Stripe sub:', stripeSubId);
+    return;
+  }
+
+  // Get new period from Stripe subscription
+  const stripeSub = await stripeService.retrieveSubscription(stripeSubId);
+  const updatedSub = await subscriptionsService.renewSubscription(
+    subscription.id,
+    new Date(stripeSub.currentPeriodEnd)
+  );
+
+  // Clear any payment failure tracking (retry succeeded)
+  const meta = subscription.metadata || {};
+  if (meta.payment_failed_at) {
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        metadata: {
+          ...meta,
+          payment_failed_at: null,
+          failure_count: null,
+          last_failure_reminder_at: null,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscription.id);
+  }
+
+  console.log(`🔄 Subscription ${subscription.id} renewed until ${updatedSub.current_period_end}`);
+
+  // Record renewal payment
+  const amountMajor = invoice.amount_paid / 100;
+  const currency = invoice.currency?.toUpperCase() || 'EUR';
+
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', subscription.user_id)
+      .maybeSingle();
+
+    if (profile?.email) {
+      const planName = subscription.plan_snapshot?.name || subscription.plan_type || 'Abonnement';
+
+      // Confirmation de paiement
+      sendPaymentConfirmationEmail(profile.email, profile.full_name || profile.email, planName, amountMajor, currency)
+        .catch(e => console.error('📧 sendPaymentConfirmation (renewal):', e.message));
+
+      // Confirmation abonnement renouvelé
+      sendSubscriptionConfirmationEmail(profile.email, profile.full_name || profile.email, {
+        planName,
+        amount: amountMajor.toFixed(2),
+        currency,
+        endDate: updatedSub.current_period_end,
+      }).catch(e => console.error('📧 sendSubscriptionConfirmation (renewal):', e.message));
+    }
+  } catch (emailErr) {
+    console.error('📧 Renewal email failed (non-blocking):', emailErr.message);
+  }
+}
+
+/**
+ * Handle invoice.payment_failed
+ * Stripe will retry automatically. We just notify the user.
+ */
+async function handleStripeInvoicePaymentFailed(invoice) {
+  const stripeSubId = invoice.subscription;
+  console.log(`❌ Stripe invoice payment failed — sub: ${stripeSubId}`);
+
+  if (!stripeSubId) return;
+
+  const { data: subscription } = await supabaseAdmin
+    .from('subscriptions')
+    .select('*')
+    .eq('provider_subscription_id', stripeSubId)
+    .maybeSingle();
+
+  if (!subscription) return;
+
+  // Track failure in metadata (used by scheduler grace period logic)
+  const existingMeta = subscription.metadata || {};
+  if (!existingMeta.payment_failed_at) {
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        metadata: {
+          ...existingMeta,
+          payment_failed_at: new Date().toISOString(),
+          failure_count: 1,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscription.id);
+  } else {
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        metadata: {
+          ...existingMeta,
+          failure_count: (existingMeta.failure_count || 0) + 1,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscription.id);
+  }
+
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', subscription.user_id)
+      .maybeSingle();
+
+    if (profile?.email) {
+      const retryUrl = `${config.frontendUrl || 'http://localhost:3000'}/subscription`;
+      const planName = subscription.plan_snapshot?.name || subscription.plan_type || 'Abonnement';
+
+      sendPaymentFailedEmail(profile.email, profile.full_name || profile.email, {
+        planName,
+        retryUrl,
+      }).catch(e => console.error('📧 sendPaymentFailedEmail (Stripe):', e.message));
+    }
+  } catch (emailErr) {
+    console.error('📧 Payment failed email error (non-blocking):', emailErr.message);
+  }
+}
+
+/**
+ * Handle customer.subscription.deleted
+ * Fired when Stripe subscription is cancelled (end of period or immediately).
+ */
+async function handleStripeSubscriptionDeleted(stripeSub) {
+  console.log(`🗑️  Stripe subscription deleted: ${stripeSub.id}`);
+
+  const { data: subscription } = await supabaseAdmin
+    .from('subscriptions')
+    .select('id, status')
+    .eq('provider_subscription_id', stripeSub.id)
+    .maybeSingle();
+
+  if (!subscription) {
+    console.log('⚠️  No internal subscription found for deleted Stripe sub:', stripeSub.id);
+    return;
+  }
+
+  if (subscription.status !== 'CANCELLED') {
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        status: 'CANCELLED',
+        cancelled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscription.id);
+
+    console.log(`✅ Subscription ${subscription.id} marked CANCELLED`);
+  }
+}
+
+/**
+ * Handle customer.subscription.updated
+ * Tracks cancel_at_period_end changes (user cancelled or reactivated).
+ */
+async function handleStripeSubscriptionUpdated(stripeSub) {
+  console.log(`🔄 Stripe subscription updated: ${stripeSub.id}, cancel_at_period_end=${stripeSub.cancel_at_period_end}`);
+
+  const { data: subscription } = await supabaseAdmin
+    .from('subscriptions')
+    .select('id')
+    .eq('provider_subscription_id', stripeSub.id)
+    .maybeSingle();
+
+  if (!subscription) return;
+
+  await supabaseAdmin
+    .from('subscriptions')
+    .update({
+      cancel_at_period_end: stripeSub.cancel_at_period_end,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', subscription.id);
 }
 
 /**

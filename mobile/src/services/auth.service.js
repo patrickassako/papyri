@@ -116,6 +116,12 @@ export async function login(email, password) {
  * Logout current user
  */
 export async function logout() {
+  // Revoke push token before signing out so we still have the session
+  try {
+    const { revokePushToken } = require('./notifications.service');
+    await revokePushToken();
+  } catch (_) {}
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {

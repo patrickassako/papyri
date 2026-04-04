@@ -29,10 +29,18 @@ router.get('/me', authenticate, subscriptionsController.getMySubscription);
 router.get('/all', authenticate, subscriptionsController.getAllMySubscriptions);
 
 /**
+ * POST /api/subscriptions/promo/validate
+ * Valide un code promo et retourne le montant après remise
+ * @protected
+ * @body {code: string, planId?: string, planCode?: string, usersLimit?: number}
+ */
+router.post('/promo/validate', authenticate, subscriptionsController.validatePromoCode);
+
+/**
  * POST /api/subscriptions/checkout
  * Initiate subscription payment via Flutterwave or Stripe
  * @protected
- * @body {planCode?: string, planId?: string, usersLimit?: number, provider?: string}
+ * @body {planCode?: string, planId?: string, usersLimit?: number, provider?: string, promoCode?: string}
  */
 router.post('/checkout', authenticate, subscriptionsController.initiateCheckout);
 
@@ -51,6 +59,13 @@ router.post('/buy-extra-seat', authenticate, subscriptionsController.buyExtraSea
  * @body {immediately?: boolean}
  */
 router.post('/cancel', authenticate, subscriptionsController.cancelSubscription);
+
+/**
+ * POST /api/subscriptions/reactivate
+ * Reactivate a Stripe subscription scheduled for cancellation (cancel_at_period_end=true)
+ * @protected
+ */
+router.post('/reactivate', authenticate, subscriptionsController.reactivateSubscription);
 
 /**
  * GET /api/subscriptions/payment-history

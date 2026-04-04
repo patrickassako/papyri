@@ -29,6 +29,12 @@ async function getContents(options = {}) {
 
   const offset = (page - 1) * limit;
 
+  // Éditeurs non-actifs (paused, banned, pending) → exclure leurs contenus
+  const { data: blockedPubs } = await supabaseAdmin
+    .from('publishers')
+    .select('id')
+    .neq('status', 'active');
+
   // Base query
   let query = supabase
     .from('contents')
@@ -40,7 +46,14 @@ async function getContents(options = {}) {
       rights_holder:rights_holders(id, name)
     `, { count: 'exact' })
     .is('deleted_at', null)
-    .eq('is_published', true);
+    .eq('is_published', true)
+    .eq('is_archived', false);
+
+  // Exclure les contenus d'éditeurs non-actifs (garder publisher_id null = contenus plateforme)
+  if (blockedPubs?.length) {
+    const ids = blockedPubs.map(p => p.id).join(',');
+    query = query.or(`publisher_id.is.null,publisher_id.not.in.(${ids})`);
+  }
 
   // Filters
   if (type) {
@@ -169,6 +182,25 @@ async function getContents(options = {}) {
  * @returns {Promise<Object>} Content with categories and rights holder
  */
 async function getContentById(contentId) {
+  // Vérifier le statut de l'éditeur avant de retourner le contenu
+  const { data: contentCheck } = await supabaseAdmin
+    .from('contents')
+    .select('publisher_id')
+    .eq('id', contentId)
+    .single();
+
+  if (contentCheck?.publisher_id) {
+    const { data: pub } = await supabaseAdmin
+      .from('publishers')
+      .select('status')
+      .eq('id', contentCheck.publisher_id)
+      .single();
+
+    if (pub && pub.status !== 'active') {
+      throw new Error('CONTENT_NOT_FOUND');
+    }
+  }
+
   const { data, error } = await supabase
     .from('contents')
     .select(`
@@ -413,6 +445,85 @@ async function deleteContent(contentId) {
   if (error) {
     throw error;
   }
+
+  // Sync Meilisearch (non-blocking)
+  try {
+    const meilisearch = require('./meilisearch.service');
+    await meilisearch.deleteContent(contentId);
+  } catch (err) {
+    console.warn('Meilisearch deleteContent error (non-blocking):', err.message);
+  }
+}
+
+/**
+ * Get content recommendations for a given content.
+ * Returns two groups:
+ *   - sameGenre: same category, up to 4 items
+ *   - youllLike: same author, up to 4 items (excluding sameGenre duplicates)
+ * @param {string} contentId
+ * @returns {Promise<{ sameGenre: Array, youllLike: Array }>}
+ */
+async function getRecommendations(contentId) {
+  const FIELDS = 'id, title, author, cover_url, content_type';
+
+  // Get the source content (categories + author)
+  const { data: source, error: srcErr } = await supabase
+    .from('contents')
+    .select(`id, author, content_categories(category_id)`)
+    .eq('id', contentId)
+    .is('deleted_at', null)
+    .single();
+
+  if (srcErr || !source) return { sameGenre: [], youllLike: [] };
+
+  const categoryIds = (source.content_categories || []).map((c) => c.category_id);
+  const author = source.author;
+
+  // ── Same genre ──────────────────────────────────────────────────────────
+  let sameGenre = [];
+  if (categoryIds.length > 0) {
+    const { data: ccRows } = await supabase
+      .from('content_categories')
+      .select('content_id')
+      .in('category_id', categoryIds)
+      .neq('content_id', contentId);
+
+    const ids = [...new Set((ccRows || []).map((r) => r.content_id))].slice(0, 12);
+
+    if (ids.length > 0) {
+      const { data } = await supabase
+        .from('contents')
+        .select(FIELDS)
+        .in('id', ids)
+        .eq('is_published', true)
+        .eq('is_archived', false)
+        .is('deleted_at', null)
+        .order('published_at', { ascending: false })
+        .limit(4);
+      sameGenre = data || [];
+    }
+  }
+
+  // ── Same author ──────────────────────────────────────────────────────────
+  let youllLike = [];
+  if (author) {
+    const sameGenreIds = sameGenre.map((c) => c.id);
+    const { data } = await supabase
+      .from('contents')
+      .select(FIELDS)
+      .eq('author', author)
+      .eq('is_published', true)
+      .eq('is_archived', false)
+      .is('deleted_at', null)
+      .neq('id', contentId)
+      .order('published_at', { ascending: false })
+      .limit(8);
+
+    const authorItems = (data || []).filter((c) => !sameGenreIds.includes(c.id));
+    youllLike = authorItems.slice(0, 4);
+  }
+
+  return { sameGenre, youllLike };
 }
 
 module.exports = {
@@ -427,4 +538,5 @@ module.exports = {
   createContent,
   updateContent,
   deleteContent,
+  getRecommendations,
 };

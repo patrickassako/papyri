@@ -2,8 +2,10 @@
  * Global error handler middleware
  * Standardizes error responses across the API
  */
+const logger = require('../utils/logger');
+
 function errorHandler(err, req, res, next) {
-  console.error('Error:', err);
+  logger.error('Error:', err);
 
   // Default error
   let statusCode = err.statusCode || 500;

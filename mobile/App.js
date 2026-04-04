@@ -8,6 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import theme from './src/theme/theme';
 import * as authService from './src/services/auth.service';
+import { deviceService } from './src/services/device.service';
+import { registerForPushNotifications } from './src/services/notifications.service';
 import { AudioProvider } from './src/context/AudioContext';
 import GlobalMiniPlayer from './src/components/GlobalMiniPlayer';
 
@@ -17,14 +19,16 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import ProfileScreen from './src/screens/ProfileScreen.simple';
-import HistoryScreen from './src/screens/HistoryScreen.simple';
+import ProfileScreen from './src/screens/ProfileScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
 import CatalogScreen from './src/screens/CatalogScreen';
 import ContentDetailScreen from './src/screens/ContentDetailScreen';
 import AudioPlayerScreen from './src/screens/AudioPlayerScreen';
 import ReaderScreen from './src/screens/ReaderScreen';
 import BookReaderScreen from './src/screens/BookReaderScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import DownloadsScreen from './src/screens/DownloadsScreen';
+import LegalScreen from './src/screens/LegalScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -56,6 +60,10 @@ export default function App() {
 
       const authenticated = await authService.isAuthenticated();
       setIsAuthenticated(authenticated);
+      if (authenticated) {
+        deviceService.register().catch(() => {});
+        registerForPushNotifications().catch(() => {});
+      }
     } catch (error) {
       console.error('Auth check error:', error);
       setIsAuthenticated(false);
@@ -178,6 +186,20 @@ export default function App() {
               <Stack.Screen
                 name="BookReader"
                 component={BookReaderScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Downloads */}
+              <Stack.Screen
+                name="Downloads"
+                component={DownloadsScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Legal pages */}
+              <Stack.Screen
+                name="Legal"
+                component={LegalScreen}
                 options={{ headerShown: false }}
               />
 

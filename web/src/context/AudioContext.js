@@ -6,6 +6,15 @@ import { readingService } from '../services/reading.service';
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 const PLAYBACK_RATE_KEY = 'audiobook_playback_rate';
 
+export const SLEEP_OPTIONS = [
+  { label: '5 min', minutes: 5 },
+  { label: '15 min', minutes: 15 },
+  { label: '30 min', minutes: 30 },
+  { label: '45 min', minutes: 45 },
+  { label: '1h', minutes: 60 },
+  { label: 'Fin du chapitre', minutes: null },
+];
+
 export const AudioContext = createContext(null);
 
 export function AudioProvider({ children }) {
@@ -40,6 +49,11 @@ export function AudioProvider({ children }) {
   const [volume, setVolumeState] = useState(80);
   const [savedPositionSeconds, setSavedPositionSeconds] = useState(0);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
+
+  // Sleep timer — null=off, -1=fin du chapitre, N=secondes restantes
+  const [sleepRemaining, setSleepRemaining] = useState(null);
+  const sleepIntervalRef = useRef(null);
+  const prevChapterForSleepRef = useRef(null);
 
   // Init playback rate from localStorage
   useEffect(() => {
@@ -121,7 +135,10 @@ export function AudioProvider({ children }) {
     setActiveChapterIndex(chapterIndex);
     setCurrentTime(0);
     setProgress(0);
-    initialSeekDoneRef.current = true;
+    // Mark seek done only on user-triggered navigation (autoplay=true).
+    // On initial load (autoplay=false) keep it false so handleLoadedMetadata
+    // can seek to savedPositionSeconds.
+    if (autoplay) initialSeekDoneRef.current = true;
 
     if (!chapter.id) {
       if (audioRef.current) {
@@ -317,6 +334,34 @@ export function AudioProvider({ children }) {
     setVolumeState(vol);
   }, []);
 
+  // ---- Sleep timer ----
+  const startSleepTimer = useCallback((minutes) => {
+    if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+    if (minutes === null) {
+      // Mode "fin du chapitre" — signal -1
+      setSleepRemaining(-1);
+      return;
+    }
+    let remaining = minutes * 60;
+    setSleepRemaining(remaining);
+    sleepIntervalRef.current = setInterval(() => {
+      remaining -= 1;
+      setSleepRemaining(remaining);
+      if (remaining <= 0) {
+        clearInterval(sleepIntervalRef.current);
+        sleepIntervalRef.current = null;
+        setSleepRemaining(null);
+        audioRef.current?.pause();
+      }
+    }, 1000);
+  }, []);
+
+  const cancelSleepTimer = useCallback(() => {
+    if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+    sleepIntervalRef.current = null;
+    setSleepRemaining(null);
+  }, []);
+
   const handleAddOrRemovePlaylist = useCallback(async () => {
     if (!content || playlistActionLoading) return;
     setPlaylistActionLoading(true);
@@ -347,6 +392,26 @@ export function AudioProvider({ children }) {
       loadPlaylist();
     }
   }, [playlist, loadPlaylist]);
+
+  // Sleep timer — "fin du chapitre" : pause quand le chapitre change
+  useEffect(() => {
+    if (sleepRemaining !== -1) {
+      prevChapterForSleepRef.current = currentChapterIndex;
+      return;
+    }
+    if (prevChapterForSleepRef.current !== null && prevChapterForSleepRef.current !== currentChapterIndex) {
+      setSleepRemaining(null);
+      audioRef.current?.pause();
+    }
+    prevChapterForSleepRef.current = currentChapterIndex;
+  }, [currentChapterIndex, sleepRemaining]);
+
+  // Sleep timer cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+    };
+  }, []);
 
   // ---- MediaSession API ----
   useEffect(() => {
@@ -517,6 +582,10 @@ export function AudioProvider({ children }) {
     handleAddOrRemovePlaylist,
     movePlaylistItem,
     dismiss,
+    // Sleep timer
+    sleepRemaining,
+    startSleepTimer,
+    cancelSleepTimer,
   }), [
     content, contentId, loading, error, canRead, accessHint, signedUrl,
     chapters, playlist, playlistLoading, playlistError, playlistActionLoading,
@@ -526,6 +595,7 @@ export function AudioProvider({ children }) {
     loadContent, play, pause, togglePlayPause, seekToPercent, shiftTime,
     goToChapter, goPrevChapter, goNextChapter, setPlaybackRate, setVolume,
     loadPlaylist, handleAddOrRemovePlaylist, movePlaylistItem, dismiss,
+    sleepRemaining, startSleepTimer, cancelSleepTimer,
   ]);
 
   return (

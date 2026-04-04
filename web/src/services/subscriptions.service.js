@@ -1,7 +1,7 @@
 import { apiClient } from './api.client';
 import { authFetch } from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '../config/api';
 
 export const subscriptionsService = {
   async getPlans() {
@@ -13,7 +13,7 @@ export const subscriptionsService = {
    * Initiate checkout — supports 'flutterwave' (mobile money) and 'stripe' (card)
    * Returns { paymentLink, reference, provider, subscription }
    */
-  async checkout({ planId, planCode, usersLimit, provider = 'flutterwave' }) {
+  async checkout({ planId, planCode, usersLimit, provider = 'flutterwave', promoCode }) {
     const response = await authFetch(`${API_BASE_URL}/api/subscriptions/checkout`, {
       method: 'POST',
       headers: {
@@ -24,6 +24,7 @@ export const subscriptionsService = {
         planCode,
         usersLimit,
         provider,
+        promoCode: promoCode || undefined,
       }),
     });
 
@@ -37,6 +38,23 @@ export const subscriptionsService = {
       throw new Error(data?.message || 'Failed to initiate checkout');
     }
 
+    return data;
+  },
+
+  /**
+   * Valider un code promo avant le paiement
+   * Returns { code, discountType, discountValue, discountCents, finalAmountCents, originalAmountCents }
+   */
+  async validatePromoCode({ code, planId, planCode, usersLimit }) {
+    const response = await authFetch(`${API_BASE_URL}/api/subscriptions/promo/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, planId, planCode, usersLimit }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || data?.error || 'Code promo invalide.');
+    }
     return data;
   },
 
@@ -204,6 +222,19 @@ export const subscriptionsService = {
     const data = await response.json();
     if (!response.ok || !data?.success) {
       throw new Error(data?.message || 'Failed to resume subscription');
+    }
+    return data;
+  },
+
+  async reactivate() {
+    const response = await authFetch(`${API_BASE_URL}/api/subscriptions/reactivate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || 'Failed to reactivate subscription');
     }
     return data;
   },

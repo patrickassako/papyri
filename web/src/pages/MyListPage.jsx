@@ -83,9 +83,19 @@ function buildReadingStats(history) {
 
 function getReadRoute(item) {
   const id = item.content_id || item.id;
+  const fmt = String(item.format || '').toLowerCase();
   const isAudio = String(item.content_type || '').toLowerCase() === 'audiobook'
-    || ['mp3', 'm4a'].includes(String(item.format || '').toLowerCase());
-  return isAudio ? `/listen/${id}` : `/read/${id}`;
+    || ['mp3', 'm4a'].includes(fmt);
+  if (isAudio) return `/listen/${id}`;
+  if (fmt === 'pdf') return `/pdf/${id}`;
+  return `/read/${id}`;
+}
+
+function getItemRoute(item) {
+  const progress = Number(item.progress_percent || 0);
+  if (progress > 0) return getReadRoute(item);
+  const id = item.content_id || item.id;
+  return `/catalogue/${id}`;
 }
 
 export default function MyListPage() {
@@ -414,7 +424,7 @@ export default function MyListPage() {
                       transition: 'all 0.25s ease',
                       '&:hover': { transform: 'translateY(-4px)' },
                     }}
-                    onClick={() => navigate(getReadRoute(book))}
+                    onClick={() => navigate(getItemRoute(book))}
                   >
                     <Box sx={{ position: 'relative', aspectRatio: '2/3', borderRadius: '12px', overflow: 'hidden', mb: 1 }}>
                       {book.cover_url ? (
@@ -467,7 +477,7 @@ export default function MyListPage() {
                       transition: 'all 0.25s ease',
                       '&:hover': { transform: 'translateY(-4px)' },
                     }}
-                    onClick={() => navigate(getReadRoute(book))}
+                    onClick={() => navigate(`/catalogue/${book.content_id || book.id}`)}
                   >
                     <Box sx={{ position: 'relative', aspectRatio: '2/3', borderRadius: '12px', overflow: 'hidden', mb: 1 }}>
                       {book.cover_url ? (

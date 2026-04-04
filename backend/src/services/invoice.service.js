@@ -7,6 +7,29 @@
 const PDFDocument = require('pdfkit');
 const { getDefaultSettings } = require('./settings.service');
 
+/**
+ * Fetches an image from a URL and returns a Buffer.
+ * Used to embed the company logo into PDF invoices.
+ * @param {string} url
+ * @returns {Promise<Buffer>}
+ */
+function fetchImageBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? require('https') : require('http');
+    const req = lib.get(url, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return reject(new Error(`Logo HTTP ${res.statusCode}`));
+      }
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error('Logo fetch timeout')); });
+  });
+}
+
 // Static colours that do not come from settings (structural)
 const COLOR_DARK   = '#1a1a1a';
 const COLOR_GREY   = '#888888';
@@ -79,13 +102,23 @@ function hRule(doc, y, color = COLOR_BORDER) {
  * @param {object} options.settings     - App settings from DB (app_settings row)
  * @param {WritableStream} options.stream - Target stream (res)
  */
-function generateInvoicePDF({ payment, user, subscription, settings, stream }) {
+async function generateInvoicePDF({ payment, user, subscription, settings, stream }) {
   // Merge with defaults so any missing field is covered
   const s = { ...getDefaultSettings(), ...(settings || {}) };
 
   const COLOR_PRIMARY = s.invoice_primary_color || '#B5651D';
   const COLOR_GOLD    = s.invoice_accent_color   || '#D4A017';
   const prefix        = s.invoice_prefix         || 'INV';
+
+  // Pre-fetch logo before opening the PDF stream (logo fetch is async)
+  let logoBuffer = null;
+  if (s.invoice_logo_url && s.invoice_logo_url.trim()) {
+    try {
+      logoBuffer = await fetchImageBuffer(s.invoice_logo_url.trim());
+    } catch (e) {
+      console.warn('Invoice logo fetch failed (skipped):', e.message);
+    }
+  }
 
   const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: false });
   doc.pipe(stream);
@@ -98,29 +131,42 @@ function generateInvoicePDF({ payment, user, subscription, settings, stream }) {
   const statusLabel   = payment.status === 'succeeded' ? 'Payée' : payment.status === 'pending' ? 'En attente' : 'Échouée';
 
   /* ------------------------------------------------------------------ */
-  /* HEADER — company name */
+  /* HEADER — logo or company name (left side)                           */
   /* ------------------------------------------------------------------ */
-  // Split company name at " — " for two-tone rendering
-  const nameParts = s.company_name.split(' — ');
-  const nameFirst = nameParts[0] || s.company_name;
-  const nameRest  = nameParts.length > 1 ? ` — ${nameParts.slice(1).join(' — ')}` : '';
+  let detailY;
 
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(22)
-    .fillColor(COLOR_PRIMARY)
-    .text(nameFirst, 50, 50, { continued: Boolean(nameRest) });
-
-  if (nameRest) {
+  if (logoBuffer) {
+    // With logo: image top-left + company name in smaller text below
+    doc.image(logoBuffer, 50, 45, { fit: [170, 65], align: 'left' });
     doc
-      .font('Helvetica')
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .fillColor(COLOR_PRIMARY)
+      .text(s.company_name, 50, 118);
+    detailY = 134;
+  } else {
+    // Without logo: large two-tone company name (original behaviour)
+    const nameParts = s.company_name.split(' — ');
+    const nameFirst = nameParts[0] || s.company_name;
+    const nameRest  = nameParts.length > 1 ? ` — ${nameParts.slice(1).join(' — ')}` : '';
+
+    doc
+      .font('Helvetica-Bold')
       .fontSize(22)
-      .fillColor(COLOR_DARK)
-      .text(nameRest);
+      .fillColor(COLOR_PRIMARY)
+      .text(nameFirst, 50, 50, { continued: Boolean(nameRest) });
+
+    if (nameRest) {
+      doc
+        .font('Helvetica')
+        .fontSize(22)
+        .fillColor(COLOR_DARK)
+        .text(nameRest);
+    }
+    detailY = 78;
   }
 
-  // Company details
-  let detailY = 78;
+  // Company details (address, email, phone, website, VAT)
   const companyDetails = [
     s.company_address,
     s.company_email,
@@ -134,7 +180,7 @@ function generateInvoicePDF({ payment, user, subscription, settings, stream }) {
     detailY += 11;
   });
 
-  /* FACTURE title on the right */
+  /* FACTURE title on the right (always at the same position) */
   doc
     .font('Helvetica-Bold')
     .fontSize(30)
@@ -149,9 +195,9 @@ function generateInvoicePDF({ payment, user, subscription, settings, stream }) {
     .text(`Émise le : ${issueDate}`, 0, 97, { align: 'right' });
 
   /* ------------------------------------------------------------------ */
-  /* Horizontal rule */
+  /* Horizontal rule (pushed down a bit more when logo is shown)        */
   /* ------------------------------------------------------------------ */
-  const ruleY = Math.max(125, detailY + 6);
+  const ruleY = logoBuffer ? Math.max(158, detailY + 6) : Math.max(125, detailY + 6);
   hRule(doc, ruleY, COLOR_PRIMARY);
 
   /* ------------------------------------------------------------------ */
@@ -304,7 +350,8 @@ function generateInvoicePDFBuffer(options) {
     stream.on('data', (c) => chunks.push(c));
     stream.on('end', () => resolve(Buffer.concat(chunks)));
     stream.on('error', reject);
-    generateInvoicePDF({ ...options, stream });
+    // generateInvoicePDF is async (logo fetch); forward any rejection
+    generateInvoicePDF({ ...options, stream }).catch(reject);
   });
 }
 

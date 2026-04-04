@@ -154,7 +154,7 @@ async function getSubscriptionById(subscriptionId) {
   return data || null;
 }
 
-async function createSubscription({ userId, planId, planCode, usersLimit, provider, providerData = {} }) {
+async function createSubscription({ userId, planId, planCode, usersLimit, provider, providerData = {}, overrideAmountCents = null }) {
   const plan = await getPlan(planId || planCode);
 
   if (!plan) {
@@ -171,7 +171,9 @@ async function createSubscription({ userId, planId, planCode, usersLimit, provid
     throw new Error('INVALID_USERS_LIMIT');
   }
 
-  const amountCents = computeSubscriptionAmountCents(plan, normalizedUsersLimit);
+  const amountCents = overrideAmountCents !== null
+    ? overrideAmountCents
+    : computeSubscriptionAmountCents(plan, normalizedUsersLimit);
 
   const subscriptionData = {
     user_id: userId,
@@ -781,18 +783,48 @@ async function ensureMemberCycleUsage(subscription, cycle, userId) {
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (existing) return existing;
 
   const snapshot = subscription.plan_snapshot || {};
+  let textQuota = Number(snapshot.textQuotaPerUser || 0);
+  let audioQuota = Number(snapshot.audioQuotaPerUser || 0);
+  let bonusQuota = Number(snapshot.bonusQuantityPerUser || 0);
+
+  // Fallback: if snapshot has all-zero quotas, load from the live plan so that
+  // subscriptions created before quotas were configured still work correctly.
+  if (textQuota === 0 && audioQuota === 0 && subscription.plan_id) {
+    const livePlan = await getPlan(subscription.plan_id);
+    if (livePlan) {
+      textQuota = Number(livePlan.textQuotaPerUser || 0);
+      audioQuota = Number(livePlan.audioQuotaPerUser || 0);
+      bonusQuota = bonusQuota || Number(livePlan.bonusQuantityPerUser || 0);
+    }
+  }
+
+  // If row exists but quotas are 0 (created before plan had quotas configured), patch it.
+  if (existing) {
+    const needsPatch = Number(existing.text_quota || 0) === 0 && Number(existing.audio_quota || 0) === 0
+      && (textQuota > 0 || audioQuota > 0);
+    if (needsPatch) {
+      const { data: patched } = await supabaseAdmin
+        .from('member_cycle_usage')
+        .update({ text_quota: textQuota, audio_quota: audioQuota, bonus_quota: bonusQuota || existing.bonus_quota, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return patched || existing;
+    }
+    return existing;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('member_cycle_usage')
     .insert({
       cycle_id: cycle.id,
       subscription_id: subscription.id,
       user_id: userId,
-      text_quota: Number(snapshot.textQuotaPerUser || 0),
-      audio_quota: Number(snapshot.audioQuotaPerUser || 0),
-      bonus_quota: Number(snapshot.bonusQuantityPerUser || 0),
+      text_quota: textQuota,
+      audio_quota: audioQuota,
+      bonus_quota: bonusQuota,
     })
     .select()
     .single();

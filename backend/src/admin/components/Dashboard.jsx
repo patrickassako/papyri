@@ -1,6 +1,67 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text } from '@adminjs/design-system'
 
+// ─── Icônes SVG inline (style Lucide, strokeWidth=1.8) ───────────────────────
+const Icon = ({ d, size = 22, color = 'currentColor', fill = 'none' }) => (
+  <svg
+    width={size} height={size} viewBox="0 0 24 24"
+    fill={fill} stroke={color} strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round"
+  >
+    {(Array.isArray(d) ? d : [d]).map((path, i) =>
+      typeof path === 'string'
+        ? <path key={i} d={path} />
+        : <React.Fragment key={i}>{path}</React.Fragment>
+    )}
+  </svg>
+)
+
+const Icons = {
+  // Revenu total
+  DollarSign: (p) => <Icon size={p.size} color={p.color} d={[
+    'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  ]} />,
+  // Abonnés actifs
+  Users: (p) => <Icon size={p.size} color={p.color} d={[
+    'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2',
+    <circle key="c1" cx="9" cy="7" r="4" fill="none" stroke={p.color} strokeWidth="1.8" />,
+    'M23 21v-2a4 4 0 0 0-3-3.87',
+    'M16 3.13a4 4 0 0 1 0 7.75',
+  ]} />,
+  // Nouvelles inscriptions
+  UserPlus: (p) => <Icon size={p.size} color={p.color} d={[
+    'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2',
+    <circle key="c1" cx="9" cy="7" r="4" fill="none" stroke={p.color} strokeWidth="1.8" />,
+    'M19 8v6M22 11h-6',
+  ]} />,
+  // Bibliothèque
+  BookOpen: (p) => <Icon size={p.size} color={p.color} d={[
+    'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z',
+    'M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z',
+  ]} />,
+  // Sessions de lecture
+  BookMarked: (p) => <Icon size={p.size} color={p.color} d={[
+    'M4 19.5A2.5 2.5 0 0 1 6.5 17H20',
+    'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
+    'M9 7l2 2 4-4',
+  ]} />,
+  // Lectures terminées
+  CheckCircle: (p) => <Icon size={p.size} color={p.color} d={[
+    <circle key="c" cx="12" cy="12" r="10" fill="none" stroke={p.color} strokeWidth="1.8" />,
+    'M9 12l2 2 4-4',
+  ]} />,
+  // Temps de lecture
+  Clock: (p) => <Icon size={p.size} color={p.color} d={[
+    <circle key="c" cx="12" cy="12" r="10" fill="none" stroke={p.color} strokeWidth="1.8" />,
+    'M12 6v6l4 2',
+  ]} />,
+  // Total utilisateurs
+  User: (p) => <Icon size={p.size} color={p.color} d={[
+    <circle key="c" cx="12" cy="8" r="4" fill="none" stroke={p.color} strokeWidth="1.8" />,
+    'M4 20c0-4 3.6-7 8-7s8 3 8 7',
+  ]} />,
+}
+
 // ─── Couleurs Papyri ───
 const C = {
   terre: '#B5651D',
@@ -19,10 +80,12 @@ const C = {
 // ─── Styles ───
 const S = {
   page: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '32px 24px',
+    width: '100%',
+    minWidth: 0,
+    padding: '28px 32px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    boxSizing: 'border-box',
+    flex: 1,
   },
   header: {
     marginBottom: '32px',
@@ -40,7 +103,7 @@ const S = {
   },
   kpiGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
     gap: '20px',
     marginBottom: '28px',
   },
@@ -158,10 +221,10 @@ const S = {
 }
 
 // ─── KPI Card Component ───
-const KPICard = ({ icon, iconBg, label, value, trend, trendPositive, subtitle }) => (
+const KPICard = ({ icon: IconComp, iconBg, iconColor, label, value, trend, trendPositive, subtitle }) => (
   <div style={S.kpiCard}>
     <div style={{ ...S.kpiIconWrap, background: iconBg || `${C.terre}15` }}>
-      <span>{icon}</span>
+      {IconComp && <IconComp size={22} color={iconColor || C.terre} />}
     </div>
     <div style={S.kpiLabel}>{label}</div>
     <div style={S.kpiValue}>{value}</div>
@@ -382,8 +445,9 @@ const Dashboard = () => {
       {/* KPI Cards */}
       <div style={S.kpiGrid}>
         <KPICard
-          icon="💰"
+          icon={Icons.DollarSign}
           iconBg={`${C.or}20`}
+          iconColor={C.or}
           label="Revenu Total"
           value={`${formatCurrency(totalRevenue)} ${currency}`}
           trend={activeSubscribers > 0 ? `${activeSubscribers} actifs` : undefined}
@@ -391,16 +455,18 @@ const Dashboard = () => {
           subtitle="abonnements"
         />
         <KPICard
-          icon="👥"
+          icon={Icons.Users}
           iconBg={`${C.terre}15`}
+          iconColor={C.terre}
           label="Abonnés Actifs"
           value={activeSubscribers}
           trend={stats.subscriptions?.expired > 0 ? `${stats.subscriptions.expired} expirés` : undefined}
           trendPositive={stats.subscriptions?.expired === 0}
         />
         <KPICard
-          icon="🆕"
+          icon={Icons.UserPlus}
           iconBg={`${C.green}15`}
+          iconColor={C.green}
           label="Nouvelles Inscriptions"
           value={newUsersMonth}
           trend={prevMonthSignups > 0
@@ -410,8 +476,9 @@ const Dashboard = () => {
           subtitle="ce mois-ci"
         />
         <KPICard
-          icon="📚"
+          icon={Icons.BookOpen}
           iconBg={`${C.indigo}15`}
+          iconColor={C.indigo}
           label="Taille Bibliothèque"
           value={totalContents}
           trend={`${stats.contents?.ebooks || 0} ebooks, ${stats.contents?.audiobooks || 0} audio`}
@@ -492,35 +559,27 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Stats Footer */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '28px' }}>
-        <div style={{ ...S.chartCard, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>📖</span>
-          <div>
-            <div style={{ fontSize: '12px', color: C.textSecondary }}>Sessions de lecture</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: C.textPrimary }}>{stats.reading?.total || 0}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px', marginTop: '28px' }}>
+        {[
+          { IconComp: Icons.BookMarked, color: C.terre,  bg: `${C.terre}12`,  label: 'Sessions de lecture',  value: stats.reading?.total || 0 },
+          { IconComp: Icons.CheckCircle, color: C.green,  bg: `${C.green}12`,  label: 'Lectures terminées',   value: stats.reading?.completed || 0 },
+          { IconComp: Icons.Clock,       color: C.indigo, bg: `${C.indigo}12`, label: 'Temps de lecture',     value: `${stats.reading?.totalTimeHours || 0}h` },
+          { IconComp: Icons.User,        color: C.or,     bg: `${C.or}15`,     label: 'Total utilisateurs',   value: stats.users?.total || 0 },
+        ].map(({ IconComp, color, bg, label, value }, i) => (
+          <div key={i} style={{ ...S.chartCard, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px', height: '42px', borderRadius: '10px',
+              background: bg, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <IconComp size={20} color={color} />
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: C.textSecondary, marginBottom: '2px' }}>{label}</div>
+              <div style={{ fontSize: '22px', fontWeight: '700', color: C.textPrimary, lineHeight: 1 }}>{value}</div>
+            </div>
           </div>
-        </div>
-        <div style={{ ...S.chartCard, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>✅</span>
-          <div>
-            <div style={{ fontSize: '12px', color: C.textSecondary }}>Lectures terminées</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: C.textPrimary }}>{stats.reading?.completed || 0}</div>
-          </div>
-        </div>
-        <div style={{ ...S.chartCard, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>⏱️</span>
-          <div>
-            <div style={{ fontSize: '12px', color: C.textSecondary }}>Temps de lecture</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: C.textPrimary }}>{stats.reading?.totalTimeHours || 0}h</div>
-          </div>
-        </div>
-        <div style={{ ...S.chartCard, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>👤</span>
-          <div>
-            <div style={{ fontSize: '12px', color: C.textSecondary }}>Total utilisateurs</div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: C.textPrimary }}>{stats.users?.total || 0}</div>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   )

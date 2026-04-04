@@ -1,6 +1,7 @@
 /**
  * Stripe Service
- * Gestion des paiements par carte bancaire via Stripe Checkout Sessions
+ * Gestion des paiements par carte bancaire via Stripe
+ * Mode: subscription (renouvellement automatique géré par Stripe)
  */
 
 const Stripe = require('stripe');
@@ -16,29 +17,61 @@ function getClient() {
   return stripeClient;
 }
 
-/**
- * Returns true if Stripe is properly configured
- */
 function isConfigured() {
   return Boolean(config.stripe.secretKey);
 }
 
+function buildUrl(base, path, query = {}) {
+  const url = new URL(path, base);
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString();
+}
+
 /**
- * Create a Stripe Checkout Session for a subscription payment
+ * Get or create a Stripe Customer for a user.
+ * Reuses existing customer if provider_customer_id is stored in DB.
+ */
+async function getOrCreateCustomer({ userId, email, existingCustomerId }) {
+  const stripe = getClient();
+
+  if (existingCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(existingCustomerId);
+      if (!customer.deleted) return customer.id;
+    } catch {
+      // Customer may have been deleted in Stripe — fall through to create
+    }
+  }
+
+  const customer = await stripe.customers.create({
+    email,
+    metadata: { papyri_user_id: userId },
+  });
+
+  return customer.id;
+}
+
+/**
+ * Create a Stripe Checkout Session in subscription mode.
+ * Stripe handles all renewals automatically and sends webhooks on each renewal.
  *
  * @param {object} params
- * @param {string} params.userId         - Supabase user UUID
- * @param {string} params.subscriptionId - Internal subscription ID
- * @param {string} params.planId         - Internal plan ID
- * @param {string} params.planCode       - Plan slug/code
- * @param {string} params.planName       - Display name
- * @param {number} params.amountCents    - Amount in cents (e.g. 999 for $9.99)
- * @param {string} params.currency       - ISO currency code (e.g. 'USD')
- * @param {number} params.usersLimit     - Number of seats
- * @param {string} params.customerEmail  - Pre-fill customer email
- * @param {string} params.paymentType    - 'subscription_initial' | 'subscription_renewal' | 'content_unlock'
- * @param {string} params.redirectBaseUrl - Override base URL (for local dev)
- * @returns {{ sessionId, sessionUrl }} - Stripe session ID and hosted checkout URL
+ * @param {string} params.userId
+ * @param {string} params.subscriptionId  - Internal subscription UUID
+ * @param {string} params.planId
+ * @param {string} params.planCode        - 'monthly' | 'yearly'
+ * @param {string} params.planName
+ * @param {number} params.amountCents     - Amount in cents
+ * @param {string} params.currency        - ISO currency (e.g. 'EUR')
+ * @param {number} params.usersLimit
+ * @param {string} params.customerEmail
+ * @param {string} params.stripeCustomerId - Optional existing Stripe customer ID
+ * @param {string} params.paymentType
+ * @param {string} params.redirectBaseUrl
  */
 async function createCheckoutSession({
   userId,
@@ -50,15 +83,20 @@ async function createCheckoutSession({
   currency,
   usersLimit,
   customerEmail,
+  stripeCustomerId,
   paymentType = 'subscription_initial',
   redirectBaseUrl,
 }) {
   const stripe = getClient();
-
   const frontendUrl = redirectBaseUrl || config.frontendUrl;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
+  // Determine billing interval from plan code
+  const isYearly = String(planCode || '').toLowerCase().includes('year') ||
+                   String(planCode || '').toLowerCase().includes('annual');
+  const interval = isYearly ? 'year' : 'month';
+
+  const sessionParams = {
+    mode: 'subscription',
     line_items: [
       {
         price_data: {
@@ -68,11 +106,11 @@ async function createCheckoutSession({
             description: `Abonnement ${planName} — ${usersLimit} utilisateur${usersLimit > 1 ? 's' : ''}`,
           },
           unit_amount: Math.round(amountCents),
+          recurring: { interval },
         },
         quantity: 1,
       },
     ],
-    customer_email: customerEmail,
     metadata: {
       user_id: userId,
       subscription_id: subscriptionId || '',
@@ -81,8 +119,95 @@ async function createCheckoutSession({
       users_limit: String(usersLimit),
       payment_type: paymentType,
     },
+    subscription_data: {
+      metadata: {
+        user_id: userId,
+        subscription_id: subscriptionId || '',
+        plan_id: planId,
+        plan_code: planCode,
+      },
+    },
     success_url: `${frontendUrl}/subscription/callback?provider=stripe&session_id={CHECKOUT_SESSION_ID}&status=successful`,
     cancel_url: `${frontendUrl}/pricing?payment=cancelled`,
+  };
+
+  // Attach to existing Stripe customer or pre-fill email
+  if (stripeCustomerId) {
+    sessionParams.customer = stripeCustomerId;
+  } else if (customerEmail) {
+    sessionParams.customer_email = customerEmail;
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams);
+
+  return {
+    sessionId: session.id,
+    sessionUrl: session.url,
+  };
+}
+
+/**
+ * Create a Stripe Checkout Session in one-time payment mode.
+ *
+ * @param {object} params
+ * @param {string} params.userId
+ * @param {number} params.amountCents
+ * @param {string} params.currency
+ * @param {string} params.title
+ * @param {string} [params.description]
+ * @param {string} [params.customerEmail]
+ * @param {object} [params.metadata]
+ * @param {string} [params.successPath]
+ * @param {string} [params.cancelPath]
+ * @param {string} [params.redirectBaseUrl]
+ */
+async function createPaymentCheckoutSession({
+  userId,
+  amountCents,
+  currency,
+  title,
+  description = '',
+  customerEmail,
+  metadata = {},
+  successPath = '/',
+  cancelPath = '/',
+  redirectBaseUrl,
+}) {
+  const stripe = getClient();
+  const frontendUrl = redirectBaseUrl || config.frontendUrl;
+
+  const successUrl = buildUrl(frontendUrl, successPath, {
+    provider: 'stripe',
+    status: 'successful',
+    session_id: '{CHECKOUT_SESSION_ID}',
+  });
+  const cancelUrl = buildUrl(frontendUrl, cancelPath, {
+    provider: 'stripe',
+    payment: 'cancelled',
+  });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    line_items: [
+      {
+        price_data: {
+          currency: String(currency || 'USD').toLowerCase(),
+          product_data: {
+            name: title,
+            ...(description ? { description } : {}),
+          },
+          unit_amount: Math.round(Number(amountCents || 0)),
+        },
+        quantity: 1,
+      },
+    ],
+    ...(customerEmail ? { customer_email: customerEmail } : {}),
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata: {
+      user_id: userId,
+      ...metadata,
+    },
   });
 
   return {
@@ -92,33 +217,79 @@ async function createCheckoutSession({
 }
 
 /**
- * Retrieve a Stripe Checkout Session and return basic payment info
- *
- * @param {string} sessionId
- * @returns {{ status, amountTotal, currency, metadata, paymentStatus }}
+ * Retrieve a Stripe Checkout Session
  */
 async function retrieveSession(sessionId) {
   const stripe = getClient();
   const session = await stripe.checkout.sessions.retrieve(sessionId, {
-    expand: ['payment_intent'],
+    expand: ['subscription'],
   });
   return {
     id: session.id,
-    status: session.status,           // 'open' | 'complete' | 'expired'
-    paymentStatus: session.payment_status, // 'paid' | 'unpaid' | 'no_payment_required'
+    status: session.status,
+    paymentStatus: session.payment_status,
     amountTotal: session.amount_total,
     currency: session.currency?.toUpperCase(),
     metadata: session.metadata || {},
     customerEmail: session.customer_details?.email || null,
+    customerId: session.customer || null,
+    stripeSubscriptionId: session.subscription?.id || (typeof session.subscription === 'string' ? session.subscription : null),
+    subscriptionStatus: session.subscription?.status || null,
+    currentPeriodEnd: session.subscription?.current_period_end
+      ? new Date(session.subscription.current_period_end * 1000).toISOString()
+      : null,
   };
 }
 
 /**
- * Verify Stripe webhook event signature and construct the event
- *
- * @param {Buffer} rawBody - Raw request body (must NOT be parsed by express.json)
- * @param {string} signature - Value of 'stripe-signature' header
- * @returns {Stripe.Event}
+ * Retrieve a Stripe Subscription
+ */
+async function retrieveSubscription(stripeSubId) {
+  const stripe = getClient();
+  const sub = await stripe.subscriptions.retrieve(stripeSubId);
+  return {
+    id: sub.id,
+    status: sub.status,
+    currentPeriodStart: new Date(sub.current_period_start * 1000).toISOString(),
+    currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString(),
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+    customerId: sub.customer,
+    metadata: sub.metadata || {},
+  };
+}
+
+/**
+ * Cancel a Stripe Subscription at period end (user keeps access until expiry)
+ */
+async function cancelSubscriptionAtPeriodEnd(stripeSubId) {
+  const stripe = getClient();
+  const sub = await stripe.subscriptions.update(stripeSubId, {
+    cancel_at_period_end: true,
+  });
+  return sub;
+}
+
+/**
+ * Reactivate a cancelled-at-period-end Stripe Subscription
+ */
+async function reactivateSubscription(stripeSubId) {
+  const stripe = getClient();
+  const sub = await stripe.subscriptions.update(stripeSubId, {
+    cancel_at_period_end: false,
+  });
+  return sub;
+}
+
+/**
+ * Retrieve a Stripe Invoice
+ */
+async function retrieveInvoice(invoiceId) {
+  const stripe = getClient();
+  return stripe.invoices.retrieve(invoiceId);
+}
+
+/**
+ * Construct and verify a Stripe webhook event
  */
 function constructWebhookEvent(rawBody, signature) {
   if (!config.stripe.webhookSecret) {
@@ -130,7 +301,13 @@ function constructWebhookEvent(rawBody, signature) {
 
 module.exports = {
   isConfigured,
+  getOrCreateCustomer,
   createCheckoutSession,
+  createPaymentCheckoutSession,
   retrieveSession,
+  retrieveSubscription,
+  cancelSubscriptionAtPeriodEnd,
+  reactivateSubscription,
+  retrieveInvoice,
   constructWebhookEvent,
 };

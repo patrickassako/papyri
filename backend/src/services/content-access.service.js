@@ -2,6 +2,55 @@ const contentsService = require('./contents.service');
 const subscriptionsService = require('./subscriptions.service');
 const { supabaseAdmin } = require('../config/database');
 
+/**
+ * Vérifie si une zone est restreinte pour un contenu donné.
+ * @param {string} contentId
+ * @param {string|null} zone
+ * @returns {Promise<{blocked: boolean, reason?: string}>}
+ */
+async function checkGeoRestriction(contentId, geo) {
+  const { zone, country } = typeof geo === 'string' ? { zone: geo, country: null } : (geo || {});
+  if (!zone && !country) return { blocked: false };
+
+  try {
+    const { data: config } = await supabaseAdmin
+      .from('content_geo_restriction_config')
+      .select('mode')
+      .eq('content_id', contentId)
+      .maybeSingle();
+
+    if (!config) return { blocked: false };
+
+    const { data: zones } = await supabaseAdmin
+      .from('content_geo_restrictions')
+      .select('zone, reason')
+      .eq('content_id', contentId)
+      .eq('is_active', true);
+
+    const activeZones = zones || [];
+    // Pays spécifique prioritaire sur continent
+    const matched = activeZones.find((z) => z.zone === country) || activeZones.find((z) => z.zone === zone);
+
+    if (config.mode === 'blacklist') {
+      if (matched) {
+        return { blocked: true, reason: matched.reason || 'Ce contenu n\'est pas disponible dans votre région.' };
+      }
+      return { blocked: false };
+    }
+
+    if (config.mode === 'whitelist') {
+      if (!matched) {
+        return { blocked: true, reason: 'Ce contenu est disponible uniquement dans certaines régions.' };
+      }
+      return { blocked: false };
+    }
+
+    return { blocked: false };
+  } catch {
+    return { blocked: false };
+  }
+}
+
 function computePricing(content, hasActiveSubscription) {
   const basePriceCents = Number(content?.price_cents || 0);
   const discountPercent = hasActiveSubscription ? Number(content?.subscription_discount_percent || 0) : 0;
@@ -65,8 +114,36 @@ async function getSharedSeriesUnlock(userId, content) {
   return unlocks.find((u) => matchedContentIds.has(u.content_id)) || null;
 }
 
-async function resolveContentAccess({ userId, contentId }) {
+async function resolveContentAccess({ userId, contentId, zone = null }) {
   const content = await contentsService.getContentByIdForUnlock(contentId);
+
+  // Vérification des restrictions géographiques (avant tout le reste)
+  const geoCheck = await checkGeoRestriction(contentId, zone);
+  if (geoCheck.blocked) {
+    const pricing = computePricing(content, false);
+    return {
+      content,
+      unlock: null,
+      hasActiveSubscription: false,
+      subscription: null,
+      memberRole: null,
+      access: {
+        content_id: content.id,
+        access_type: content.access_type || 'subscription',
+        is_purchasable: false,
+        has_active_subscription: false,
+        unlocked: false,
+        unlock: null,
+        can_read: false,
+        pricing,
+        denial: {
+          code: 'GEO_RESTRICTED',
+          message: geoCheck.reason || 'Ce contenu n\'est pas disponible dans votre région.',
+        },
+      },
+    };
+  }
+
   const directUnlock = await contentsService.getUserContentUnlock(userId, contentId);
   const sharedSeriesUnlock = directUnlock ? null : await getSharedSeriesUnlock(userId, content);
   const unlock = directUnlock || sharedSeriesUnlock;
@@ -78,10 +155,9 @@ async function resolveContentAccess({ userId, contentId }) {
   const isPurchasable = Boolean(content.is_purchasable) || ['paid', 'subscription_or_paid'].includes(accessType);
 
   const canReadByUnlock = Boolean(unlock);
-  // Access now always requires explicit unlock consumption (quota/bonus/paid),
-  // even for active subscribers.
-  const canReadBySubscription = false;
-  const canRead = canReadByUnlock || canReadBySubscription;
+  // Access requires an explicit unlock (quota consumption). Merely having an active
+  // subscription is not enough — the subscriber must go through the unlock flow first.
+  const canRead = canReadByUnlock;
 
   let denialCode = null;
   let denialMessage = null;
@@ -130,4 +206,5 @@ async function resolveContentAccess({ userId, contentId }) {
 module.exports = {
   resolveContentAccess,
   computePricing,
+  checkGeoRestriction,
 };

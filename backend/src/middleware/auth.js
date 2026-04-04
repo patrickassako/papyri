@@ -1,5 +1,38 @@
 const { supabase, supabaseAdmin } = require('../config/database');
 
+// Cache permissions par rôle (TTL 5 min) pour éviter une requête DB à chaque appel
+const permissionsCache = new Map(); // key: roleName → { permissions: Set, expiresAt: number }
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getRolePermissions(roleName) {
+  const cached = permissionsCache.get(roleName);
+  if (cached && cached.expiresAt > Date.now()) return cached.permissions;
+
+  // Fallback query if join syntax unsupported
+  const { data: roleData } = await supabaseAdmin
+    .from('roles')
+    .select('id')
+    .eq('name', roleName)
+    .single();
+
+  let permissions = new Set();
+  if (roleData?.id) {
+    const { data: rp } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permissions(key)')
+      .eq('role_id', roleData.id);
+    if (rp) rp.forEach(r => { if (r.permissions?.key) permissions.add(r.permissions.key); });
+  }
+
+  permissionsCache.set(roleName, { permissions, expiresAt: Date.now() + CACHE_TTL_MS });
+  return permissions;
+}
+
+function clearPermissionsCache(roleName) {
+  if (roleName) permissionsCache.delete(roleName);
+  else permissionsCache.clear();
+}
+
 /**
  * Middleware to verify Supabase JWT access token
  * Migrated from custom JWT to Supabase Auth
@@ -49,7 +82,7 @@ async function verifyJWT(req, res, next) {
       language: profile?.language,
       avatar_url: profile?.avatar_url,
       onboarding_completed: profile?.onboarding_completed,
-      role: data.user.user_metadata?.role || 'user'
+      role: profile?.role || data.user.user_metadata?.role || 'user'
     };
 
     next();
@@ -112,8 +145,39 @@ function requireRole(...roles) {
   };
 }
 
+/**
+ * Middleware to check if user has a specific permission key (ex: 'users.write')
+ * Must be used after verifyJWT
+ * Admins always pass (all permissions granted by seed).
+ */
+function requirePermission(permissionKey) {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Non authentifié.' } });
+    }
+    // Admin role always has full access (shortcut — avoids DB query)
+    if (req.user.role === 'admin') return next();
+
+    try {
+      const permissions = await getRolePermissions(req.user.role);
+      if (!permissions.has(permissionKey)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: `Permission requise : ${permissionKey}` },
+        });
+      }
+      next();
+    } catch (err) {
+      console.error('requirePermission error:', err);
+      return res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Erreur vérification permissions.' } });
+    }
+  };
+}
+
 module.exports = {
   verifyJWT,
-  authenticate: verifyJWT, // Alias for consistency
-  requireRole
+  authenticate: verifyJWT,
+  requireRole,
+  requirePermission,
+  clearPermissionsCache,
 };

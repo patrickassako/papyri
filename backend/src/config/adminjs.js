@@ -15,6 +15,7 @@ const r2Service = require('../services/r2.service');
 const { clearCache: clearSettingsCache, SETTINGS_ROW_ID, getSettings } = require('../services/settings.service');
 const { generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/invoice.service');
 const { storeToken } = require('../services/admin-invoice-token.service');
+const notificationsService = require('../services/notifications.service');
 
 // Register Supabase adapter with AdminJS
 AdminJS.registerAdapter({
@@ -48,6 +49,50 @@ const Components = {
   Dashboard: componentLoader.add(
     'Dashboard',
     path.join(__dirname, '..', 'admin', 'components', 'Dashboard.jsx')
+  ),
+  InvoicePreview: componentLoader.add(
+    'InvoicePreview',
+    path.join(__dirname, '..', 'admin', 'components', 'InvoicePreview.jsx')
+  ),
+  LogoUpload: componentLoader.add(
+    'LogoUpload',
+    path.join(__dirname, '..', 'admin', 'components', 'LogoUpload.jsx')
+  ),
+  NotificationsTest: componentLoader.add(
+    'NotificationsTest',
+    path.join(__dirname, '..', 'admin', 'components', 'NotificationsTest.jsx')
+  ),
+  PublishersDashboard: componentLoader.add(
+    'PublishersDashboard',
+    path.join(__dirname, '..', 'admin', 'components', 'PublishersDashboard.jsx')
+  ),
+  PublishersManager: componentLoader.add(
+    'PublishersManager',
+    path.join(__dirname, '..', 'admin', 'components', 'PublishersManager.jsx')
+  ),
+  ContentValidation: componentLoader.add(
+    'ContentValidation',
+    path.join(__dirname, '..', 'admin', 'components', 'ContentValidation.jsx')
+  ),
+  PayoutsManager: componentLoader.add(
+    'PayoutsManager',
+    path.join(__dirname, '..', 'admin', 'components', 'PayoutsManager.jsx')
+  ),
+  UserReadingManager: componentLoader.add(
+    'UserReadingManager',
+    path.join(__dirname, '..', 'admin', 'components', 'UserReadingManager.jsx')
+  ),
+  PublisherContentCreate: componentLoader.add(
+    'PublisherContentCreate',
+    path.join(__dirname, '..', 'admin', 'components', 'PublisherContentCreate.jsx')
+  ),
+  GeographicPricingEditor: componentLoader.add(
+    'GeographicPricingEditor',
+    path.join(__dirname, '..', 'admin', 'components', 'GeographicPricingEditor.jsx')
+  ),
+  GeoRestrictionsEditor: componentLoader.add(
+    'GeoRestrictionsEditor',
+    path.join(__dirname, '..', 'admin', 'components', 'GeoRestrictionsEditor.jsx')
   ),
 };
 
@@ -549,61 +594,17 @@ const cancelSubscriptionAction = {
 // ─── Invoice Actions ──────────────────────────────────────────────────────────
 
 /**
- * Generates a sample invoice PDF with current app_settings and returns a one-time download link.
- * Used on the app_settings resource as "Aperçu Facture".
+ * Shows an HTML invoice preview with current app_settings.
+ * Renders the InvoicePreview component inline in AdminJS (no PDF, no navigation away).
  */
 const previewInvoiceAction = {
   actionType: 'resource',
   icon: 'Eye',
   label: 'Aperçu Facture',
+  component: Components.InvoicePreview,
   handler: async (request, response, context) => {
-    try {
-      const settings = await getSettings();
-
-      // Build a realistic sample payment
-      const now = new Date().toISOString();
-      const samplePayment = {
-        id: '00000000-0000-0000-0000-sample000001',
-        amount: 9.99,
-        currency: settings.currency || 'USD',
-        status: 'succeeded',
-        provider: 'stripe',
-        provider_payment_id: 'pi_sample_preview',
-        paid_at: now,
-        created_at: now,
-        metadata: {
-          payment_type: 'subscription_initial',
-          plan_name: 'Plan Solo Mensuel',
-        },
-      };
-      const sampleUser = {
-        email: 'client@exemple.com',
-        full_name: 'Nom du Client',
-      };
-
-      const prefix = settings.invoice_prefix || 'INV';
-      const invoiceNumber = buildInvoiceNumber(samplePayment.id, now, prefix);
-      const filename = `apercu-${invoiceNumber}.pdf`;
-
-      const buffer = await generateInvoicePDFBuffer({
-        payment: samplePayment,
-        user: sampleUser,
-        subscription: null,
-        settings,
-      });
-
-      const token = storeToken(buffer, filename);
-
-      return {
-        redirectUrl: `/admin/invoice-token/${token}`,
-        notice: { message: `Aperçu généré : ${invoiceNumber}`, type: 'success' },
-      };
-    } catch (err) {
-      console.error('Preview invoice action error:', err);
-      return {
-        notice: { message: `Erreur : ${err.message}`, type: 'error' },
-      };
-    }
+    // Component handles its own data fetching via /admin/invoice-preview-data
+    return {};
   },
 };
 
@@ -615,6 +616,7 @@ const downloadPaymentInvoiceAction = {
   actionType: 'record',
   icon: 'Download',
   label: 'Télécharger Facture PDF',
+  component: false,  // pas de page React — exécute le handler et redirige
   isVisible: (context) => context?.record?.params?.status === 'succeeded',
   handler: async (request, response, context) => {
     const { record } = context;
@@ -764,6 +766,22 @@ async function contentAfterNew(response, request, context) {
     });
   }
 
+  // Notify users when content is published immediately on creation
+  if (record.params?.is_published === true || record.params?.is_published === 'true') {
+    try {
+      const { data: profiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('is_active', true);
+      const userIds = (profiles || []).map((p) => p.id);
+      if (userIds.length > 0) {
+        await notificationsService.notifyNewContent(userIds, record.params);
+      }
+    } catch (notifErr) {
+      console.error('New content notification error (non-blocking):', notifErr.message);
+    }
+  }
+
   return response;
 }
 
@@ -786,6 +804,24 @@ async function contentAfterEdit(response, request, context) {
     await logResourceUpdated(currentAdmin.id, 'contents', record.params.id, {}, record.params, {
       ip_address: request?.headers?.['x-forwarded-for'] || 'admin-panel',
     });
+  }
+
+  // Notify users when a draft content is published via edit
+  const justPublished = (record.params?.is_published === true || record.params?.is_published === 'true')
+    && request?.payload?.is_published === 'true';
+  if (justPublished) {
+    try {
+      const { data: profiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('is_active', true);
+      const userIds = (profiles || []).map((p) => p.id);
+      if (userIds.length > 0) {
+        await notificationsService.notifyNewContent(userIds, record.params);
+      }
+    } catch (notifErr) {
+      console.error('Publish notification error (non-blocking):', notifErr.message);
+    }
   }
 
   return response;
@@ -821,6 +857,194 @@ async function contentAfterDelete(response, request, context) {
   return response;
 }
 
+// ─── Promo Code Hooks & Actions ──────────────────────────────────────────────
+
+/**
+ * Enrichit la vue détail d'un code promo avec les stats d'utilisation.
+ */
+async function enrichPromoCodeShow(response, request, context) {
+  const { record } = context;
+  if (!record) return response;
+
+  const promoId = record.params?.id;
+  if (!promoId) return response;
+
+  try {
+    const now = new Date();
+
+    // Total remises accordées
+    const { data: usages } = await supabaseAdmin
+      .from('promo_code_usages')
+      .select('discount_applied, used_at, user_id')
+      .eq('promo_code_id', promoId)
+      .order('used_at', { ascending: false });
+
+    const totalDiscount = (usages || []).reduce((sum, u) => sum + Number(u.discount_applied || 0), 0);
+
+    // Statut calculé
+    const isActive = record.params?.is_active;
+    const validUntil = record.params?.valid_until ? new Date(record.params.valid_until) : null;
+    const maxUses = record.params?.max_uses;
+    const usedCount = Number(record.params?.used_count || 0);
+
+    let status;
+    if (!isActive) {
+      status = 'Inactif';
+    } else if (validUntil && validUntil < now) {
+      status = 'Expiré';
+    } else if (maxUses !== null && maxUses !== undefined && usedCount >= Number(maxUses)) {
+      status = 'Quota atteint';
+    } else {
+      status = 'Actif';
+    }
+
+    // Utilisations restantes
+    let remaining;
+    if (!maxUses) {
+      remaining = 'Illimité';
+    } else {
+      remaining = `${Number(maxUses) - usedCount} restantes sur ${maxUses}`;
+    }
+
+    // Résumé des 5 dernières utilisations
+    let usagesSummary = 'Aucune utilisation pour le moment.';
+    if (usages && usages.length > 0) {
+      usagesSummary = usages.slice(0, 5).map((u) => {
+        const date = new Date(u.used_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+        return `• ${date} — remise ${Number(u.discount_applied).toFixed(2)} EUR (user: ${u.user_id.slice(0, 8)}…)`;
+      }).join('\n');
+      if (usages.length > 5) {
+        usagesSummary += `\n… et ${usages.length - 5} autre(s)`;
+      }
+    }
+
+    record.params['__status']             = status;
+    record.params['__remaining_uses']     = remaining;
+    record.params['__total_discount_eur'] = `${totalDiscount.toFixed(2)} EUR (${(usages || []).length} utilisations)`;
+    record.params['__recent_usages']      = usagesSummary;
+  } catch (err) {
+    console.error('Promo enrichment error:', err.message);
+  }
+
+  return response;
+}
+
+/**
+ * Action "Désactiver/Réactiver" — toggle is_active directement depuis liste ou show.
+ */
+const togglePromoActiveAction = {
+  name: 'toggleActive',
+  actionType: 'record',
+  icon: 'Power',
+  label: 'Désactiver / Réactiver',
+  guard: 'Confirmer le changement de statut du code promo ?',
+  component: false,
+  handler: async (request, response, context) => {
+    const { record, currentAdmin } = context;
+    if (!record) {
+      throw new Error('Enregistrement introuvable.');
+    }
+
+    const currentValue = record.params?.is_active;
+    const newValue = !currentValue;
+    const promoId = record.params?.id;
+
+    const { error } = await supabaseAdmin
+      .from('promo_codes')
+      .update({ is_active: newValue, updated_at: new Date().toISOString() })
+      .eq('id', promoId);
+
+    if (error) throw error;
+
+    // Audit
+    if (currentAdmin) {
+      await logResourceUpdated(
+        currentAdmin.id,
+        'promo_codes',
+        promoId,
+        { is_active: currentValue },
+        { is_active: newValue },
+        { ip_address: request?.headers?.['x-forwarded-for'] || 'admin-panel' }
+      ).catch(() => {});
+    }
+
+    // Rafraîchir l'enregistrement
+    const { data: updated } = await supabaseAdmin
+      .from('promo_codes')
+      .select('*')
+      .eq('id', promoId)
+      .single();
+
+    if (updated) {
+      Object.assign(record.params, updated);
+    }
+
+    return {
+      record: record.toJSON(currentAdmin),
+      notice: {
+        message: newValue ? 'Code promo activé.' : 'Code promo désactivé.',
+        type: 'success',
+      },
+    };
+  },
+};
+
+/**
+ * Action "Dupliquer" — crée une copie du code avec un nouveau nom.
+ */
+const duplicatePromoCodeAction = {
+  name: 'duplicate',
+  actionType: 'record',
+  icon: 'Copy',
+  label: 'Dupliquer',
+  guard: 'Créer une copie de ce code promo ?',
+  component: false,
+  handler: async (request, response, context) => {
+    const { record, currentAdmin } = context;
+    if (!record) throw new Error('Enregistrement introuvable.');
+
+    const original = record.params;
+    const newCode = `${original.code}_COPY_${Date.now().toString().slice(-4)}`;
+
+    const { data: copy, error } = await supabaseAdmin
+      .from('promo_codes')
+      .insert({
+        code: newCode,
+        description: original.description ? `Copie de ${original.code}` : null,
+        discount_type: original.discount_type,
+        discount_value: original.discount_value,
+        max_uses: original.max_uses,
+        valid_from: original.valid_from,
+        valid_until: original.valid_until,
+        applicable_plans: original.applicable_plans,
+        is_active: false, // la copie est inactive par défaut
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (currentAdmin) {
+      await logResourceCreated(
+        currentAdmin.id,
+        'promo_codes',
+        copy.id,
+        copy,
+        { ip_address: request?.headers?.['x-forwarded-for'] || 'admin-panel' }
+      ).catch(() => {});
+    }
+
+    return {
+      record: record.toJSON(currentAdmin),
+      notice: {
+        message: `Code «${newCode}» créé (inactif). Modifiez-le avant de l'activer.`,
+        type: 'success',
+      },
+      redirectUrl: `/admin/resources/promo_codes`,
+    };
+  },
+};
+
 // ─── AdminJS Options ─────────────────────────────────────────────────────────
 
 async function buildAdminOptions() {
@@ -834,6 +1058,9 @@ async function buildAdminOptions() {
   rootPath: '/admin',
   dashboard: {
     component: Components.Dashboard,
+  },
+  assets: {
+    styles: ['/public/admin-custom.css'],
   },
   branding: {
     companyName: 'Papyri — Back-Office',
@@ -867,6 +1094,9 @@ async function buildAdminOptions() {
           content_categories: 'Categories ↔ Contenus',
           app_settings: 'Paramètres Facture',
           payments: 'Paiements',
+          promo_codes: 'Codes Promo',
+          promo_code_usages: 'Utilisations Promo',
+          'test-notifications': 'Test Notifications',
         },
         actions: {
           list: 'Liste',
@@ -888,6 +1118,52 @@ async function buildAdminOptions() {
           loginWelcome: 'Connectez-vous au back-office Papyri',
         },
       },
+    },
+  },
+  pages: {
+    'test-notifications': {
+      label: 'Test Notifications',
+      icon: 'Bell',
+      component: Components.NotificationsTest,
+      handler: async (request, response, context) => {
+        return { data: {} };
+      },
+    },
+    'publishers-dashboard': {
+      label: 'Dashboard Éditeurs',
+      icon: 'BarChart2',
+      component: Components.PublishersDashboard,
+      handler: async (request, response, context) => { return { data: {} }; },
+    },
+    'publishers-list': {
+      label: 'Gérer les éditeurs',
+      icon: 'BookOpen',
+      component: Components.PublishersManager,
+      handler: async (request, response, context) => { return { data: {} }; },
+    },
+    'content-validation': {
+      label: 'Validation contenu',
+      icon: 'CheckSquare',
+      component: Components.ContentValidation,
+      handler: async (request, response, context) => { return { data: {} }; },
+    },
+    'payouts': {
+      label: 'Versements éditeurs',
+      icon: 'DollarSign',
+      component: Components.PayoutsManager,
+      handler: async (request, response, context) => { return { data: {} }; },
+    },
+    'publisher-content-create': {
+      label: 'Soumettre un contenu',
+      icon: 'PlusCircle',
+      component: Components.PublisherContentCreate,
+      handler: async (request, response, context) => { return { data: {} }; },
+    },
+    'user-reading': {
+      label: 'Gestion utilisateurs',
+      icon: 'Users',
+      component: Components.UserReadingManager,
+      handler: async (request, response, context) => { return { data: {} }; },
     },
   },
   resources: [
@@ -1124,6 +1400,26 @@ async function buildAdminOptions() {
             isVisible: true,
             after: [contentAfterDelete],
           },
+          geoPricing: {
+            actionType: 'record',
+            label: 'Prix Géographiques',
+            icon: 'Globe',
+            isVisible: true,
+            component: Components.GeographicPricingEditor,
+            handler: async (request, response, context) => {
+              return { record: context.record.toJSON(context.currentAdmin) };
+            },
+          },
+          geoRestrictions: {
+            actionType: 'record',
+            label: 'Restrictions Géo',
+            icon: 'Lock',
+            isVisible: true,
+            component: Components.GeoRestrictionsEditor,
+            handler: async (request, response, context) => {
+              return { record: context.record.toJSON(context.currentAdmin) };
+            },
+          },
         },
       },
     },
@@ -1327,7 +1623,10 @@ async function buildAdminOptions() {
           invoice_prefix:      { label: 'Préfixe factures (ex: INV)' },
           invoice_primary_color: { label: 'Couleur principale (hex, ex: #B5651D)' },
           invoice_accent_color:  { label: 'Couleur accent (hex, ex: #D4A017)' },
-          invoice_logo_url:    { label: 'URL du logo (lien image)' },
+          invoice_logo_url: {
+            label: 'Logo de la société',
+            components: { edit: Components.LogoUpload },
+          },
           invoice_footer_text: { label: 'Texte de bas de facture', type: 'textarea' },
           invoice_notes:       { label: 'Notes additionnelles (facultatif)', type: 'textarea' },
           updated_by:          { label: 'Modifié par' },
@@ -1430,6 +1729,257 @@ async function buildAdminOptions() {
         },
       },
     },
+    // ─── Codes promo ──────────────────────────────────────────────────
+    {
+      resource: 'promo_codes',
+      options: {
+        navigation: { name: 'Marketing', icon: 'Tag' },
+        listProperties: ['code', 'discount_type', 'discount_value', 'max_uses', 'used_count', 'valid_until', 'is_active'],
+        showProperties: [
+          'id', 'code', 'description',
+          'discount_type', 'discount_value',
+          'max_uses', 'used_count',
+          'valid_from', 'valid_until',
+          'applicable_plans', 'is_active',
+          '__status', '__remaining_uses', '__total_discount_eur', '__recent_usages',
+          'created_at', 'updated_at',
+        ],
+        editProperties: [
+          'code', 'description', 'discount_type', 'discount_value',
+          'max_uses', 'valid_from', 'valid_until', 'applicable_plans', 'is_active',
+        ],
+        filterProperties: ['is_active', 'discount_type'],
+        sort: { sortBy: 'created_at', direction: 'desc' },
+        properties: {
+          code: {
+            label: 'Code',
+            description: 'Ex: BIENVENUE20 — sera automatiquement mis en majuscules côté client',
+          },
+          description:    { label: 'Description interne' },
+          discount_type: {
+            label: 'Type de remise',
+            availableValues: [
+              { value: 'percent', label: 'Pourcentage (%)' },
+              { value: 'fixed',   label: 'Montant fixe (EUR)' },
+            ],
+          },
+          discount_value: { label: 'Valeur (% ou EUR)' },
+          max_uses:       { label: 'Utilisations max (vide = illimité)' },
+          used_count:     { label: 'Utilisations effectuées' },
+          valid_from:     { label: 'Valable à partir de' },
+          valid_until:    { label: 'Expiration' },
+          applicable_plans: {
+            label: 'Plans applicables',
+            description: 'Laisser vide pour s\'appliquer à tous les plans. Ex: ["monthly","yearly"]',
+          },
+          is_active: { label: 'Actif' },
+          // Champs virtuels (show view)
+          __status:             { label: 'Statut calculé',        isVisible: { list: false, show: true, edit: false, filter: false } },
+          __remaining_uses:     { label: 'Utilisations restantes', isVisible: { list: false, show: true, edit: false, filter: false } },
+          __total_discount_eur: { label: 'Total remises accordées', isVisible: { list: false, show: true, edit: false, filter: false } },
+          __recent_usages:      { label: 'Dernières utilisations', isVisible: { list: false, show: true, edit: false, filter: false } },
+        },
+        actions: {
+          list:       { isVisible: true },
+          show:       {
+            isVisible: true,
+            after: enrichPromoCodeShow,
+          },
+          edit:       { isVisible: true, after: auditAfterHook('edit') },
+          new:        { isVisible: true, after: auditAfterHook('new') },
+          delete:     { isVisible: true, after: auditAfterHook('delete') },
+          bulkDelete: { isVisible: false },
+          toggleActive: togglePromoActiveAction,
+          duplicate:    duplicatePromoCodeAction,
+        },
+      },
+    },
+    {
+      resource: 'promo_code_usages',
+      options: {
+        navigation: { name: 'Marketing', icon: 'Tag' },
+        listProperties: ['user_id', 'promo_code_id', 'discount_applied', 'used_at'],
+        showProperties: ['id', 'promo_code_id', 'user_id', 'subscription_id', 'discount_applied', 'used_at'],
+        filterProperties: ['promo_code_id', 'user_id'],
+        sort: { sortBy: 'used_at', direction: 'desc' },
+        properties: {
+          promo_code_id:    { label: 'Code promo' },
+          user_id:          { label: 'Utilisateur' },
+          subscription_id:  { label: 'Abonnement' },
+          discount_applied: { label: 'Remise appliquée (EUR)' },
+          used_at:          { label: 'Utilisé le' },
+        },
+        actions: {
+          list:       { isVisible: true },
+          show:       { isVisible: true },
+          edit:       { isVisible: false },
+          new:        { isVisible: false },
+          delete:     { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+      },
+    },
+
+    // ─── Éditeurs ─────────────────────────────────────────────────────
+    {
+      resource: 'publishers',
+      options: {
+        navigation: { name: 'Éditeurs', icon: 'BookOpen' },
+        listProperties: ['company_name', 'contact_name', 'email', 'status', 'activated_at'],
+        showProperties: [
+          'id', 'company_name', 'contact_name', 'email', 'description',
+          'status', 'revenue_grid', 'payout_method',
+          'invitation_token', 'token_expires_at', 'activated_at',
+          'created_at', 'updated_at',
+        ],
+        editProperties: ['company_name', 'contact_name', 'email', 'description', 'status', 'revenue_grid', 'payout_method'],
+        filterProperties: ['status'],
+        properties: {
+          company_name:     { label: 'Maison d\'édition', isRequired: true },
+          contact_name:     { label: 'Responsable', isRequired: true },
+          email:            { label: 'Email', isRequired: true },
+          description:      { label: 'Description' },
+          status: {
+            label: 'Statut',
+            availableValues: [
+              { value: 'pending',  label: 'En attente' },
+              { value: 'active',   label: 'Actif' },
+              { value: 'paused',   label: 'Pause' },
+              { value: 'banned',   label: 'Banni' },
+            ],
+          },
+          revenue_grid:     { label: 'Grille de revenus (JSON)', type: 'mixed' },
+          payout_method:    { label: 'Mode de paiement (JSON)', type: 'mixed' },
+          invitation_token: { label: 'Token invitation' },
+          token_expires_at: { label: 'Expiration token' },
+          activated_at:     { label: 'Activé le' },
+          user_id:          { label: 'ID utilisateur lié' },
+        },
+        actions: {
+          list:   { isVisible: true },
+          show:   { isVisible: true },
+          new:    { isVisible: false }, // invitation via service publisher
+          edit:   { isVisible: true, after: [auditAfterHook('edit')] },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+        sort: { sortBy: 'created_at', direction: 'desc' },
+      },
+    },
+    // ─── Livres soumis par les éditeurs ───────────────────────────────
+    {
+      resource: 'publisher_books',
+      options: {
+        navigation: { name: 'Éditeurs', icon: 'BookOpen' },
+        listProperties: ['publisher_id', 'content_id', 'validation_status', 'submitted_at'],
+        showProperties: [
+          'id', 'publisher_id', 'content_id',
+          'validation_status', 'rejection_reason', 'reviewed_by',
+          'submitted_at', 'reviewed_at',
+        ],
+        editProperties: ['validation_status', 'rejection_reason'],
+        filterProperties: ['validation_status', 'publisher_id'],
+        properties: {
+          publisher_id:      { label: 'Éditeur (ID)' },
+          content_id:        { label: 'Contenu (ID)' },
+          validation_status: {
+            label: 'Statut validation',
+            availableValues: [
+              { value: 'pending',   label: 'En attente' },
+              { value: 'approved',  label: 'Approuvé' },
+              { value: 'rejected',  label: 'Rejeté' },
+            ],
+          },
+          rejection_reason:  { label: 'Motif de rejet' },
+          reviewed_by:       { label: 'Examiné par' },
+          submitted_at:      { label: 'Soumis le' },
+          reviewed_at:       { label: 'Examiné le' },
+        },
+        actions: {
+          list:   { isVisible: true },
+          show:   { isVisible: true },
+          edit:   { isVisible: true, after: [auditAfterHook('edit')] },
+          new:    { isVisible: false },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+        sort: { sortBy: 'submitted_at', direction: 'desc' },
+      },
+    },
+    // ─── Revenus éditeurs ─────────────────────────────────────────────
+    {
+      resource: 'publisher_revenue',
+      options: {
+        navigation: { name: 'Éditeurs', icon: 'BookOpen' },
+        listProperties: ['publisher_id', 'content_id', 'sale_type', 'sale_amount_cad', 'publisher_amount_cad', 'created_at'],
+        showProperties: [
+          'id', 'publisher_id', 'content_id', 'payment_id',
+          'sale_type', 'sale_amount_cad', 'publisher_amount_cad',
+          'payout_id', 'created_at',
+        ],
+        filterProperties: ['publisher_id', 'sale_type', 'payout_id'],
+        properties: {
+          publisher_id:         { label: 'Éditeur (ID)' },
+          content_id:           { label: 'Contenu (ID)' },
+          payment_id:           { label: 'Paiement (ID)' },
+          sale_type:            { label: 'Type de vente' },
+          sale_amount_cad:      { label: 'Montant vente (CAD)' },
+          publisher_amount_cad: { label: 'Part éditeur (CAD)' },
+          payout_id:            { label: 'Versement lié (ID)' },
+        },
+        actions: {
+          list:   { isVisible: true },
+          show:   { isVisible: true },
+          edit:   { isVisible: false },
+          new:    { isVisible: false },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+        sort: { sortBy: 'created_at', direction: 'desc' },
+      },
+    },
+    // ─── Versements éditeurs ──────────────────────────────────────────
+    {
+      resource: 'publisher_payouts',
+      options: {
+        navigation: { name: 'Éditeurs', icon: 'BookOpen' },
+        listProperties: ['publisher_id', 'amount_cad', 'status', 'period_start', 'period_end', 'paid_at'],
+        showProperties: [
+          'id', 'publisher_id', 'amount_cad', 'status',
+          'period_start', 'period_end', 'notes',
+          'paid_at', 'created_at', 'updated_at',
+        ],
+        editProperties: ['status', 'amount_cad', 'period_start', 'period_end', 'notes', 'paid_at'],
+        filterProperties: ['publisher_id', 'status'],
+        properties: {
+          publisher_id: { label: 'Éditeur (ID)', isRequired: true },
+          amount_cad:   { label: 'Montant (CAD)' },
+          status: {
+            label: 'Statut',
+            availableValues: [
+              { value: 'pending',    label: 'En attente' },
+              { value: 'processing', label: 'En cours' },
+              { value: 'paid',       label: 'Versé' },
+              { value: 'failed',     label: 'Échoué' },
+            ],
+          },
+          period_start: { label: 'Début période' },
+          period_end:   { label: 'Fin période' },
+          notes:        { label: 'Notes' },
+          paid_at:      { label: 'Payé le' },
+        },
+        actions: {
+          list:   { isVisible: true },
+          show:   { isVisible: true },
+          new:    { isVisible: true, after: [auditAfterHook('new')] },
+          edit:   { isVisible: true, after: [auditAfterHook('edit')] },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+        sort: { sortBy: 'created_at', direction: 'desc' },
+      },
+    },
+
     // ─── Journal d'audit ──────────────────────────────────────────────
     {
       resource: 'audit_logs',

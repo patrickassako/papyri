@@ -21,12 +21,19 @@
     "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.13.5",
     "epubjs": "^0.3.93",
+    "firebase": "^12.10.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "pdfjs-dist": "^5.4.624",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.0"
+    "react-pageflip": "^2.0.3",
+    "react-router-dom": "^7.13.0",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.3",

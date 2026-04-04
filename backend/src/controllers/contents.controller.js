@@ -6,7 +6,9 @@
 const contentsService = require('../services/contents.service');
 const subscriptionsService = require('../services/subscriptions.service');
 const flutterwaveService = require('../services/flutterwave.service');
+const stripeService = require('../services/stripe.service');
 const contentAccessService = require('../services/content-access.service');
+const geoService = require('../services/geo.service');
 const { supabaseAdmin } = require('../config/database');
 
 /**
@@ -25,6 +27,30 @@ async function listContents(req, res) {
       category,
       sort,
     });
+
+    const geo = geoService.getGeoFromRequest(req);
+    if ((geo.zone || geo.country) && result.contents) {
+      result.contents = await geoService.attachLocalizedPrices(result.contents, geo);
+    }
+
+    // Appliquer la réduction abonné si l'utilisateur est connecté et a un abonnement actif
+    const userId = req.user?.id;
+    if (userId && result.contents) {
+      const subStatus = await subscriptionsService.checkSubscriptionStatus(userId).catch(() => null);
+      const hasActiveSub = Boolean(subStatus?.isActive);
+      result.contents = result.contents.map(c => {
+        const baseCents = Number(c.localized_price?.price_cents ?? c.price_cents ?? 0);
+        const discountPct = hasActiveSub ? Number(c.subscription_discount_percent ?? 0) : 0;
+        const discountedCents = discountPct > 0
+          ? Math.max(0, Math.round(baseCents * (100 - discountPct) / 100))
+          : baseCents;
+        return {
+          ...c,
+          subscriber_discount_percent: discountPct,
+          discounted_price_cents: discountedCents,
+        };
+      });
+    }
 
     res.json({
       success: true,
@@ -50,7 +76,12 @@ async function getContent(req, res) {
   try {
     const { id } = req.params;
 
-    const content = await contentsService.getContentById(id);
+    let content = await contentsService.getContentById(id);
+
+    const geo = geoService.getGeoFromRequest(req);
+    if (geo.zone || geo.country) {
+      content = await geoService.attachLocalizedPrice(content, geo);
+    }
 
     res.json({
       success: true,
@@ -131,9 +162,11 @@ async function getContentAccess(req, res) {
     const { id } = req.params;
     const userId = req.user.id;
 
+    const geo = geoService.getGeoFromRequest(req);
     const context = await contentAccessService.resolveContentAccess({
       userId,
       contentId: id,
+      zone: geo,
     });
 
     res.json({
@@ -344,26 +377,79 @@ async function unlockContent(req, res) {
       ? requestOrigin
       : undefined;
 
-    const checkout = await flutterwaveService.initiateCheckout({
-      amount: finalPriceCents / 100,
-      currency: content.price_currency || 'USD',
-      email: req.user.email,
-      name: req.user.full_name || req.user.email,
-      userId,
-      txPrefix: 'CNT',
-      redirectPath: `/catalogue/${content.id}`,
-      redirectBaseUrl,
-      title: 'Papyri - Déblocage contenu',
-      description: `Déblocage: ${content.title}`,
-      meta: {
-        payment_type: 'content_unlock',
-        content_id: content.id,
-        access_type: content.access_type || 'paid',
-      },
-    });
+    const requestedProvider = req.body?.provider === 'stripe' ? 'stripe' : 'flutterwave';
 
-    const paymentLink = checkout.link;
-    const reference = checkout.reference;
+    let paymentLink = null;
+    let reference = null;
+    let paymentProvider = requestedProvider;
+    let paymentMethod = 'card';
+
+    if (requestedProvider === 'stripe') {
+      if (!stripeService.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: 'STRIPE_NOT_CONFIGURED',
+            message: 'Stripe is not configured.',
+          },
+        });
+      }
+
+      const stripeSession = await stripeService.createPaymentCheckoutSession({
+        userId,
+        amountCents: finalPriceCents,
+        currency: content.price_currency || 'USD',
+        title: 'Papyri - Déblocage contenu',
+        description: `Déblocage: ${content.title}`,
+        customerEmail: req.user.email,
+        successPath: `/catalogue/${content.id}`,
+        cancelPath: `/catalogue/${content.id}`,
+        redirectBaseUrl,
+        metadata: {
+          payment_type: 'content_unlock',
+          content_id: content.id,
+          access_type: content.access_type || 'paid',
+        },
+      });
+
+      paymentLink = stripeSession.sessionUrl;
+      reference = stripeSession.sessionId;
+      paymentProvider = 'stripe';
+      paymentMethod = 'card';
+    } else {
+      if (!flutterwaveService.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: {
+            code: 'FLUTTERWAVE_NOT_CONFIGURED',
+            message: 'Flutterwave is not configured.',
+          },
+        });
+      }
+
+      const checkout = await flutterwaveService.initiateCheckout({
+        amount: finalPriceCents / 100,
+        currency: content.price_currency || 'USD',
+        email: req.user.email,
+        name: req.user.full_name || req.user.email,
+        userId,
+        txPrefix: 'CNT',
+        redirectPath: `/catalogue/${content.id}`,
+        redirectBaseUrl,
+        title: 'Papyri - Déblocage contenu',
+        description: `Déblocage: ${content.title}`,
+        meta: {
+          payment_type: 'content_unlock',
+          content_id: content.id,
+          access_type: content.access_type || 'paid',
+        },
+      });
+
+      paymentLink = checkout.link;
+      reference = checkout.reference;
+      paymentProvider = 'flutterwave';
+      paymentMethod = 'mobile_money';
+    }
 
     const paymentRecord = await subscriptionsService.createPayment({
       userId,
@@ -371,10 +457,10 @@ async function unlockContent(req, res) {
       amount: finalPriceCents / 100,
       currency: content.price_currency || 'USD',
       status: 'pending',
-      provider: 'flutterwave',
+      provider: paymentProvider,
       providerPaymentId: reference,
       providerCustomerId: null,
-      paymentMethod: 'card',
+      paymentMethod,
       metadata: {
         payment_type: 'content_unlock',
         content_id: content.id,
@@ -396,7 +482,7 @@ async function unlockContent(req, res) {
       data: {
         unlockable_via: 'paid',
         payment: {
-          provider: 'flutterwave',
+          provider: paymentProvider,
           reference,
           payment_id: paymentRecordId,
           payment_link: paymentLink,
@@ -432,14 +518,13 @@ async function verifyUnlockPayment(req, res) {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const { transactionId, reference } = req.body;
-
-    if (!transactionId || !reference) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'MISSING_PARAMETERS', message: 'transactionId et reference sont requis.' },
-      });
-    }
+    const {
+      provider = 'flutterwave',
+      transactionId,
+      reference,
+      sessionId,
+    } = req.body;
+    const resolvedProvider = provider === 'stripe' ? 'stripe' : 'flutterwave';
 
     const content = await contentsService.getContentByIdForUnlock(id);
     const existingUnlock = await contentsService.getUserContentUnlock(userId, id);
@@ -455,46 +540,117 @@ async function verifyUnlockPayment(req, res) {
       });
     }
 
-    const paymentDetails = await flutterwaveService.verifyPayment(transactionId);
-    if (paymentDetails.meta?.user_id !== userId || paymentDetails.meta?.content_id !== id) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'UNAUTHORIZED_PAYMENT', message: 'Ce paiement ne correspond pas a cet utilisateur/contenu.' },
-      });
-    }
+    let paymentRecord = null;
+    let providerMetadata = {};
 
-    const { data: paymentRecord, error: paymentRecordError } = await supabaseAdmin
-      .from('payments')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('provider', 'flutterwave')
-      .eq('provider_payment_id', reference)
-      .maybeSingle();
-
-    if (paymentRecordError) throw paymentRecordError;
-    if (!paymentRecord) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'PAYMENT_NOT_FOUND', message: 'Paiement introuvable.' },
-      });
-    }
-
-    if (paymentDetails.status === 'failed') {
-      if (paymentRecord.status !== 'failed') {
-        await subscriptionsService.updatePaymentStatus(paymentRecord.id, 'failed', 'Payment failed');
+    if (resolvedProvider === 'stripe') {
+      const effectiveSessionId = sessionId || reference;
+      if (!effectiveSessionId) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_PARAMETERS', message: 'sessionId est requis pour Stripe.' },
+        });
       }
-      return res.status(400).json({
-        success: false,
-        error: { code: 'PAYMENT_FAILED', message: 'Le paiement a echoue.' },
-      });
-    }
+      if (!stripeService.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured.' },
+        });
+      }
 
-    if (paymentDetails.status !== 'successful') {
-      return res.status(200).json({
-        success: false,
-        status: 'pending',
-        message: 'Paiement en cours de traitement.',
-      });
+      const session = await stripeService.retrieveSession(effectiveSessionId);
+      if ((session.metadata?.user_id || null) !== userId || (session.metadata?.content_id || null) !== id) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED_PAYMENT', message: 'Ce paiement ne correspond pas a cet utilisateur/contenu.' },
+        });
+      }
+
+      const { data: foundPayment, error: paymentRecordError } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', 'stripe')
+        .eq('provider_payment_id', effectiveSessionId)
+        .maybeSingle();
+
+      if (paymentRecordError) throw paymentRecordError;
+      if (!foundPayment) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PAYMENT_NOT_FOUND', message: 'Paiement introuvable.' },
+        });
+      }
+
+      if (session.paymentStatus !== 'paid') {
+        return res.status(200).json({
+          success: false,
+          status: 'pending',
+          message: 'Paiement en cours de traitement.',
+        });
+      }
+
+      paymentRecord = foundPayment;
+      providerMetadata = {
+        provider: 'stripe',
+        session_id: effectiveSessionId,
+      };
+    } else {
+      if (!transactionId || !reference) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_PARAMETERS', message: 'transactionId et reference sont requis.' },
+        });
+      }
+
+      const paymentDetails = await flutterwaveService.verifyPayment(transactionId);
+      if (paymentDetails.meta?.user_id !== userId || paymentDetails.meta?.content_id !== id) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED_PAYMENT', message: 'Ce paiement ne correspond pas a cet utilisateur/contenu.' },
+        });
+      }
+
+      const { data: foundPayment, error: paymentRecordError } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', 'flutterwave')
+        .eq('provider_payment_id', reference)
+        .maybeSingle();
+
+      if (paymentRecordError) throw paymentRecordError;
+      if (!foundPayment) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PAYMENT_NOT_FOUND', message: 'Paiement introuvable.' },
+        });
+      }
+
+      if (paymentDetails.status === 'failed') {
+        if (foundPayment.status !== 'failed') {
+          await subscriptionsService.updatePaymentStatus(foundPayment.id, 'failed', 'Payment failed');
+        }
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PAYMENT_FAILED', message: 'Le paiement a echoue.' },
+        });
+      }
+
+      if (paymentDetails.status !== 'successful') {
+        return res.status(200).json({
+          success: false,
+          status: 'pending',
+          message: 'Paiement en cours de traitement.',
+        });
+      }
+
+      paymentRecord = foundPayment;
+      providerMetadata = {
+        provider: 'flutterwave',
+        reference,
+        transaction_id: transactionId,
+      };
     }
 
     if (paymentRecord.status !== 'succeeded') {
@@ -516,11 +672,7 @@ async function verifyUnlockPayment(req, res) {
       paid_amount_cents: finalPriceCents,
       currency: content.price_currency || paymentRecord.currency || 'USD',
       discount_applied_percent: discountPercent,
-      metadata: {
-        provider: 'flutterwave',
-        reference,
-        transaction_id: transactionId,
-      },
+      metadata: providerMetadata,
     });
 
     return res.status(200).json({
@@ -686,6 +838,24 @@ async function deleteContent(req, res) {
   }
 }
 
+/**
+ * GET /contents/:id/recommendations
+ * Returns same-genre and same-author recommendations
+ */
+async function getContentRecommendations(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await contentsService.getRecommendations(id);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Get recommendations error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'RECOMMENDATIONS_FAILED', message: 'Impossible de charger les recommandations.' },
+    });
+  }
+}
+
 module.exports = {
   listContents,
   getContent,
@@ -698,4 +868,5 @@ module.exports = {
   createContent,
   updateContent,
   deleteContent,
+  getContentRecommendations,
 };

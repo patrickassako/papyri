@@ -11,6 +11,7 @@ const { resolveContentAccessContext, requireReadableContent } = require('../midd
 
 // Public routes (accessible sans auth pour landing page)
 router.get('/contents', contentsController.listContents);
+router.get('/contents/:id/recommendations', contentsController.getContentRecommendations);
 router.get('/contents/:id', contentsController.getContent);
 router.get('/categories', contentsController.listCategories);
 router.get('/categories/:slug', contentsController.getCategory);

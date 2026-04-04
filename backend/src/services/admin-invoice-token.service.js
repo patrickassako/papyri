@@ -42,6 +42,22 @@ function storeToken(buffer, filename) {
 }
 
 /**
+ * Peeks at a token — validates it exists/hasn't expired without consuming it.
+ * Use this for the HTML launcher page (first request).
+ * @param {string} token
+ * @returns {{ filename: string } | null}
+ */
+function peekToken(token) {
+  const entry = _store.get(token);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    _store.delete(token);
+    return null;
+  }
+  return { filename: entry.filename }; // metadata only, token remains valid
+}
+
+/**
  * Consumes a token and returns its entry (single-use).
  * Returns null if the token is expired or doesn't exist.
  * @param {string} token
@@ -58,4 +74,4 @@ function consumeToken(token) {
   return { buffer: entry.buffer, filename: entry.filename };
 }
 
-module.exports = { storeToken, consumeToken };
+module.exports = { storeToken, peekToken, consumeToken };

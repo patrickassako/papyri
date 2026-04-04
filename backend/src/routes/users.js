@@ -382,6 +382,164 @@ router.put('/me/password', verifyJWT, async (req, res, next) => {
 });
 
 /**
+ * GET /users/me/sessions
+ * Protected — Retourne les sessions actives de l'utilisateur
+ */
+router.get('/me/sessions', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const user = authUser?.user;
+
+    // Parse user-agent for current request
+    const ua = req.headers['user-agent'] || '';
+    const currentSession = {
+      id: 'current',
+      is_current: true,
+      last_sign_in_at: user?.last_sign_in_at || null,
+      created_at: user?.created_at || null,
+      device: parseUserAgent(ua),
+      ip: req.ip || req.headers['x-forwarded-for'] || 'Inconnue',
+    };
+
+    return res.status(200).json({ success: true, data: [currentSession] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function parseUserAgent(ua) {
+  const uaLower = ua.toLowerCase();
+  let browser = 'Navigateur inconnu';
+  let os = 'OS inconnu';
+  let deviceType = 'desktop';
+
+  // Browser
+  if (uaLower.includes('edg/')) browser = 'Microsoft Edge';
+  else if (uaLower.includes('chrome/') && !uaLower.includes('chromium')) browser = 'Google Chrome';
+  else if (uaLower.includes('firefox/')) browser = 'Firefox';
+  else if (uaLower.includes('safari/') && !uaLower.includes('chrome')) browser = 'Safari';
+  else if (uaLower.includes('opr/') || uaLower.includes('opera')) browser = 'Opera';
+
+  // OS
+  if (uaLower.includes('windows nt')) os = 'Windows';
+  else if (uaLower.includes('mac os x')) os = 'macOS';
+  else if (uaLower.includes('linux')) os = 'Linux';
+  else if (uaLower.includes('android')) os = 'Android';
+  else if (uaLower.includes('iphone') || uaLower.includes('ipad')) os = 'iOS';
+
+  // Device type
+  if (uaLower.includes('mobile') || uaLower.includes('android') || uaLower.includes('iphone')) {
+    deviceType = 'mobile';
+  } else if (uaLower.includes('ipad') || uaLower.includes('tablet')) {
+    deviceType = 'tablet';
+  }
+
+  return { browser, os, deviceType, raw: ua.slice(0, 120) };
+}
+
+/**
+ * DELETE /users/me/sessions
+ * Protected — Révoque toutes les sessions (déconnexion globale)
+ */
+router.delete('/me/sessions', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    // Supabase admin: sign out user from all sessions
+    await supabaseAdmin.auth.admin.signOut(userId, 'global').catch(() => {});
+    return res.status(200).json({ success: true, message: 'Toutes les sessions ont été révoquées.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /users/me/data-export  (RGPD — droit d'accès & portabilité)
+ * Retourne toutes les données personnelles de l'utilisateur en JSON
+ */
+router.get('/me/data-export', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [profileRes, authRes, subsRes, paymentsRes, historyRes, devicesRes] = await Promise.all([
+      supabaseAdmin.from('profiles').select('*').eq('id', userId).single(),
+      supabaseAdmin.auth.admin.getUserById(userId),
+      supabaseAdmin.from('subscriptions').select('*').eq('user_id', userId),
+      supabaseAdmin.from('payments').select('amount, currency, provider, paid_at, status').eq('user_id', userId).order('paid_at', { ascending: false }).limit(200),
+      supabaseAdmin.from('reading_history').select('content_id, progress_percent, total_time_seconds, is_completed, last_read_at, started_at').eq('user_id', userId).order('last_read_at', { ascending: false }).limit(500),
+      supabaseAdmin.from('user_devices').select('device_type, platform, created_at, last_seen_at').eq('user_id', userId),
+    ]);
+
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      profile: {
+        id: userId,
+        email: authRes.data?.user?.email,
+        full_name: profileRes.data?.full_name,
+        language: profileRes.data?.language,
+        avatar_url: profileRes.data?.avatar_url,
+        created_at: profileRes.data?.created_at,
+        role: profileRes.data?.role,
+      },
+      subscriptions: subsRes.data || [],
+      payments: paymentsRes.data || [],
+      reading_history: historyRes.data || [],
+      devices: devicesRes.data || [],
+    };
+
+    const filename = `mes-donnees-papyri-${new Date().toISOString().split('T')[0]}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.json(exportData);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /users/me  (RGPD — droit à l'effacement)
+ * Supprime le compte et toutes les données associées
+ */
+router.delete('/me', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Annuler les abonnements actifs
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ status: 'CANCELLED', cancelled_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('status', 'ACTIVE');
+
+    // Supprimer les données utilisateur (dans l'ordre des dépendances FK)
+    await Promise.allSettled([
+      supabaseAdmin.from('reading_history').delete().eq('user_id', userId),
+      supabaseAdmin.from('user_devices').delete().eq('user_id', userId),
+      supabaseAdmin.from('notification_preferences').delete().eq('user_id', userId),
+      supabaseAdmin.from('user_notifications').delete().eq('user_id', userId),
+    ]);
+
+    // Anonymiser le profil plutôt que de le supprimer (garde les FK intactes)
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        full_name: 'Compte supprimé',
+        avatar_url: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    // Supprimer le compte Supabase Auth (irrévocable)
+    const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (deleteAuthError) throw deleteAuthError;
+
+    res.status(200).json({ success: true, message: 'Compte supprimé avec succès.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /users/me/onboarding-complete
  * Protected endpoint - Mark onboarding as completed
  */
@@ -409,6 +567,66 @@ router.post('/me/onboarding-complete', verifyJWT, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+/**
+ * POST /users/me/gdpr-request
+ * RGPD — soumettre une demande (deletion | export | rectification)
+ */
+router.post('/me/gdpr-request', verifyJWT, express.json(), async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { request_type = 'deletion', user_message } = req.body;
+
+    const validTypes = ['deletion', 'export', 'rectification'];
+    if (!validTypes.includes(request_type)) {
+      return res.status(400).json({ success: false, error: 'Type de demande invalide.' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('gdpr_requests')
+      .insert({
+        user_id: userId,
+        request_type,
+        status: 'pending',
+        user_message: user_message || null,
+        deadline_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Unique constraint: request already pending
+      if (error.code === '23505') {
+        return res.status(409).json({ success: false, error: 'Une demande de ce type est déjà en cours de traitement.' });
+      }
+      throw error;
+    }
+
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /users/me/gdpr-requests
+ * RGPD — liste des demandes de l'utilisateur connecté
+ */
+router.get('/me/gdpr-requests', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { data, error } = await supabaseAdmin
+      .from('gdpr_requests')
+      .select('id, request_type, status, user_message, admin_notes, deadline_at, created_at, processed_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    next(err);
   }
 });
 

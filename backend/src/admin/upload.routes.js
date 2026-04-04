@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const r2Service = require('../services/r2.service');
 const config = require('../config/env');
+const { extractMetadata } = require('../services/metadata-extractor.service');
 
 const router = express.Router();
 
@@ -141,6 +142,119 @@ router.post('/upload-content', uploadContent.single('file'), async (req, res) =>
     });
   } catch (err) {
     console.error('Content upload error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Metadata extraction ─────────────────────────────────────────────────────
+
+const uploadExtract = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/epub+zip',
+      'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/mp3',
+    ];
+    const ext = file.originalname.split('.').pop().toLowerCase();
+    const allowedExts = ['epub', 'mp3', 'm4a'];
+    if (allowed.includes(file.mimetype) || allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format non supporté. Acceptés: EPUB, MP3, M4A'));
+    }
+  },
+});
+
+/**
+ * POST /admin/api/extract-metadata
+ * Receives an EPUB or audio file, extracts metadata, uploads cover to R2 if found.
+ * Returns JSON with all extracted fields + optional coverUrl.
+ */
+router.post('/extract-metadata', uploadExtract.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+
+    const meta = await extractMetadata(req.file.buffer, req.file.originalname, req.file.mimetype);
+    if (meta.error) return res.status(422).json({ error: meta.error });
+
+    // Upload extracted cover to R2 if found
+    let coverUrl = null;
+    if (meta.coverBuffer && r2Service.isConfigured()) {
+      const now = new Date();
+      const ext = meta.coverMime === 'image/png' ? '.png' : '.jpg';
+      const fileKey = `covers/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/extracted_${Date.now()}${ext}`;
+      await r2Service.uploadBuffer(meta.coverBuffer, fileKey, {
+        bucket: config.r2.bucketCovers,
+        contentType: meta.coverMime,
+        cacheControl: 'public, max-age=31536000',
+      });
+      coverUrl = r2Service.getPublicUrl(fileKey, config.r2.bucketCovers);
+    }
+
+    // Don't send the binary buffer to the client
+    const { coverBuffer, coverMime, ...metaClean } = meta;
+
+    res.json({ ...metaClean, coverUrl });
+  } catch (err) {
+    console.error('extract-metadata error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Logo upload (invoice settings) ────────────────────────────────────────
+
+const uploadLogo = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format non supporte. Acceptes: JPG, PNG, WebP, SVG'));
+    }
+  },
+});
+
+/**
+ * POST /admin/api/upload-logo
+ * Upload the company logo to R2 (public covers bucket).
+ * Returns a public URL stored in app_settings.invoice_logo_url.
+ */
+router.post('/upload-logo', uploadLogo.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Aucun fichier envoye' });
+    }
+
+    if (!r2Service.isConfigured()) {
+      return res.status(503).json({ error: 'R2 non configure' });
+    }
+
+    // Determine extension (SVG needs special handling)
+    const mimeToExt = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/svg+xml': '.svg',
+    };
+    const ext = mimeToExt[req.file.mimetype] || path.extname(req.file.originalname) || '.png';
+    const fileKey = `assets/logos/logo_${Date.now()}${ext}`;
+
+    // Upload to covers bucket (public)
+    await r2Service.uploadBuffer(req.file.buffer, fileKey, {
+      bucket: config.r2.bucketCovers,
+      contentType: req.file.mimetype,
+      cacheControl: 'public, max-age=31536000',
+    });
+
+    const publicUrl = r2Service.getPublicUrl(fileKey, config.r2.bucketCovers);
+    console.log(`✅ Logo uploaded: ${fileKey} → ${publicUrl}`);
+
+    res.json({ success: true, url: publicUrl, key: fileKey });
+  } catch (err) {
+    console.error('Logo upload error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

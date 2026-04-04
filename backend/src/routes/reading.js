@@ -5,6 +5,7 @@ const { verifyJWT } = require('../middleware/auth');
 const contentsService = require('../services/contents.service');
 const contentAccessService = require('../services/content-access.service');
 const r2Service = require('../services/r2.service');
+const geoService = require('../services/geo.service');
 
 function normalizeLastPosition(lastPosition) {
   if (lastPosition === undefined || lastPosition === null) return null;
@@ -488,6 +489,111 @@ router.put('/reading-history/:content_id', verifyJWT, async (req, res, next) => 
 });
 
 /**
+ * GET /reading-history/stats
+ * Protected endpoint - Reading statistics for the current user
+ */
+router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const { data: history, error } = await supabaseAdmin
+      .from('reading_history')
+      .select('content_id, status, progress_percent, total_time_seconds, last_read_at, contents(type)')
+      .eq('user_id', userId);
+
+    if (error && !isMissingReadingHistoryTable(error)) {
+      return next(error);
+    }
+
+    const rows = history || [];
+    const totalBooks = rows.length;
+    const completed = rows.filter(r => r.status === 'completed').length;
+    const inProgress = rows.filter(r => r.status === 'in_progress').length;
+    const totalSeconds = rows.reduce((sum, r) => sum + (r.total_time_seconds || 0), 0);
+    const audioSeconds = rows
+      .filter(r => r.contents?.type === 'audio')
+      .reduce((sum, r) => sum + (r.total_time_seconds || 0), 0);
+    const completionRate = totalBooks > 0 ? Math.round((completed / totalBooks) * 100) : 0;
+
+    // Streak: consecutive days with at least one read (desc order)
+    const readDates = [...new Set(
+      rows
+        .filter(r => r.last_read_at)
+        .map(r => r.last_read_at.slice(0, 10))
+    )].sort((a, b) => b.localeCompare(a));
+
+    let streakDays = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    let cursor = today;
+    for (const d of readDates) {
+      if (d === cursor) {
+        streakDays++;
+        const prev = new Date(cursor);
+        prev.setDate(prev.getDate() - 1);
+        cursor = prev.toISOString().slice(0, 10);
+      } else {
+        break;
+      }
+    }
+
+    // Daily activity for last 30 days
+    const dailyMap = {};
+    rows.forEach(r => {
+      if (!r.last_read_at) return;
+      const day = r.last_read_at.slice(0, 10);
+      dailyMap[day] = (dailyMap[day] || 0) + 1;
+    });
+
+    const activity = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      activity.push({ date: key, count: dailyMap[key] || 0 });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        total_books: totalBooks,
+        completed,
+        in_progress: inProgress,
+        total_time_seconds: totalSeconds,
+        audio_time_seconds: audioSeconds,
+        streak_days: streakDays,
+        completion_rate: completionRate,
+        daily_activity: activity,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /reading-history
+ * Protected endpoint - Clear all reading history for the current user
+ */
+router.delete('/reading-history', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const { error } = await supabaseAdmin
+      .from('reading_history')
+      .delete()
+      .eq('user_id', userId);
+
+    if (error && !isMissingReadingHistoryTable(error)) {
+      return next(error);
+    }
+
+    return res.status(200).json({ success: true, message: 'Historique effacé.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/reading/:content_id/session
  * Protected endpoint - Resolve reading session (access + signed url + progress)
  */
@@ -499,6 +605,7 @@ router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next)
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
+      zone: geoService.getGeoFromRequest(req),
     });
 
     if (!accessContext.access.can_read) {
@@ -543,6 +650,7 @@ router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next)
           author: content.author,
           content_type: content.content_type,
           format: content.format,
+          file_size_bytes: Number(content.file_size_bytes || 0),
           description: content.description,
           duration_seconds: content.duration_seconds,
           cover_url: content.cover_url,
@@ -603,6 +711,7 @@ router.post('/api/reading/:content_id/progress', verifyJWT, async (req, res, nex
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
+      zone: geoService.getGeoFromRequest(req),
     });
     if (!accessContext.access.can_read) {
       const statusCode = accessContext.access.denial?.code === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402;
@@ -640,6 +749,7 @@ router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
+      zone: geoService.getGeoFromRequest(req),
     });
 
     if (!accessContext.access.can_read) {
@@ -761,6 +871,7 @@ router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, 
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
+      zone: geoService.getGeoFromRequest(req),
     });
 
     if (!accessContext.access.can_read) {
@@ -831,6 +942,7 @@ router.get('/api/reading/:content_id/file', verifyJWT, async (req, res, next) =>
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
+      zone: geoService.getGeoFromRequest(req),
     });
 
     if (!accessContext.access.can_read) {
@@ -855,6 +967,18 @@ router.get('/api/reading/:content_id/file', verifyJWT, async (req, res, next) =>
 
     const objectData = await r2Service.getObjectBuffer(content.file_key);
     const mimeType = objectData.contentType || mimeByFormat[extension] || 'application/octet-stream';
+    const signature = objectData.buffer
+      ? objectData.buffer.subarray(0, 4).toString('hex')
+      : 'none';
+
+    console.log('[reading:file] OK', {
+      contentId: content.id,
+      fileKey: content.file_key,
+      format: content.format,
+      mimeType,
+      contentLength: objectData.contentLength || objectData.buffer?.length || 0,
+      signature,
+    });
 
     res.setHeader('Content-Type', mimeType);
     if (objectData.contentLength) {
@@ -863,6 +987,12 @@ router.get('/api/reading/:content_id/file', verifyJWT, async (req, res, next) =>
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).send(objectData.buffer);
   } catch (error) {
+    console.error('[reading:file] ERROR', {
+      contentId: req.params.content_id,
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+    });
     if (error.message === 'CONTENT_NOT_FOUND') {
       return res.status(404).json({
         success: false,
@@ -1446,6 +1576,363 @@ router.delete('/api/reading/audio/playlist/:content_id', verifyJWT, async (req, 
         items: playlist.items,
       },
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// BOOKMARKS
+// ─────────────────────────────────────────────
+
+/**
+ * GET /api/reading/:content_id/bookmarks
+ * List all bookmarks for a content (owned by user)
+ */
+router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { data, error } = await supabaseAdmin
+      .from('bookmarks')
+      .select('id, position, label, created_at')
+      .eq('user_id', userId)
+      .eq('content_id', contentId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/:content_id/bookmarks
+ * Body: { position: {percent, chapter_label, paragraph_index?}, label? }
+ */
+router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const { position, label } = req.body;
+
+    if (!position || typeof position !== 'object') {
+      return res.status(422).json({
+        success: false,
+        error: { code: 'INVALID_POSITION', message: 'La position du marque-page est requise.' },
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('bookmarks')
+      .insert({ user_id: userId, content_id: contentId, position, label: label || null })
+      .select('id, position, label, created_at')
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/:content_id/bookmarks/:bookmark_id
+ */
+router.delete('/api/reading/:content_id/bookmarks/:bookmark_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const bookmarkId = req.params.bookmark_id;
+
+    const { error } = await supabaseAdmin
+      .from('bookmarks')
+      .delete()
+      .eq('id', bookmarkId)
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// HIGHLIGHTS
+// ─────────────────────────────────────────────
+
+/**
+ * GET /api/reading/:content_id/highlights
+ */
+router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { data, error } = await supabaseAdmin
+      .from('highlights')
+      .select('id, text, cfi_range, position, color, note, created_at')
+      .eq('user_id', userId)
+      .eq('content_id', contentId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/:content_id/highlights
+ * Body: { text, cfi_range, position: {paragraphIndex, chapter_label?}, color?, note? }
+ */
+router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const { text, cfi_range, position, color, note } = req.body;
+
+    if (!text || !cfi_range || !position) {
+      return res.status(422).json({
+        success: false,
+        error: { code: 'INVALID_HIGHLIGHT', message: 'text, cfi_range et position sont requis.' },
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('highlights')
+      .insert({
+        user_id: userId,
+        content_id: contentId,
+        text,
+        cfi_range,
+        position,
+        color: color || 'yellow',
+        note: note || null,
+      })
+      .select('id, text, cfi_range, position, color, note, created_at')
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({ success: true, data });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/:content_id/highlights/:highlight_id
+ */
+router.delete('/api/reading/:content_id/highlights/:highlight_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const highlightId = req.params.highlight_id;
+
+    const { error } = await supabaseAdmin
+      .from('highlights')
+      .delete()
+      .eq('id', highlightId)
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// EBOOK READING LIST (liste de lecture)
+// ─────────────────────────────────────────────
+
+/**
+ * GET /api/reading/ebook/list
+ * Récupère la liste de lecture ebooks de l'utilisateur
+ */
+router.get('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { data, error } = await supabaseAdmin
+      .from('ebook_reading_list')
+      .select(`
+        id, added_at,
+        contents ( id, title, author, cover_url, content_type, language )
+      `)
+      .eq('user_id', userId)
+      .order('added_at', { ascending: false });
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      data: { items: (data || []).map(item => ({ ...item.contents, added_at: item.added_at })) },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/ebook/list
+ * Ajoute un ebook à la liste de lecture
+ * Body: { content_id }
+ */
+router.post('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { content_id: contentId } = req.body;
+
+    if (!contentId) {
+      return res.status(422).json({ success: false, error: { message: 'content_id requis.' } });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('ebook_reading_list')
+      .upsert({ user_id: userId, content_id: contentId }, { onConflict: 'user_id,content_id' });
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/ebook/list/:content_id
+ * Retire un ebook de la liste de lecture
+ */
+router.delete('/api/reading/ebook/list/:content_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { error } = await supabaseAdmin
+      .from('ebook_reading_list')
+      .delete()
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─────────────────────────────────────────────
+// AVIS / REVIEWS
+// ─────────────────────────────────────────────
+
+/**
+ * GET /api/reading/reviews/:content_id
+ * Avis publics d'un contenu + stats + avis de l'utilisateur courant
+ */
+router.get('/api/reading/reviews/:content_id', async (req, res, next) => {
+  try {
+    const userId = req.user?.id || null; // optional auth via middleware
+    const contentId = req.params.content_id;
+
+    const [reviewsResult, statsResult] = await Promise.allSettled([
+      supabaseAdmin
+        .from('content_reviews')
+        .select('id, rating, body, created_at, profiles ( id, full_name )')
+        .eq('content_id', contentId)
+        .eq('is_visible', true)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabaseAdmin
+        .from('content_review_stats')
+        .select('*')
+        .eq('content_id', contentId)
+        .maybeSingle(),
+    ]);
+
+    const reviews = reviewsResult.status === 'fulfilled' ? (reviewsResult.value.data || []) : [];
+    const stats   = statsResult.status === 'fulfilled' ? statsResult.value.data : null;
+
+    // Avis de l'utilisateur courant (si connecté)
+    let myReview = null;
+    if (userId) {
+      const { data } = await supabaseAdmin
+        .from('content_reviews')
+        .select('id, rating, body, created_at')
+        .eq('content_id', contentId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      myReview = data || null;
+    }
+
+    return res.status(200).json({ success: true, data: { reviews, stats, myReview } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /api/reading/reviews/:content_id
+ * Soumettre ou mettre à jour son avis (upsert)
+ * Body: { rating, body? }
+ */
+router.post('/api/reading/reviews/:content_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+    const { rating, body } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(422).json({ success: false, error: { message: 'rating entre 1 et 5 requis.' } });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('content_reviews')
+      .upsert(
+        { user_id: userId, content_id: contentId, rating: Number(rating), body: body || null, updated_at: new Date().toISOString() },
+        { onConflict: 'content_id,user_id' }
+      )
+      .select('id, rating, body, created_at')
+      .single();
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true, data: { review: data } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * DELETE /api/reading/reviews/:content_id
+ * Supprimer son avis
+ */
+router.delete('/api/reading/reviews/:content_id', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const contentId = req.params.content_id;
+
+    const { error } = await supabaseAdmin
+      .from('content_reviews')
+      .delete()
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true });
   } catch (error) {
     return next(error);
   }

@@ -6,10 +6,12 @@
 const subscriptionsService = require('../services/subscriptions.service');
 const flutterwaveService = require('../services/flutterwave.service');
 const stripeService = require('../services/stripe.service');
-const { generateInvoicePDF } = require('../services/invoice.service');
+const promoService = require('../services/promo.service');
+const { generateInvoicePDF, generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/invoice.service');
 const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
 const config = require('../config/env');
+const { sendSubscriptionConfirmationEmail, sendInvoiceEmail } = require('../services/email.service');
 
 /**
  * GET /api/subscriptions/plans
@@ -96,8 +98,8 @@ async function getAllMySubscriptions(req, res) {
 async function initiateCheckout(req, res) {
   try {
     const userId = req.user.id;
-    const { planCode, planId, usersLimit, provider = 'flutterwave' } = req.body;
-    console.log('[subscriptions.checkout] start', { userId, planCode, planId, usersLimit, provider });
+    const { planCode, planId, usersLimit, provider = 'flutterwave', promoCode } = req.body;
+    console.log('[subscriptions.checkout] start', { userId, planCode, planId, usersLimit, provider, promoCode: promoCode || null });
 
     // Validate plan
     const plan = await subscriptionsService.getPlan(planId || planCode);
@@ -109,13 +111,28 @@ async function initiateCheckout(req, res) {
       });
     }
 
-    // Check if user already has an active subscription
+    // Check if user already has an active OR pending subscription (prevent duplicate checkouts)
     const existingSubscription = await subscriptionsService.getUserSubscription(userId);
     if (existingSubscription) {
       return res.status(400).json({
         success: false,
         error: 'Active subscription exists',
         message: 'You already have an active subscription. Please cancel it first.',
+      });
+    }
+    const { data: pendingSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'INACTIVE')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (pendingSub) {
+      return res.status(400).json({
+        success: false,
+        error: 'Pending subscription exists',
+        message: 'You already have a pending payment in progress. Please complete or wait for it to expire.',
       });
     }
 
@@ -159,6 +176,27 @@ async function initiateCheckout(req, res) {
       });
     }
 
+    // Valider et appliquer le code promo si fourni
+    let promoResult = null;
+    if (promoCode) {
+      const normalizedUsersLimit = Number(usersLimit || plan.includedUsers || 1);
+      const baseAmountCents = subscriptionsService.computeSubscriptionAmountCents(plan, normalizedUsersLimit);
+      try {
+        promoResult = await promoService.validatePromoCode(promoCode, plan.slug, userId, baseAmountCents);
+        console.log('[subscriptions.checkout] promo applied:', {
+          code: promoResult.code,
+          discountCents: promoResult.discountCents,
+          finalAmountCents: promoResult.finalAmountCents,
+        });
+      } catch (promoError) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_PROMO_CODE',
+          message: promoService.getPromoErrorMessage(promoError.message),
+        });
+      }
+    }
+
     // Create subscription record (INACTIVE until webhook confirms payment)
     const subscription = await subscriptionsService.createSubscription({
       userId,
@@ -166,6 +204,7 @@ async function initiateCheckout(req, res) {
       usersLimit,
       provider: resolvedProvider,
       providerData: {},
+      overrideAmountCents: promoResult ? promoResult.finalAmountCents : null,
     });
 
     const requestOrigin = req.headers.origin;
@@ -203,8 +242,16 @@ async function initiateCheckout(req, res) {
           plan_id: plan.id,
           plan_code: plan.slug,
           users_limit: subscription.users_limit,
+          promo_code: promoResult?.code || null,
+          discount_cents: promoResult?.discountCents || 0,
         },
       });
+
+      // Enregistrer l'utilisation du code promo (non bloquant)
+      if (promoResult) {
+        promoService.recordUsage(promoResult.promoId, userId, subscription.id, promoResult.discountCents)
+          .catch((err) => console.error('[promo] recordUsage error (flutterwave):', err.message));
+      }
 
       return res.status(200).json({
         success: true,
@@ -229,6 +276,18 @@ async function initiateCheckout(req, res) {
     const amountMajor = Number(subscription.amount);
     const amountCents = Math.round(amountMajor >= 100 ? amountMajor : amountMajor * 100);
 
+    // Reuse existing Stripe customer ID if the user had a prior Stripe subscription
+    const { data: prevStripeSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('provider_customer_id')
+      .eq('user_id', userId)
+      .eq('provider', 'stripe')
+      .not('provider_customer_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const stripeCustomerId = prevStripeSub?.provider_customer_id || null;
+
     const stripeSession = await stripeService.createCheckoutSession({
       userId,
       subscriptionId: subscription.id,
@@ -239,6 +298,7 @@ async function initiateCheckout(req, res) {
       currency: subscription.currency,
       usersLimit: subscription.users_limit,
       customerEmail: payerEmail,
+      stripeCustomerId,
       paymentType: 'subscription_initial',
       redirectBaseUrl,
     });
@@ -259,8 +319,16 @@ async function initiateCheckout(req, res) {
         plan_id: plan.id,
         plan_code: plan.slug,
         users_limit: subscription.users_limit,
+        promo_code: promoResult?.code || null,
+        discount_cents: promoResult?.discountCents || 0,
       },
     });
+
+    // Enregistrer l'utilisation du code promo (non bloquant)
+    if (promoResult) {
+      promoService.recordUsage(promoResult.promoId, userId, subscription.id, promoResult.discountCents)
+        .catch((err) => console.error('[promo] recordUsage error (stripe):', err.message));
+    }
 
     return res.status(200).json({
       success: true,
@@ -301,37 +369,75 @@ async function cancelSubscription(req, res) {
     const userId = req.user.id;
     const { immediately = false } = req.body;
 
-    // Get active subscription
     const subscription = await subscriptionsService.getUserSubscription(userId);
-
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        error: 'No active subscription',
-        message: 'You do not have an active subscription',
-      });
+      return res.status(404).json({ success: false, error: 'Aucun abonnement actif.' });
     }
 
-    // Cancel subscription
-    const updatedSubscription = await subscriptionsService.cancelSubscription(
-      subscription.id,
-      immediately
-    );
+    // For Stripe subscriptions: cancel via Stripe API (at period end)
+    if (subscription.provider === 'stripe' && subscription.provider_subscription_id) {
+      if (immediately) {
+        // Immediately cancel via Stripe
+        const stripe = require('stripe')(config.stripe?.secretKey);
+        await stripe.subscriptions.cancel(subscription.provider_subscription_id);
+      } else {
+        await stripeService.cancelSubscriptionAtPeriodEnd(subscription.provider_subscription_id);
+      }
+      // DB update will come via webhook (customer.subscription.updated / deleted)
+      // But update locally too for immediate UX
+    }
+
+    const updatedSubscription = await subscriptionsService.cancelSubscription(subscription.id, immediately);
 
     res.status(200).json({
       success: true,
       message: immediately
-        ? 'Subscription cancelled immediately'
-        : 'Subscription will be cancelled at the end of the billing period',
+        ? 'Abonnement annulé immédiatement.'
+        : 'Abonnement annulé — accès conservé jusqu\'à la fin de la période.',
       subscription: updatedSubscription,
     });
   } catch (error) {
     console.error('❌ Cancel subscription error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to cancel subscription',
-      message: error.message,
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * POST /api/subscriptions/reactivate
+ * Reactivate a Stripe subscription scheduled for cancellation
+ */
+async function reactivateSubscription(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const subscription = await subscriptionsService.getUserSubscription(userId);
+    if (!subscription) {
+      return res.status(404).json({ success: false, error: 'Aucun abonnement trouvé.' });
+    }
+
+    if (subscription.provider !== 'stripe' || !subscription.provider_subscription_id) {
+      return res.status(400).json({ success: false, error: 'Réactivation disponible uniquement pour les abonnements Stripe.' });
+    }
+
+    if (!subscription.cancel_at_period_end) {
+      return res.status(400).json({ success: false, error: 'Cet abonnement n\'est pas programmé pour annulation.' });
+    }
+
+    await stripeService.reactivateSubscription(subscription.provider_subscription_id);
+
+    // Update DB
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ cancel_at_period_end: false, updated_at: new Date().toISOString() })
+      .eq('id', subscription.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Abonnement réactivé. Le renouvellement automatique est rétabli.',
     });
+  } catch (error) {
+    console.error('❌ Reactivate subscription error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 }
 
@@ -440,6 +546,39 @@ async function verifyPayment(req, res) {
         transactionId,
         reference,
       });
+
+      // Emails post-paiement (non-bloquants)
+      const { data: profile } = await supabaseAdmin
+        .from('profiles').select('email, full_name').eq('id', userId).single();
+      const { data: plan } = await supabaseAdmin
+        .from('subscription_plans').select('name').eq('id', subscription.plan_id).single();
+
+      if (profile) {
+        const emailData = {
+          planName: plan?.name || 'Abonnement',
+          amount: (paymentDetails.amount / 100).toFixed(2),
+          currency: paymentDetails.currency || 'EUR',
+          endDate: subscription.end_date,
+        };
+        sendSubscriptionConfirmationEmail(profile.email, profile.full_name, emailData)
+          .catch(e => console.error('[email] subscription confirmation:', e.message));
+
+        // Facture PDF par email
+        try {
+          const settings = await getSettings();
+          const pdfBuffer = await generateInvoicePDFBuffer({
+            payment: { ...payment, amount: paymentDetails.amount / 100, currency: paymentDetails.currency, status: 'succeeded', paid_at: new Date().toISOString() },
+            user: { email: profile.email, full_name: profile.full_name },
+            subscription,
+            settings,
+          });
+          const invoiceNumber = buildInvoiceNumber(payment.id, new Date().toISOString(), settings.invoice_prefix || 'INV');
+          sendInvoiceEmail(profile.email, profile.full_name, { invoiceNumber, pdfBuffer })
+            .catch(e => console.error('[email] invoice:', e.message));
+        } catch (e) {
+          console.error('[email] invoice generation error:', e.message);
+        }
+      }
 
       return res.status(200).json({
         success: true,
@@ -1457,8 +1596,8 @@ async function downloadInvoice(req, res) {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-    // Generate and stream the PDF with dynamic settings
-    generateInvoicePDF({ payment, user, subscription, settings, stream: res });
+    // Generate and stream the PDF with dynamic settings (async — may fetch logo)
+    await generateInvoicePDF({ payment, user, subscription, settings, stream: res });
 
   } catch (error) {
     console.error('❌ Download invoice error:', error);
@@ -1469,13 +1608,65 @@ async function downloadInvoice(req, res) {
   }
 }
 
+/**
+ * POST /api/subscriptions/promo/validate
+ * Valide un code promo et retourne le montant après remise.
+ * @protected
+ * @body { code: string, planId?: string, planCode?: string, usersLimit?: number }
+ */
+async function validatePromoCode(req, res) {
+  try {
+    const userId = req.user.id;
+    const { code, planId, planCode, usersLimit } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Code requis.' });
+    }
+
+    const plan = await subscriptionsService.getPlan(planId || planCode);
+    if (!plan) {
+      return res.status(400).json({ success: false, error: 'Plan invalide.' });
+    }
+
+    const normalizedUsersLimit = Number(usersLimit || plan.includedUsers || 1);
+    const originalAmountCents = subscriptionsService.computeSubscriptionAmountCents(plan, normalizedUsersLimit);
+
+    const result = await promoService.validatePromoCode(code, plan.slug, userId, originalAmountCents);
+
+    return res.status(200).json({
+      success: true,
+      code: result.code,
+      discountType: result.discountType,
+      discountValue: result.discountValue,
+      discountCents: result.discountCents,
+      finalAmountCents: result.finalAmountCents,
+      originalAmountCents,
+    });
+  } catch (error) {
+    const message = promoService.getPromoErrorMessage(error.message);
+    const isKnownError = [
+      'INVALID_CODE', 'CODE_NOT_YET_VALID', 'CODE_EXPIRED',
+      'CODE_MAX_USES_REACHED', 'CODE_NOT_APPLICABLE', 'CODE_ALREADY_USED',
+    ].includes(error.message);
+
+    if (isKnownError) {
+      return res.status(400).json({ success: false, error: error.message, message });
+    }
+
+    console.error('❌ Validate promo code error:', error);
+    return res.status(500).json({ success: false, error: 'VALIDATION_ERROR', message: error.message });
+  }
+}
+
 module.exports = {
   getPlans,
   getMySubscription,
   getAllMySubscriptions,
   initiateCheckout,
+  validatePromoCode,
   buyExtraSeat,
   cancelSubscription,
+  reactivateSubscription,
   getPaymentHistory,
   verifyPayment,
   verifyStripeSession,

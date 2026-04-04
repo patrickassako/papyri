@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
+import { COVER_PLACEHOLDER_PORTRAIT, COVER_PLACEHOLDER_SMALL } from '../config/constants';
 
 /**
  * ContentCardWithProgress Component
@@ -75,7 +76,7 @@ const ContentCardWithProgress = ({
         activeOpacity={0.7}
       >
         <Image
-          source={{ uri: cover_url || 'https://via.placeholder.com/200x300?text=No+Cover' }}
+          source={{ uri: cover_url || COVER_PLACEHOLDER_PORTRAIT }}
           style={styles.horizontalCover}
           resizeMode="cover"
         />
@@ -123,7 +124,7 @@ const ContentCardWithProgress = ({
         activeOpacity={0.7}
       >
         <Image
-          source={{ uri: cover_url || 'https://via.placeholder.com/120x180?text=No+Cover' }}
+          source={{ uri: cover_url || COVER_PLACEHOLDER_SMALL }}
           style={styles.verticalCover}
           resizeMode="cover"
         />
@@ -154,7 +155,7 @@ const ContentCardWithProgress = ({
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: cover_url || 'https://via.placeholder.com/120x180?text=No+Cover' }}
+        source={{ uri: cover_url || COVER_PLACEHOLDER_SMALL }}
         style={styles.listCover}
         resizeMode="cover"
       />
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: tokens.colors.neutral[200],
+    backgroundColor: tokens.colors.surfaces.light.variant,
   },
   progressText: {
     marginTop: 4,
@@ -306,7 +307,7 @@ const styles = StyleSheet.create({
   verticalProgressBar: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: tokens.colors.neutral[200],
+    backgroundColor: tokens.colors.surfaces.light.variant,
   },
   verticalProgressText: {
     marginTop: 2,
@@ -370,7 +371,7 @@ const styles = StyleSheet.create({
   listProgressBar: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: tokens.colors.neutral[200],
+    backgroundColor: tokens.colors.surfaces.light.variant,
   },
   listFooter: {
     flexDirection: 'row',

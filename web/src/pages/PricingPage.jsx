@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
   AccordionDetails,
@@ -8,11 +8,13 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Container,
   Dialog,
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   Snackbar,
   Stack,
   Table,
@@ -20,6 +22,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
   useMediaQuery,
 } from '@mui/material';
@@ -33,6 +36,7 @@ import { useNavigate } from 'react-router-dom';
 import { subscriptionsService } from '../services/subscriptions.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
+import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const primary = '#f4a825';
 const background = '#f8f7f5';
@@ -272,7 +276,36 @@ export default function PricingPage() {
   const closePaymentDialog = () => {
     if (paymentDialog.providerBusy) return; // prevent close while loading
     setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
+    setPromoCode('');
+    setPromoResult(null);
+    setPromoError('');
   };
+
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState(null);
+  const [promoError, setPromoError] = useState('');
+
+  const handleValidatePromo = useCallback(async () => {
+    const trimmed = promoCode.trim().toUpperCase();
+    if (!trimmed) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setPromoResult(null);
+    try {
+      const result = await subscriptionsService.validatePromoCode({
+        code: trimmed,
+        planId: paymentDialog.plan?.id,
+        usersLimit: paymentDialog.membersCount,
+      });
+      setPromoResult(result);
+    } catch (err) {
+      setPromoError(err.message || 'Code promo invalide.');
+    } finally {
+      setPromoLoading(false);
+    }
+  }, [promoCode, paymentDialog.plan, paymentDialog.membersCount]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [familyMembersCount, setFamilyMembersCount] = useState(3);
@@ -446,8 +479,12 @@ export default function PricingPage() {
         planId: plan.id,
         usersLimit: membersCount,
         provider,
+        promoCode: promoResult ? promoCode.trim().toUpperCase() : undefined,
       });
       setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
+      setPromoCode('');
+      setPromoResult(null);
+      setPromoError('');
       if (response.paymentLink) {
         window.location.href = response.paymentLink;
         return;
@@ -697,8 +734,8 @@ export default function PricingPage() {
 
       <Box sx={{ borderTop: '1px solid #e6e2db', py: 4.2, bgcolor: '#fff' }}>
         <Container maxWidth="lg" sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2.5 }}>
-          <Typography sx={{ fontWeight: 800 }}>Papyri</Typography>
-          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>© 2026 Papyri. developpe par Afrik NoCode</Typography>
+          <Box component="img" src={papyriLogo} alt="Papyri" sx={{ height: 38, objectFit: 'contain' }} />
+          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>© 2026 Papyri · Développé par Afrik NoCode</Typography>
         </Container>
       </Box>
 
@@ -712,9 +749,74 @@ export default function PricingPage() {
           Choisir le mode de paiement
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ color: '#8a7f74', mb: 2.5, fontSize: '0.92rem' }}>
+          <Typography sx={{ color: '#8a7f74', mb: 2, fontSize: '0.92rem' }}>
             Sélectionne comment tu souhaites régler ton abonnement{paymentDialog.plan ? ` "${paymentDialog.plan.name}"` : ''}.
           </Typography>
+
+          {/* ── Code promo ── */}
+          <Box sx={{ mb: 2.5 }}>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                size="small"
+                placeholder="Code promo (ex: BIENVENUE20)"
+                value={promoCode}
+                onChange={(e) => {
+                  setPromoCode(e.target.value.toUpperCase());
+                  setPromoResult(null);
+                  setPromoError('');
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleValidatePromo(); }}
+                disabled={Boolean(paymentDialog.providerBusy) || promoLoading}
+                sx={{ flex: 1, '& .MuiInputBase-input': { fontFamily: 'monospace', letterSpacing: 1 } }}
+                InputProps={{
+                  endAdornment: promoResult ? (
+                    <InputAdornment position="end">
+                      <Box component="span" sx={{ color: 'success.main', fontSize: '1.1rem' }}>✓</Box>
+                    </InputAdornment>
+                  ) : null,
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleValidatePromo}
+                disabled={!promoCode.trim() || Boolean(paymentDialog.providerBusy) || promoLoading}
+                sx={{ whiteSpace: 'nowrap', borderRadius: 2, textTransform: 'none', height: 40 }}
+              >
+                {promoLoading ? <CircularProgress size={16} /> : 'Appliquer'}
+              </Button>
+            </Stack>
+
+            <Collapse in={Boolean(promoResult)}>
+              {promoResult && (
+                <Box sx={{ mt: 1, p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>
+                    ✓ Code «{promoResult.code}» appliqué !
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.82rem', color: '#166534', mt: 0.3 }}>
+                    Remise : {promoResult.discountType === 'percent'
+                      ? `-${promoResult.discountValue}%`
+                      : `-${(promoResult.discountCents / 100).toFixed(2)} €`
+                    }
+                    {' '}→ Total :{' '}
+                    <strong>
+                      {(promoResult.finalAmountCents / 100).toFixed(2)} {paymentDialog.plan?.currency || 'EUR'}
+                    </strong>
+                    {' '}au lieu de {(promoResult.originalAmountCents / 100).toFixed(2)} {paymentDialog.plan?.currency || 'EUR'}
+                  </Typography>
+                </Box>
+              )}
+            </Collapse>
+
+            <Collapse in={Boolean(promoError)}>
+              {promoError && (
+                <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: 'error.main' }}>
+                  {promoError}
+                </Typography>
+              )}
+            </Collapse>
+          </Box>
+
           <Stack spacing={1.5}>
             {/* Stripe — carte bancaire */}
             <Button

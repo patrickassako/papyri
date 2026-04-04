@@ -6,6 +6,7 @@
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const config = require('../config/env');
+const { Readable } = require('stream');
 
 // Initialize S3 client with R2 endpoint
 let s3Client = null;
@@ -130,13 +131,51 @@ async function getObjectBuffer(fileKey, bucket = null) {
   });
 
   const response = await client.send(command);
-  const bytes = await response.Body.transformToByteArray();
+  const bytes = await bodyToBuffer(response.Body);
 
   return {
-    buffer: Buffer.from(bytes),
+    buffer: bytes,
     contentType: response.ContentType || null,
     contentLength: response.ContentLength || null,
   };
+}
+
+/**
+ * Normalize AWS SDK v3 Body into a Node Buffer across runtimes.
+ * Supports: Buffer, Uint8Array, Node Readable, Web ReadableStream, and transformToByteArray.
+ */
+async function bodyToBuffer(body) {
+  if (!body) return Buffer.alloc(0);
+
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  if (typeof body.transformToByteArray === 'function') {
+    const bytes = await body.transformToByteArray();
+    return Buffer.from(bytes);
+  }
+
+  // Web ReadableStream (Node 18+ fetch style)
+  if (typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const chunks = [];
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  // Node.js stream.Readable
+  if (typeof body.pipe === 'function' || body instanceof Readable) {
+    const chunks = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  throw new Error('UNSUPPORTED_R2_BODY_TYPE');
 }
 
 /**

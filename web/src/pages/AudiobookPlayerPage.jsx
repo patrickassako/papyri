@@ -1,12 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Drawer,
   IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Slider,
   Stack,
   Typography,
@@ -19,6 +26,7 @@ import {
   Expand,
   Forward,
   ListMusic,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -35,6 +43,10 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { formatDuration, chapterDuration } from '../utils/formatDuration';
+import { useReadingLock } from '../hooks/useReadingLock';
+import { SLEEP_OPTIONS } from '../context/AudioContext';
+import { readingService } from '../services/reading.service';
+import tokens from '../config/tokens';
 
 const primary = '#f2960d';
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
@@ -44,6 +56,9 @@ export default function AudiobookPlayerPage() {
   const navigate = useNavigate();
   const containerRef = useRef(null);
   const [chaptersOpen, setChaptersOpen] = useState(false);
+  const [sleepDialogOpen, setSleepDialogOpen] = useState(false);
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
 
   const {
     content,
@@ -81,13 +96,27 @@ export default function AudiobookPlayerPage() {
     setVolume,
     handleAddOrRemovePlaylist,
     movePlaylistItem,
+    sleepRemaining,
+    startSleepTimer,
+    cancelSleepTimer,
   } = useAudioPlayer();
+
+  // Lock uniquement quand la lecture est active (style Spotify)
+  const { lockState, reacquire } = useReadingLock(id, isPlaying);
 
   // Always refresh audio session/chapters for the route id
   useEffect(() => {
     if (!id) return;
     loadContent(id, true);
   }, [id, loadContent]);
+
+  // Load bookmarks
+  useEffect(() => {
+    if (!id) return;
+    readingService.getBookmarks(id).then((data) => {
+      setBookmarks(Array.isArray(data) ? data : []);
+    }).catch(() => {});
+  }, [id]);
 
   const chapterItems = useMemo(() => {
     if (Array.isArray(chapters) && chapters.length > 1) {
@@ -126,6 +155,47 @@ export default function AudiobookPlayerPage() {
       chapterId: null,
     }];
   }, [chapters, playlist, currentChapterIndex, id, duration, content?.duration_seconds]);
+
+  const currentBookmark = useMemo(() => {
+    if (!chapterItems.length) return null;
+    const activeLabel = chapterItems.find((c) => c.active)?.title || '';
+    return bookmarks.find((b) => b.label === activeLabel || b.position?.chapter_number === currentChapterIndex + 1) || null;
+  }, [bookmarks, chapterItems, currentChapterIndex]);
+
+  const toggleBookmark = useCallback(async () => {
+    if (bookmarkLoading) return;
+    setBookmarkLoading(true);
+    try {
+      if (currentBookmark) {
+        await readingService.deleteBookmark(id, currentBookmark.id);
+        setBookmarks((prev) => prev.filter((b) => b.id !== currentBookmark.id));
+      } else {
+        const activeChapter = chapterItems.find((c) => c.active);
+        const label = activeChapter?.title || `Chapitre ${currentChapterIndex + 1}`;
+        const saved = await readingService.createBookmark(id, {
+          position: { chapter_number: currentChapterIndex + 1, position_seconds: Math.floor(currentTime || 0) },
+          label,
+        });
+        setBookmarks((prev) => [...prev, saved]);
+      }
+    } catch (err) {
+      console.error('Erreur bookmark audio:', err);
+    } finally {
+      setBookmarkLoading(false);
+    }
+  }, [bookmarkLoading, currentBookmark, id, chapterItems, currentChapterIndex, currentTime]);
+
+  const handleShare = useCallback(() => {
+    const title = content?.title || 'Livre audio';
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: `J'écoute "${title}" sur Papyri`, url }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(url).then(() => {
+        // Could show a snackbar, but keep it simple
+      }).catch(() => {});
+    }
+  }, [content?.title]);
 
   const openFullscreen = async () => {
     if (!containerRef.current) return;
@@ -170,12 +240,47 @@ export default function AudiobookPlayerPage() {
     );
   }
 
+  {/* pas de blocage 'blocked' — bannière displaced dans le player */}
+
+  if (lockState === 'device_limit') {
+    return (
+      <Box sx={{ minHeight: '100vh', background: 'linear-gradient(140deg,#111827,#1f2937)', display: 'grid', placeItems: 'center', p: 4 }}>
+        <Box sx={{ textAlign: 'center', color: '#fff' }}>
+          <Box sx={{ fontSize: 64, mb: 2 }}>🔒</Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Limite d'appareils atteinte</Typography>
+          <Typography sx={{ color: '#9ca3af', mb: 3 }}>
+            Votre compte est limité à 3 appareils. Supprimez un appareil depuis votre espace personnel.
+          </Typography>
+          <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1, bgcolor: primary }}>Gérer mes appareils</Button>
+          <Button variant="outlined" sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }} onClick={() => navigate(-1)}>Retour</Button>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box ref={containerRef} sx={{ minHeight: '100vh', color: '#fff', background: 'linear-gradient(140deg,#111827,#1f2937)' }}>
+      {/* Bannière déplacement — un autre device a pris le relai */}
+      {lockState === 'displaced' && (
+        <Box sx={{ bgcolor: tokens.colors.accent, px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography sx={{ color: '#fff', fontSize: '0.85rem', flex: 1 }}>
+            📱 Un autre appareil a repris la lecture.
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={reacquire}
+            sx={{ bgcolor: tokens.colors.primary, '&:hover': { bgcolor: '#a0571a' }, textTransform: 'none', fontWeight: 700 }}
+          >
+            Reprendre ici
+          </Button>
+        </Box>
+      )}
+
       <Box sx={{ position: 'sticky', top: 0, zIndex: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', bgcolor: 'rgba(17,24,39,0.85)', backdropFilter: 'blur(10px)', px: { xs: 2, md: 4 }, py: 1.6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack direction="row" spacing={2.5} alignItems="center">
-          <Button startIcon={<ArrowLeft size={16} />} sx={{ color: '#c7ced8' }} onClick={() => navigate(`/catalogue/${id}`)}>
-            Retour bibliothèque
+          <Button startIcon={<ArrowLeft size={16} />} sx={{ color: '#c7ced8' }} onClick={() => navigate(-1)}>
+            Retour
           </Button>
           <Box sx={{ display: { xs: 'none', md: 'block' }, borderLeft: '1px solid rgba(255,255,255,0.1)', pl: 2.5 }}>
             <Typography sx={{ fontSize: '0.68rem', letterSpacing: '0.1em', color: '#9ca3af', textTransform: 'uppercase' }}>Lecture audio</Typography>
@@ -190,8 +295,15 @@ export default function AudiobookPlayerPage() {
             sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
           />
           <IconButton sx={{ color: '#fff' }} onClick={openFullscreen}><Expand size={17} /></IconButton>
-          <IconButton sx={{ color: '#fff' }}><Share2 size={17} /></IconButton>
-          <IconButton sx={{ color: '#fff' }}><Bookmark size={17} /></IconButton>
+          <IconButton sx={{ color: '#fff' }} onClick={handleShare} title="Partager"><Share2 size={17} /></IconButton>
+          <IconButton
+            sx={{ color: currentBookmark ? tokens.colors.secondary : '#fff' }}
+            onClick={toggleBookmark}
+            disabled={bookmarkLoading}
+            title={currentBookmark ? 'Retirer le marque-page' : 'Ajouter un marque-page'}
+          >
+            <Bookmark size={17} fill={currentBookmark ? tokens.colors.secondary : 'none'} />
+          </IconButton>
         </Stack>
       </Box>
 
@@ -233,7 +345,7 @@ export default function AudiobookPlayerPage() {
               <IconButton sx={{ color: '#9ca3af' }} onClick={() => shiftTime(30)}><Forward /></IconButton>
               <IconButton sx={{ color: '#9ca3af' }} onClick={goNextChapter}><SkipForward /></IconButton>
             </Stack>
-            <Box sx={{ mt: 1.6, display: 'flex', justifyContent: 'center' }}>
+            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1.6 }}>
               <Button
                 variant="outlined"
                 startIcon={<ListMusic size={16} />}
@@ -247,7 +359,25 @@ export default function AudiobookPlayerPage() {
               >
                 Chapitres
               </Button>
-            </Box>
+              <Button
+                variant="outlined"
+                startIcon={<Moon size={16} />}
+                onClick={() => sleepRemaining !== null ? cancelSleepTimer() : setSleepDialogOpen(true)}
+                sx={{
+                  color: sleepRemaining !== null ? '#111827' : '#fff',
+                  bgcolor: sleepRemaining !== null ? primary : 'transparent',
+                  borderColor: sleepRemaining !== null ? primary : 'rgba(255,255,255,0.28)',
+                  textTransform: 'none',
+                  '&:hover': { borderColor: primary, bgcolor: sleepRemaining !== null ? '#db860b' : 'rgba(242,150,13,0.08)' },
+                }}
+              >
+                {sleepRemaining === null
+                  ? 'Sleep timer'
+                  : sleepRemaining === -1
+                    ? 'Fin chapitre ✕'
+                    : `${Math.floor(sleepRemaining / 60)}:${String(sleepRemaining % 60).padStart(2, '0')} ✕`}
+              </Button>
+            </Stack>
 
             <Box sx={{ mt: 3, p: 2, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)' }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
@@ -366,6 +496,39 @@ export default function AudiobookPlayerPage() {
           </Box>
         </Box>
       </Box>
+      {/* Sleep Timer Dialog */}
+      <Dialog
+        open={sleepDialogOpen}
+        onClose={() => setSleepDialogOpen(false)}
+        PaperProps={{ sx: { bgcolor: '#0f172a', color: '#fff', borderRadius: 3, minWidth: 300 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, pb: 0.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Moon size={20} color={primary} />
+            <span>Sleep timer</span>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important', pb: 1 }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', mb: 1.5 }}>
+            La lecture s'arrête automatiquement après :
+          </Typography>
+          <List disablePadding>
+            {SLEEP_OPTIONS.map((opt) => (
+              <ListItemButton
+                key={opt.label}
+                onClick={() => { startSleepTimer(opt.minutes); setSleepDialogOpen(false); }}
+                sx={{ borderRadius: 2, '&:hover': { bgcolor: 'rgba(242,150,13,0.12)' } }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  <Timer size={16} color={primary} />
+                </ListItemIcon>
+                <ListItemText primary={opt.label} primaryTypographyProps={{ sx: { color: '#fff', fontWeight: 600 } }} />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+      </Dialog>
+
       <Drawer
         anchor="bottom"
         open={chaptersOpen}

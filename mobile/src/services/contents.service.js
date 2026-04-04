@@ -46,6 +46,12 @@ export const contentsService = {
     return response.data;
   },
 
+  async getRecommendations(id) {
+    const response = await apiClient.get(`/api/contents/${id}/recommendations`);
+    const data = response.data?.data || {};
+    return { sameGenre: data.sameGenre || [], youllLike: data.youllLike || [] };
+  },
+
   /**
    * Récupère les droits d'accès sur un contenu pour l'utilisateur courant
    * @param {string} id - ID du contenu

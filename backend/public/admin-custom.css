@@ -1,0 +1,27 @@
+/* ── Papyri Back-Office — Custom Layout Overrides ── */
+
+/* Force the content area to fill available width */
+[data-css="app-content"] {
+  width: 0;
+  min-width: 0;
+  flex: 1 1 0% !important;
+}
+
+/* Ensure the app-content children (our Dashboard pages) fill full width */
+[data-css="app-content"] > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Remove any Section max-width */
+[data-css="app-content"] section,
+[data-css="app-content"] [class*="Section"] {
+  max-width: none !important;
+}
+
+/* Ensure the outer app wrapper fills the viewport */
+[data-css="app"] {
+  width: 100vw;
+  min-height: 100vh;
+}
