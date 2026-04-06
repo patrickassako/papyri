@@ -4,8 +4,8 @@ import {
   Avatar,
   Box,
   Button,
-  CircularProgress,
   Chip,
+  CircularProgress,
   Container,
   Dialog,
   DialogContent,
@@ -712,14 +712,28 @@ export default function ContentDetailPage() {
                       {' '}({quotaRemaining} restant{quotaRemaining > 1 ? 's' : ''})
                     </Typography>
                   ) : null}
-                  {isPaidBook && basePriceCents > 0 ? (() => {
+                  {/* Prix avec réduction abonné — uniquement si le livre est payant ET que la réduction est effective */}
+                  {isPaidBook && basePriceCents > 0 && discountPercent > 0 && reducedPriceCents < basePriceCents ? (() => {
                     const pBase = formatCurrencyBoth(basePriceCents);
                     const pReduced = formatCurrencyBoth(reducedPriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
-                        Prix public: <strong>{pBase.local}</strong>{pBase.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pBase.eur})</span> : ''}
-                        {' '}• Prix abonné: <strong>{pReduced.local}</strong>{pReduced.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pReduced.eur})</span> : ''}
-                        {' '}({discountPercent}% de réduction)
+                      <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
+                        <Typography sx={{ color: '#5f513d', fontSize: '0.9rem' }}>
+                          {isSubscriptionBook ? 'Ou achetez-le' : 'Prix abonné'}:{' '}
+                          <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
+                          {'  '}
+                          <strong style={{ color: '#b5651d' }}>{pReduced.local}</strong>
+                          {pReduced.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.82em' }}> (≈ {pReduced.eur})</span> : ''}
+                          {'  '}
+                          <Chip label={`-${discountPercent}%`} size="small" sx={{ bgcolor: '#b5651d', color: '#fff', fontWeight: 700, fontSize: '0.72rem', height: 20, ml: 0.5 }} />
+                        </Typography>
+                      </Box>
+                    );
+                  })() : isPaidBook && basePriceCents > 0 && discountPercent === 0 ? (() => {
+                    const pBase = formatCurrencyBoth(basePriceCents);
+                    return (
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem' }}>
+                        Prix: <strong>{pBase.local}</strong>{pBase.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pBase.eur})</span> : ''}
                       </Typography>
                     );
                   })() : null}

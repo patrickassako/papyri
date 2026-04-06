@@ -51,13 +51,23 @@ async function checkGeoRestriction(contentId, geo) {
   }
 }
 
-function computePricing(content, hasActiveSubscription) {
+/**
+ * @param {object} content
+ * @param {boolean} hasActiveSubscription
+ * @param {number} [planDiscountPercent] — discount du plan abonnement (fallback si le contenu n'en a pas)
+ */
+function computePricing(content, hasActiveSubscription, planDiscountPercent = 0) {
   const basePriceCents = Number(content?.price_cents || 0);
-  const discountPercent = hasActiveSubscription ? Number(content?.subscription_discount_percent || 0) : 0;
+
+  // Priorité : discount propre au contenu → discount du plan → 0
+  const contentDiscount = Number(content?.subscription_discount_percent || 0);
+  const effectiveDiscount = contentDiscount > 0 ? contentDiscount : Number(planDiscountPercent || 0);
+  const discountPercent = hasActiveSubscription ? effectiveDiscount : 0;
+
   const finalPriceCents = Math.max(0, Math.round(basePriceCents * (100 - discountPercent) / 100));
 
   return {
-    currency: content?.price_currency || 'USD',
+    currency: content?.price_currency || 'EUR',
     base_price_cents: basePriceCents,
     discount_percent: discountPercent,
     final_price_cents: finalPriceCents,
@@ -150,8 +160,14 @@ async function resolveContentAccess({ userId, contentId, zone = null }) {
   const membership = await subscriptionsService.getActiveSubscriptionForMember(userId);
   const hasActiveSubscription = Boolean(membership?.subscription);
 
+  // Récupère le discount payant du plan abonnement comme fallback
+  const planSnapshot = membership?.subscription?.plan_snapshot || {};
+  const planDiscountPercent = Number(
+    planSnapshot.discountPercentPaidBooks || planSnapshot.paid_books_discount_percent || 0
+  );
+
   const accessType = content.access_type || 'subscription';
-  const pricing = computePricing(content, hasActiveSubscription);
+  const pricing = computePricing(content, hasActiveSubscription, planDiscountPercent);
   const isPurchasable = Boolean(content.is_purchasable) || ['paid', 'subscription_or_paid'].includes(accessType);
 
   const canReadByUnlock = Boolean(unlock);
