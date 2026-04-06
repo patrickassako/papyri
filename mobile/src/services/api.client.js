@@ -111,14 +111,14 @@ const fetchWithAuth = async (url, options = {}) => {
       const refreshData = await refreshResponse.json();
       const session = refreshData?.data?.session || refreshData?.session;
       const accessToken = session?.access_token;
-      const refreshToken = session?.refresh_token;
+      const nextRefreshToken = session?.refresh_token;
 
-      if (!accessToken || !refreshToken) {
+      if (!accessToken || !nextRefreshToken) {
         await clearTokens();
         throw new Error('Invalid refresh response');
       }
 
-      await setTokens(accessToken, refreshToken);
+      await setTokens(accessToken, nextRefreshToken);
 
       // Réessayer la requête originale
       return fetchWithAuth(url, { ...options, _retry: true });

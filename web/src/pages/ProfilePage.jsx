@@ -18,7 +18,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  InputAdornment,
   Switch,
   Divider,
 } from '@mui/material';
@@ -27,7 +26,6 @@ import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import PhotoCameraOutlined from '@mui/icons-material/PhotoCameraOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
-import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
 import CreditCardOutlined from '@mui/icons-material/CreditCardOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
@@ -38,9 +36,6 @@ import RecordVoiceOverOutlined from '@mui/icons-material/RecordVoiceOverOutlined
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import ShareOutlined from '@mui/icons-material/ShareOutlined';
 import LocalLibraryOutlined from '@mui/icons-material/LocalLibraryOutlined';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
@@ -150,18 +145,6 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState('');
   const [notifPrefs, setNotifPrefs] = useState(null);
   const [notifSaving, setNotifSaving] = useState(false);
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: '',
-  });
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    next: false,
-    confirm: false,
-  });
 
   useEffect(() => {
     async function loadProfile() {
@@ -350,53 +333,6 @@ export default function ProfilePage() {
       setNotifPrefs((prev) => ({ ...(prev || {}), [key]: !value }));
     } finally {
       setNotifSaving(false);
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (!passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password) {
-      setErrorMsg('Tous les champs de mot de passe sont obligatoires.');
-      return;
-    }
-    if (passwordForm.new_password.length < 8) {
-      setErrorMsg('Le nouveau mot de passe doit contenir au moins 8 caractères.');
-      return;
-    }
-    if (passwordForm.new_password !== passwordForm.confirm_password) {
-      setErrorMsg('Les mots de passe ne correspondent pas.');
-      return;
-    }
-
-    setPasswordSaving(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-    try {
-      const response = await authFetch(`${API_URL}/users/me/password`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          current_password: passwordForm.current_password,
-          new_password: passwordForm.new_password,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload = await safeJson(response);
-        throw new Error(payload?.error?.message || 'Erreur lors du changement de mot de passe.');
-      }
-
-      setPasswordDialogOpen(false);
-      setPasswordForm({
-        current_password: '',
-        new_password: '',
-        confirm_password: '',
-      });
-      setShowPasswords({ current: false, next: false, confirm: false });
-      setSuccessMsg('Mot de passe mis à jour avec succès.');
-    } catch (err) {
-      setErrorMsg(err.message || 'Erreur lors du changement de mot de passe.');
-    } finally {
-      setPasswordSaving(false);
     }
   };
 
@@ -859,26 +795,6 @@ export default function ProfilePage() {
                 S&eacute;curit&eacute; &amp; Compte
               </Typography>
 
-              {/* Change password */}
-              <Box
-                onClick={() => setPasswordDialogOpen(true)}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  px: 3,
-                  py: 1.5,
-                  cursor: 'pointer',
-                  transition: 'background 0.15s',
-                  '&:hover': { bgcolor: `${surfaceVariant}80` },
-                }}
-              >
-                <LockResetOutlined sx={{ fontSize: 20, color: textMuted, mr: 1.5 }} />
-                <Typography sx={{ flex: 1, fontSize: '0.875rem', color: textMain }}>
-                  Changer mot de passe
-                </Typography>
-                <ChevronRightOutlined sx={{ fontSize: 20, color: textMuted }} />
-              </Box>
-
               {/* Manage subscription */}
               <Box
                 onClick={() => navigate('/subscription')}
@@ -1313,72 +1229,6 @@ export default function ProfilePage() {
           </Button>
           <Button onClick={handleSaveAvatar} disabled={saving} variant="contained" sx={{ textTransform: 'none', bgcolor: primary, '&:hover': { bgcolor: primaryDark } }}>
             {saving ? 'Enregistrement...' : 'Enregistrer'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Changer le mot de passe</DialogTitle>
-        <DialogContent>
-          <TextField
-            margin="dense"
-            label="Mot de passe actuel"
-            type={showPasswords.current ? 'text' : 'password'}
-            fullWidth
-            value={passwordForm.current_password}
-            onChange={(e) => setPasswordForm((prev) => ({ ...prev, current_password: e.target.value }))}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton aria-label="Afficher ou masquer le mot de passe actuel" onClick={() => setShowPasswords((prev) => ({ ...prev, current: !prev.current }))} edge="end">
-                    {showPasswords.current ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <TextField
-            margin="dense"
-            label="Nouveau mot de passe"
-            type={showPasswords.next ? 'text' : 'password'}
-            fullWidth
-            value={passwordForm.new_password}
-            onChange={(e) => setPasswordForm((prev) => ({ ...prev, new_password: e.target.value }))}
-            helperText="Minimum 8 caractères"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton aria-label="Afficher ou masquer le nouveau mot de passe" onClick={() => setShowPasswords((prev) => ({ ...prev, next: !prev.next }))} edge="end">
-                    {showPasswords.next ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <TextField
-            margin="dense"
-            label="Confirmer le nouveau mot de passe"
-            type={showPasswords.confirm ? 'text' : 'password'}
-            fullWidth
-            value={passwordForm.confirm_password}
-            onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirm_password: e.target.value }))}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton aria-label="Afficher ou masquer la confirmation du mot de passe" onClick={() => setShowPasswords((prev) => ({ ...prev, confirm: !prev.confirm }))} edge="end">
-                    {showPasswords.confirm ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPasswordDialogOpen(false)} sx={{ textTransform: 'none' }}>
-            Annuler
-          </Button>
-          <Button onClick={handleChangePassword} disabled={passwordSaving} variant="contained" sx={{ textTransform: 'none', bgcolor: primary, '&:hover': { bgcolor: primaryDark } }}>
-            {passwordSaving ? 'Mise à jour...' : 'Mettre à jour'}
           </Button>
         </DialogActions>
       </Dialog>

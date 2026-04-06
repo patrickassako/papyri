@@ -17,13 +17,45 @@ const { sendSubscriptionConfirmationEmail, sendInvoiceEmail } = require('../serv
  * GET /api/subscriptions/plans
  * Get available subscription plans (public)
  */
+// Currency info per geo zone
+const ZONE_CURRENCY = {
+  africa:        { code: 'XAF', symbol: 'XAF', rateToCent: 6.5596, label: 'Franc CFA' }, // 1 EUR = 655.96 XAF → 1 EUR-cent ≈ 6.5596 XAF
+  europe:        { code: 'EUR', symbol: '€',   rateToCent: 1,      label: 'Euro' },
+  north_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' }, // approx
+  south_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
+  asia:          { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
+  middle_east:   { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
+  oceania:       { code: 'AUD', symbol: 'A$',  rateToCent: 1.62,   label: 'Dollar AUS' },
+};
+
 async function getPlans(req, res) {
   try {
     const plans = await subscriptionsService.getPlans();
 
+    // Detect user zone for currency localisation (best-effort)
+    let geo = { zone: null, country: null };
+    try {
+      const { getGeoFromRequest } = require('../services/geo.service');
+      geo = getGeoFromRequest(req);
+    } catch (_) {}
+
+    const zoneCurrency = (geo.zone && ZONE_CURRENCY[geo.zone]) ? ZONE_CURRENCY[geo.zone] : null;
+
+    const enrichedPlans = plans.map((plan) => {
+      if (!zoneCurrency || zoneCurrency.code === (plan.currency || 'EUR')) return plan;
+      return {
+        ...plan,
+        localizedCurrency: zoneCurrency.code,
+        localizedSymbol: zoneCurrency.symbol,
+        localizedPriceCents: Math.round((plan.basePriceCents || 0) * zoneCurrency.rateToCent),
+        localizedExtraUserPriceCents: Math.round((plan.extraUserPriceCents || 0) * zoneCurrency.rateToCent),
+      };
+    });
+
     res.status(200).json({
       success: true,
-      plans,
+      plans: enrichedPlans,
+      geo: { zone: geo.zone, country: geo.country, currency: zoneCurrency?.code || null },
     });
   } catch (error) {
     console.error('❌ Get plans error:', error);

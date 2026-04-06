@@ -261,6 +261,7 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState({ labels: ['L', 'M', 'M', 'J', 'V', 'S', 'D'], values: [0, 0, 0, 0, 0, 0, 0] });
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [subscriptionLabel, setSubscriptionLabel] = useState('Aucun abonnement actif');
+  const [usage, setUsage] = useState(null);
   const nouveautesRef = useRef(null);
   const populairesRef = useRef(null);
   const recommendationsRef = useRef(null);
@@ -273,13 +274,14 @@ export default function DashboardPage() {
         const userData = await authService.getUser();
         if (alive && userData) setUser(userData);
 
-        const [historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes] = await Promise.allSettled([
+        const [historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes, usageRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/reading-history/continue?limit=3`),
           authFetch(`${API_URL}/api/subscriptions/me`),
           contentsService.getContents({ sort: 'newest', limit: 12 }),
           contentsService.getContents({ sort: 'popular', limit: 12 }),
           contentsService.getRecommendations(12),
+          authFetch(`${API_URL}/api/subscriptions/usage/me`),
         ]);
 
         let historyItems = [];
@@ -322,6 +324,13 @@ export default function DashboardPage() {
         } else if (alive) {
           setHasActiveSubscription(false);
           setSubscriptionLabel('Aucun abonnement actif');
+        }
+
+        if (usageRes.status === 'fulfilled' && usageRes.value.ok) {
+          const payload = await safeJson(usageRes.value);
+          if (alive && payload?.data?.usage) {
+            setUsage(payload.data.usage);
+          }
         }
 
         if (alive) {
@@ -429,7 +438,7 @@ export default function DashboardPage() {
           </Box>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2.5, mb: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2.5, mb: usage ? 2 : 3 }}>
           {statCards.map((stat) => {
             const StatIcon = stat.icon;
             return (
@@ -449,6 +458,59 @@ export default function DashboardPage() {
             );
           })}
         </Box>
+
+        {usage && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2.5, mb: 3 }}>
+            {[
+              {
+                label: 'Crédits livres texte',
+                icon: MenuBookOutlined,
+                color: tokens.colors.primary,
+                used: Number(usage.text_unlocked_count || 0),
+                quota: Number(usage.text_quota || 0),
+              },
+              {
+                label: 'Crédits livres audio',
+                icon: HeadphonesOutlined,
+                color: tokens.colors.secondary,
+                used: Number(usage.audio_unlocked_count || 0),
+                quota: Number(usage.audio_quota || 0),
+              },
+            ].map((credit) => {
+              const CreditIcon = credit.icon;
+              const remaining = Math.max(0, credit.quota - credit.used);
+              const pct = credit.quota > 0 ? Math.min(100, Math.round((credit.used / credit.quota) * 100)) : 0;
+              return (
+                <Paper key={credit.label} elevation={0} sx={{ p: 2.5, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                    <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: `${credit.color}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CreditIcon sx={{ color: credit.color, fontSize: 20 }} />
+                    </Box>
+                    <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {credit.label}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, mb: 1 }}>
+                    <Typography variant="h4" sx={{ fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
+                      {remaining}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#9c7e49' }}>/ {credit.quota} restants</Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={pct}
+                    sx={{
+                      height: 6,
+                      borderRadius: 3,
+                      bgcolor: `${credit.color}1A`,
+                      '& .MuiLinearProgress-bar': { borderRadius: 3, bgcolor: credit.color },
+                    }}
+                  />
+                </Paper>
+              );
+            })}
+          </Box>
+        )}
 
         <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2.5 }}>
           <Box sx={{ minWidth: 0 }}>

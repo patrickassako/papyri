@@ -74,7 +74,7 @@ function planFeatures(plan) {
 
   if ((plan.includedUsers || 1) > 1) {
     features.unshift(`${plan.includedUsers} utilisateurs inclus`);
-    features.push(`+ ${formatMoney(plan.extraUserPriceCents || 0, plan.currency)} par utilisateur supplémentaire`);
+    features.push(`+ ${formatMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency)} par utilisateur supplémentaire`);
   }
 
   if (plan.bonusQuantityPerUser > 0) {
@@ -159,9 +159,14 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
   const isFamily = getPlanFamilyKey(plan) === 'family';
 
   const minMembers = Number(plan.includedUsers || 1);
-  const extraUserPriceCents = Number(plan.extraUserPriceCents || 0);
+  const isLocalized = Boolean(plan.localizedCurrency && plan.localizedCurrency !== plan.currency);
+  const displayCurrency = plan.localizedCurrency || plan.currency || 'EUR';
+  const basePriceCents = isLocalized ? Number(plan.localizedPriceCents || 0) : Number(plan.basePriceCents || 0);
+  const extraUserPriceCents = isLocalized
+    ? Number(plan.localizedExtraUserPriceCents || 0)
+    : Number(plan.extraUserPriceCents || 0);
   const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
-  const computedPriceCents = Number(plan.basePriceCents || 0) + extraMembers * extraUserPriceCents;
+  const computedPriceCents = basePriceCents + extraMembers * extraUserPriceCents;
 
   return (
     <Box
@@ -211,20 +216,26 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
       <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
         <Typography sx={{ fontSize: '2.4rem', lineHeight: 1, fontWeight: 900 }}>
-          {formatMoney(computedPriceCents, plan.currency)}
+          {formatMoney(computedPriceCents, displayCurrency)}
         </Typography>
         <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>/ {plan.durationDays} jours</Typography>
       </Box>
 
+      {isLocalized && (
+        <Typography sx={{ mt: 0.4, fontSize: '0.78rem', color: '#9a8c7f' }}>
+          ≈ {formatMoney(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
+        </Typography>
+      )}
+
       {isFamily && extraMembers > 0 && (
         <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d' }}>
-          {formatMoney(plan.basePriceCents, plan.currency)} base · +{formatMoney(extraUserPriceCents, plan.currency)} × {extraMembers}
+          {formatMoney(basePriceCents, displayCurrency)} base · +{formatMoney(extraUserPriceCents, displayCurrency)} × {extraMembers}
         </Typography>
       )}
 
       {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d' }}>
-          Soit {formatMoney(plan.monthlyEquivalentCents, plan.currency)} / mois
+          Soit {formatMoney(isLocalized ? Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))) : plan.monthlyEquivalentCents, displayCurrency)} / mois
         </Typography>
       ) : null}
 
@@ -264,6 +275,7 @@ export default function PricingPage() {
   const isMobile = useMediaQuery('(max-width:900px)');
 
   const [plans, setPlans] = useState([]);
+  const [geoInfo, setGeoInfo] = useState(null);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingCheckoutSlug, setLoadingCheckoutSlug] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
@@ -315,8 +327,9 @@ export default function PricingPage() {
       setLoadingPlans(true);
       setError('');
       try {
-        const data = await subscriptionsService.getPlans();
+        const { plans: data, geo } = await subscriptionsService.getPlansWithGeo();
         setPlans(data || []);
+        setGeoInfo(geo || null);
       } catch (err) {
         console.error('Pricing plans error:', err);
         setError('Impossible de charger les forfaits pour le moment.');
@@ -507,7 +520,7 @@ export default function PricingPage() {
   const comparisonRows = [
     {
       key: 'Prix',
-      value: (p) => formatMoney(p.basePriceCents, p.currency),
+      value: (p) => formatMoney(p.localizedPriceCents ?? p.basePriceCents, p.localizedCurrency ?? p.currency),
     },
     {
       key: 'Utilisateurs inclus',
@@ -548,6 +561,12 @@ export default function PricingPage() {
           <Typography sx={{ mt: 2, color: '#6d665d' }}>
             Forfaits connectés aux données backend en temps réel.
           </Typography>
+
+          {geoInfo?.currency && geoInfo.currency !== 'EUR' && (
+            <Typography sx={{ mt: 1, fontSize: '0.82rem', color: '#9a7f4d', bgcolor: 'rgba(244,168,37,0.08)', display: 'inline-block', px: 2, py: 0.5, borderRadius: '20px', border: '1px solid rgba(244,168,37,0.2)' }}>
+              Prix affichés en {geoInfo.currency} · basé sur votre localisation ({geoInfo.country || geoInfo.zone})
+            </Typography>
+          )}
 
           <Box sx={{ mt: 4.5, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5 }}>
             {!isMobile && <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>Facturation mensuelle</Typography>}

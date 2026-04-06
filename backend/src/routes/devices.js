@@ -4,7 +4,7 @@ const { supabaseAdmin } = require('../config/database');
 const { verifyJWT } = require('../middleware/auth');
 
 const MAX_DEVICES = 3;
-const LOCK_TTL_MS = 120_000; // 2 minutes — lock is stale if no heartbeat
+const LOCK_TTL_MS = 30_000; // 30s — lock is stale if no heartbeat
 
 function isLockFresh(heartbeatAt) {
   if (!heartbeatAt) return false;
@@ -115,7 +115,7 @@ router.get('/', verifyJWT, async (req, res, next) => {
 
 /**
  * DELETE /devices/:deviceId
- * Remove a registered device (also releases its reading lock).
+ * Remove a registered device (also releases its reading lock and revokes all sessions).
  */
 router.delete('/:deviceId', verifyJWT, async (req, res, next) => {
   try {
@@ -135,7 +135,16 @@ router.delete('/:deviceId', verifyJWT, async (req, res, next) => {
       .eq('user_id', userId)
       .eq('device_id', deviceId);
 
-    return res.status(200).json({ success: true, message: 'Appareil supprimé.' });
+    // Revoke ALL sessions for this user so the removed device is truly disconnected.
+    // This also signs out the current device — the frontend will redirect to login.
+    try {
+      await supabaseAdmin.auth.admin.signOut(userId);
+    } catch (signOutErr) {
+      console.error('[devices] signOut after delete error:', signOutErr.message);
+      // Non-blocking — device is already removed from DB
+    }
+
+    return res.status(200).json({ success: true, message: 'Appareil supprimé.', sessions_revoked: true });
   } catch (error) {
     next(error);
   }

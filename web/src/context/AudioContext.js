@@ -605,7 +605,7 @@ export function AudioProvider({ children }) {
       <audio
         ref={audioRef}
         src={signedUrl || undefined}
-        preload="metadata"
+        preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={handlePlay}
         onPause={handlePause}

@@ -80,5 +80,15 @@ module.exports = {
   },
 
   // Frontend URL (for emails)
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000'
+  // IMPORTANT: set FRONTEND_URL=https://www.papyrihub.net in production env vars
+  frontendUrl: (() => {
+    const url = process.env.FRONTEND_URL || '';
+    if (!url || url.includes('localhost') || url.includes('127.0.0.1')) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[config] FRONTEND_URL not set or is localhost in production — emails will have broken links');
+      }
+      return url || 'http://localhost:3000';
+    }
+    return url;
+  })(),
 };

@@ -115,9 +115,10 @@ export default function MyListPage() {
         const u = await authService.getUser();
         if (alive) setUser(u);
 
-        const [historyRes, playlistRes] = await Promise.allSettled([
+        const [historyRes, playlistRes, ebookListRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/api/reading/audio/playlist`),
+          authFetch(`${API_URL}/api/reading/ebook/list`),
         ]);
 
         let historyItems = [];
@@ -127,10 +128,14 @@ export default function MyListPage() {
           if (alive) setHistory(historyItems);
         }
 
+        const combinedFavorites = [];
+        const seenIds = new Set();
+
+        // Audio playlist
         if (playlistRes.status === 'fulfilled' && playlistRes.value.ok) {
           const payload = await safeJson(playlistRes.value);
           const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
-          const mapped = items
+          items
             .map((row) => ({
               id: row?.content?.id || row?.content_id,
               content_id: row?.content_id || row?.content?.id,
@@ -141,11 +146,46 @@ export default function MyListPage() {
               format: row?.content?.format || null,
               progress_percent: Number(row?.progress?.progress_percent || 0),
             }))
-            .filter((item) => item.id);
-          if (alive) setFavorites(mapped);
-        } else if (alive) {
-          // Fallback if playlist table is not available: use recent reading items.
-          setFavorites(historyItems.slice(0, 12));
+            .filter((item) => item.id)
+            .forEach((item) => {
+              if (!seenIds.has(item.id)) {
+                seenIds.add(item.id);
+                combinedFavorites.push(item);
+              }
+            });
+        }
+
+        // Ebook reading list
+        if (ebookListRes.status === 'fulfilled' && ebookListRes.value.ok) {
+          const payload = await safeJson(ebookListRes.value);
+          const items = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+          items
+            .map((item) => ({
+              id: item.id,
+              content_id: item.id,
+              title: item.title || 'Titre inconnu',
+              author: item.author || 'Auteur inconnu',
+              cover_url: item.cover_url || null,
+              content_type: item.content_type || null,
+              format: null,
+              progress_percent: 0,
+            }))
+            .filter((item) => item.id)
+            .forEach((item) => {
+              if (!seenIds.has(item.id)) {
+                seenIds.add(item.id);
+                combinedFavorites.push(item);
+              }
+            });
+        }
+
+        if (alive) {
+          if (combinedFavorites.length > 0) {
+            setFavorites(combinedFavorites);
+          } else {
+            // Fallback: use recent reading items
+            setFavorites(historyItems.slice(0, 12));
+          }
         }
 
         const catalogRes = await authFetch(`${API_URL}/api/contents?page=1&limit=12&sort=newest`);

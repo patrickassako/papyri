@@ -9,6 +9,14 @@ export const subscriptionsService = {
     return response.data?.plans || [];
   },
 
+  async getPlansWithGeo() {
+    const response = await apiClient.get('/api/subscriptions/plans');
+    return {
+      plans: response.data?.plans || [],
+      geo: response.data?.geo || null,
+    };
+  },
+
   /**
    * Initiate checkout — supports 'flutterwave' (mobile money) and 'stripe' (card)
    * Returns { paymentLink, reference, provider, subscription }

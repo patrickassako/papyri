@@ -536,17 +536,19 @@ function getCtaButton(text, url) {
 }
 
 function getWelcomeEmailTemplate(full_name) {
+  const subscriptionUrl = `${config.frontendUrl}/subscription`;
+  const hasPublicUrl = config.frontendUrl && !config.frontendUrl.includes('localhost') && !config.frontendUrl.includes('127.0.0.1');
   return getEmailLayout('Bienvenue', `
     <h2 style="margin: 0 0 24px 0; color: #2E4057; font-size: 24px; font-weight: 600;">
       Bienvenue ${full_name} !
     </h2>
     <p style="margin: 0 0 16px 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
-      Nous sommes ravis de vous accueillir dans notre bibliothèque numérique. Vous avez désormais accès à des milliers de livres et livres audio en français.
+      Nous sommes ravis de vous accueillir sur Papyri, votre bibliothèque numérique. Vous avez désormais accès à des milliers de livres et livres audio en français.
     </p>
     <p style="margin: 0 0 24px 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
       Pour profiter pleinement de notre catalogue, pensez à souscrire un abonnement.
     </p>
-    ${getCtaButton('Choisir mon abonnement', `${config.frontendUrl}/subscription`)}
+    ${hasPublicUrl ? getCtaButton('Choisir mon abonnement', subscriptionUrl) : ''}
     <p style="margin: 24px 0 0 0; color: #757575; font-size: 14px; line-height: 1.6;">
       Vous avez des questions ? Contactez-nous à <a href="mailto:${config.email.senderEmail}" style="color: #B5651D; text-decoration: none;">${config.email.senderEmail}</a>
     </p>

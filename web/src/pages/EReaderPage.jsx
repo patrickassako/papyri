@@ -2345,31 +2345,59 @@ export default function EReaderPage() {
         transition: 'background-color 0.3s ease',
       }}>
         <Box sx={{ maxWidth: 980, mx: 'auto' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <IconButton
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
               onClick={goPrev}
-              title="Précédent"
-              size="small"
               disabled={!canNavigateEpub}
-              sx={{ flexShrink: 0, color: t.text }}
+              startIcon={<ChevronLeft size={16} />}
+              size="small"
+              sx={{
+                flexShrink: 0,
+                color: t.text,
+                bgcolor: t.hoverBg,
+                borderRadius: '10px',
+                px: 1.5,
+                py: 0.6,
+                minWidth: 110,
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                textTransform: 'none',
+                border: `1px solid ${t.border}`,
+                '&:hover': { bgcolor: `${primary}18`, borderColor: primary, color: primary },
+                '&.Mui-disabled': { opacity: 0.35 },
+              }}
             >
-              <ChevronLeft size={20} />
-            </IconButton>
+              Précédent
+            </Button>
             <Slider
               value={sliderValue}
               onChange={handleProgressChange}
               onChangeCommitted={handleProgressCommit}
               sx={{ color: primary, mx: 1 }}
             />
-            <IconButton
+            <Button
               onClick={goNext}
-              title="Suivant"
-              size="small"
               disabled={!canNavigateEpub}
-              sx={{ flexShrink: 0, color: t.text }}
+              endIcon={<ChevronRight size={16} />}
+              size="small"
+              sx={{
+                flexShrink: 0,
+                color: t.text,
+                bgcolor: t.hoverBg,
+                borderRadius: '10px',
+                px: 1.5,
+                py: 0.6,
+                minWidth: 110,
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                textTransform: 'none',
+                border: `1px solid ${t.border}`,
+                '&:hover': { bgcolor: `${primary}18`, borderColor: primary, color: primary },
+                '&.Mui-disabled': { opacity: 0.35 },
+              }}
             >
-              <ChevronRight size={20} />
-            </IconButton>
+              Suivant
+            </Button>
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: -0.5 }}>
             {ttsSupported ? (

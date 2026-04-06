@@ -88,9 +88,17 @@ export default function DevicesPage() {
     setRemovingId(removeTarget.deviceId);
     setRemoveTarget(null);
     try {
-      await deviceService.remove(removeTarget.deviceId);
-      setSnack({ open: true, message: 'Appareil supprimé.', severity: 'success' });
-      await loadData();
+      const result = await deviceService.remove(removeTarget.deviceId);
+      if (result?.sessions_revoked) {
+        setSnack({ open: true, message: 'Appareil supprimé. Toutes les sessions ont été révoquées. Reconnexion requise…', severity: 'success' });
+        setTimeout(async () => {
+          await authService.logout();
+          navigate('/login');
+        }, 2500);
+      } else {
+        setSnack({ open: true, message: 'Appareil supprimé.', severity: 'success' });
+        await loadData();
+      }
     } catch {
       setSnack({ open: true, message: 'Erreur lors de la suppression.', severity: 'error' });
     } finally {

@@ -166,6 +166,13 @@ async function startServer() {
   app.listen(PORT, async () => {
     logger.info(`✅ Server running on port ${PORT}`);
     logger.info(`📍 Health check: http://localhost:${PORT}/health`);
+
+    // Startup config checks
+    if (!process.env.BREVO_API_KEY) {
+      logger.warn('⚠️  BREVO_API_KEY non configuré — les emails (bienvenue, factures, etc.) ne seront PAS envoyés.');
+    } else {
+      logger.info(`✅ Email provider: ${process.env.EMAIL_PROVIDER || 'brevo'} (sender: ${process.env.BREVO_SENDER_EMAIL || 'non défini'})`);
+    }
     if (app.locals.adminEnabled) {
       logger.info(`📍 Back-office: http://localhost:${PORT}/admin`);
     }

@@ -16,15 +16,30 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bibliothequenumerique.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
-      "package": "com.bibliothequenumerique.app"
+      "package": "com.bibliothequenumerique.app",
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "plugins": [
       "expo-font",
-      ["expo-av", { "microphonePermission": false }]
-    ]
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b7917bb2-9bcf-44db-bd5d-8d805ec9085e"
+      }
+    }
   }
 }
