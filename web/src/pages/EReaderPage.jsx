@@ -16,7 +16,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Moon, Search, Sun, Maximize, Minimize, Bookmark, BookmarkCheck, Highlighter, MessageSquare, Trash2, X, Play, Pause, Square, AudioLines } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Moon, Search, Sun, Maximize, Minimize, Bookmark, BookmarkCheck, Highlighter, MessageSquare, Trash2, X, Play, Pause, Square } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
@@ -1548,6 +1548,17 @@ export default function EReaderPage() {
     r.themes.override('background', theme.epubPageBg);
   }, [isEpub, nightMode]);
 
+  // Quand le sommaire ou les annotations changent, forcer epub.js à recalculer sa largeur
+  useEffect(() => {
+    if (!isEpub || !renditionRef.current) return;
+    const timer = setTimeout(() => {
+      try {
+        renditionRef.current.resize();
+      } catch (_) {}
+    }, 80); // laisser le temps à la transition CSS de finir
+    return () => clearTimeout(timer);
+  }, [isEpub, showToc, showSearch, showAnnotations]);
+
   useEffect(() => {
     if (!isEpub || !renditionRef.current) return;
     const timer = setTimeout(() => {
@@ -1890,7 +1901,7 @@ export default function EReaderPage() {
         bgcolor: t.frameBg,
         color: t.text,
         display: 'grid',
-        gridTemplateRows: lockState === 'displaced' ? '40px 52px 1fr auto' : '52px 1fr auto',
+        gridTemplateRows: lockState === 'displaced' ? '40px auto 1fr 44px' : 'auto 1fr 44px',
         overflow: 'hidden',
         transition: 'background-color 0.3s ease',
       }}
@@ -1912,70 +1923,118 @@ export default function EReaderPage() {
         </Box>
       )}
 
+      {/* ── Toolbar principale ── */}
       <Box sx={{
         borderBottom: `1px solid ${t.border}`,
         bgcolor: t.headerBg,
-        px: { xs: 1.5, md: 2 },
+        px: { xs: 1, md: 1.5 },
         display: { xs: mobileChromeVisible ? 'flex' : 'none', md: 'flex' },
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 1,
-        minHeight: 52,
+        flexDirection: 'column',
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-          <IconButton onClick={() => navigate(-1)} size="small" sx={{ color: t.text }}><ArrowLeft size={17} /></IconButton>
-          <Box component="img" src={papyriMark} alt="Papyri" sx={{ height: 22, width: 22, objectFit: 'contain', borderRadius: '4px', opacity: 0.75, flexShrink: 0 }} />
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: { xs: 130, md: 320 }, color: t.text, opacity: 0.85 }}>
+        {/* Ligne 1 : titre + tous les contrôles */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, minHeight: 48, flexWrap: 'nowrap' }}>
+          {/* Gauche : retour + logo + titre */}
+          <IconButton onClick={() => navigate(-1)} size="small" sx={{ color: t.text, flexShrink: 0 }}><ArrowLeft size={17} /></IconButton>
+          <Box component="img" src={papyriMark} alt="Papyri" sx={{ height: 20, width: 20, objectFit: 'contain', borderRadius: '3px', opacity: 0.7, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: { xs: 90, md: 220 }, color: t.text, opacity: 0.8, flexShrink: 1 }}>
             {content.title}
           </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-          {ttsSupported && (
-            <>
-              <IconButton
-                onClick={pauseResumeTts}
-                title={ttsSpeaking ? (ttsPaused ? 'Reprendre la lecture vocale' : 'Pause lecture vocale') : 'Lire à voix haute'}
-                sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText }}
-              >
-                {ttsSpeaking && !ttsPaused ? <Pause size={18} /> : <Play size={18} />}
-              </IconButton>
-              <IconButton
-                onClick={stopTts}
-                title="Arrêter la lecture vocale"
-                disabled={!ttsSpeaking && !ttsPaused}
-                sx={{ color: t.text }}
-              >
-                <Square size={16} />
-              </IconButton>
-            </>
-          )}
-          <IconButton onClick={() => setNightMode((v) => !v)} title={nightMode ? 'Mode jour' : 'Mode nuit'} sx={{ color: t.text }}>
-            {nightMode ? <Sun size={17} /> : <Moon size={17} />}
-          </IconButton>
-          {isEpub ? (
-            <Box sx={{ width: 90, px: 0.8, display: { xs: 'none', md: 'block' } }}>
-              <Slider min={80} max={140} step={10} value={fontPercent} onChange={(_, v) => setFontPercent(Number(v))} sx={{ color: primary }} />
-            </Box>
-          ) : null}
-          {isEpub && (
-            <IconButton onClick={toggleBookmark} title={currentBookmark ? 'Retirer le marque-page' : 'Ajouter un marque-page'} sx={{ color: currentBookmark ? tokens.colors.secondary : t.text }}>
-              {currentBookmark ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+
+          {/* Séparateur + info page — centre */}
+          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, overflow: 'hidden', px: 1 }}>
+            {(isEpub && epubPageInfo.total > 0) ? (
+              <Typography sx={{ fontSize: '0.72rem', color: t.subtleText, whiteSpace: 'nowrap' }}>
+                {epubPageInfo.page} / {epubPageInfo.total}
+              </Typography>
+            ) : content.format === 'pdf' ? (
+              <Typography sx={{ fontSize: '0.72rem', color: t.subtleText, whiteSpace: 'nowrap' }}>
+                {currentPage} / {totalPages}
+              </Typography>
+            ) : (
+              <Typography sx={{ fontSize: '0.72rem', color: t.subtleText, whiteSpace: 'nowrap' }}>
+                {Math.round(progress)} %
+              </Typography>
+            )}
+            {isEpub && activeTocIndex >= 0 && tocItems[activeTocIndex] && (
+              <Typography sx={{ fontSize: '0.7rem', color: t.subtleText, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: { xs: 80, md: 260 }, display: { xs: 'none', sm: 'block' } }}>
+                {tocItems[activeTocIndex].title || tocItems[activeTocIndex].label}
+              </Typography>
+            )}
+            {(ttsSpeaking || ttsPaused) && ttsNowText && (
+              <Typography sx={{ fontSize: '0.68rem', color: primary, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180, display: { xs: 'none', md: 'block' } }}>
+                ♪ {ttsNowText}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Droite : tous les contrôles */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2, flexShrink: 0 }}>
+            {/* TTS */}
+            {ttsSupported && (
+              <>
+                <IconButton size="small" onClick={pauseResumeTts} title={ttsSpeaking && !ttsPaused ? 'Pause vocale' : 'Lire à voix haute'} sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText }}>
+                  {ttsSpeaking && !ttsPaused ? <Pause size={16} /> : <Play size={16} />}
+                </IconButton>
+                <IconButton size="small" onClick={stopTts} disabled={!ttsSpeaking && !ttsPaused} title="Arrêter la lecture vocale" sx={{ color: t.subtleText }}>
+                  <Square size={14} />
+                </IconButton>
+                {/* Vitesse TTS — compact */}
+                <Button size="small" variant="text" onClick={() => {
+                  const steps = [0.75, 1, 1.25, 1.5];
+                  const idx = steps.findIndex((v) => Math.abs(v - ttsRate) < 0.01);
+                  setTtsRate(steps[(idx + 1) % steps.length]);
+                }} sx={{ minWidth: 0, px: 0.6, py: 0, color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText, fontSize: '0.68rem', textTransform: 'none', display: { xs: 'none', md: 'flex' } }}>
+                  x{ttsRate.toFixed(2).replace(/\.00$/, '')}
+                </Button>
+                {/* Voix TTS — masquée sur mobile */}
+                <TextField select size="small" value={ttsVoiceUri} onChange={(e) => setTtsVoiceUri(e.target.value)}
+                  sx={{ display: { xs: 'none', lg: 'flex' }, width: 130, '& .MuiInputBase-input': { py: 0.15, fontSize: '0.65rem', color: t.subtleText }, '& .MuiOutlinedInput-notchedOutline': { borderColor: t.border } }}>
+                  {ttsVoices.map((v) => <MenuItem key={v.voiceURI} value={v.voiceURI} sx={{ fontSize: '0.72rem' }}>{v.name}</MenuItem>)}
+                </TextField>
+              </>
+            )}
+
+            {/* Taille police epub */}
+            {isEpub && (
+              <Box sx={{ width: 72, px: 0.5, display: { xs: 'none', md: 'block' } }}>
+                <Slider min={80} max={140} step={10} value={fontPercent} onChange={(_, v) => setFontPercent(Number(v))} sx={{ color: primary, '& .MuiSlider-thumb': { width: 12, height: 12 } }} />
+              </Box>
+            )}
+
+            {/* Mode jour/nuit */}
+            <IconButton size="small" onClick={() => setNightMode((v) => !v)} title={nightMode ? 'Mode jour' : 'Mode nuit'} sx={{ color: t.text }}>
+              {nightMode ? <Sun size={16} /> : <Moon size={16} />}
             </IconButton>
-          )}
-          {isEpub && (
-            <IconButton onClick={() => { setShowSearch((v) => !v); setSearchResults([]); setSearchQuery(''); }} title="Recherche dans le livre" sx={{ color: showSearch ? primary : t.text }}>
-              <Search size={18} />
+
+            {/* Marque-page */}
+            {isEpub && (
+              <IconButton size="small" onClick={toggleBookmark} title={currentBookmark ? 'Retirer marque-page' : 'Marque-page'} sx={{ color: currentBookmark ? primary : t.subtleText }}>
+                {currentBookmark ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+              </IconButton>
+            )}
+
+            {/* Recherche */}
+            {isEpub && (
+              <IconButton size="small" onClick={() => { setShowSearch((v) => !v); setSearchResults([]); setSearchQuery(''); }} title="Recherche" sx={{ color: showSearch ? primary : t.subtleText }}>
+                <Search size={16} />
+              </IconButton>
+            )}
+
+            {/* Annotations */}
+            <IconButton size="small" onClick={() => setShowAnnotations((v) => !v)} title="Annotations" sx={{ color: showAnnotations ? primary : t.subtleText }}>
+              <Highlighter size={16} />
             </IconButton>
-          )}
-          <IconButton onClick={() => setShowAnnotations((v) => !v)} title="Annotations" sx={{ color: showAnnotations ? primary : t.text }}>
-            <Highlighter size={18} />
-          </IconButton>
-          <IconButton onClick={() => setShowToc((v) => !v)} title="Table des matières" sx={{ color: t.text }}>
-            <Menu size={18} />
-          </IconButton>
-          <IconButton onClick={toggleFullscreen} title="Plein écran" sx={{ color: t.text }}>
-            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-          </IconButton>
+
+            {/* Sommaire */}
+            <IconButton size="small" onClick={() => setShowToc((v) => !v)} title={showToc ? 'Masquer le sommaire' : 'Sommaire'} sx={{ color: (showToc || showSearch) ? primary : t.text }}>
+              <Menu size={16} />
+            </IconButton>
+
+            {/* Plein écran */}
+            <IconButton size="small" onClick={toggleFullscreen} title="Plein écran" sx={{ color: t.text }}>
+              {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+            </IconButton>
+          </Box>
         </Box>
       </Box>
 
@@ -2337,158 +2396,73 @@ export default function EReaderPage() {
         )}
       </Box>
 
+      {/* ── Barre de navigation — navigation seule ── */}
       <Box sx={{
         borderTop: `1px solid ${t.border}`,
         bgcolor: t.footerBg,
         px: { xs: 1, md: 3 },
-        py: 0.5,
-        minHeight: 56,
-        display: { xs: mobileChromeVisible ? 'block' : 'none', md: 'block' },
+        display: { xs: mobileChromeVisible ? 'flex' : 'none', md: 'flex' },
+        alignItems: 'center',
+        gap: 1,
+        height: 44,
       }}>
-        <Box sx={{ maxWidth: 980, mx: 'auto' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button
-              onClick={goPrev}
-              disabled={!canNavigateEpub}
-              startIcon={<ChevronLeft size={15} />}
-              size="small"
-              sx={{
-                flexShrink: 0,
-                color: t.text,
-                bgcolor: 'rgba(255,255,255,0.08)',
-                borderRadius: '6px',
-                px: 1.4,
-                py: 0.5,
-                minWidth: 100,
-                fontWeight: 600,
-                fontSize: '0.78rem',
-                textTransform: 'none',
-                border: `1px solid rgba(255,255,255,0.12)`,
-                '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
-                '&.Mui-disabled': { opacity: 0.28, color: t.text },
-              }}
-            >
-              Précédent
-            </Button>
-            <Slider
-              value={sliderValue}
-              onChange={handleProgressChange}
-              onChangeCommitted={handleProgressCommit}
-              sx={{
-                color: primary,
-                mx: 1.5,
-                '& .MuiSlider-thumb': { width: 14, height: 14 },
-                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.15)' },
-              }}
-            />
-            <Button
-              onClick={goNext}
-              disabled={!canNavigateEpub}
-              endIcon={<ChevronRight size={15} />}
-              size="small"
-              sx={{
-                flexShrink: 0,
-                color: t.text,
-                bgcolor: 'rgba(255,255,255,0.08)',
-                borderRadius: '6px',
-                px: 1.4,
-                py: 0.5,
-                minWidth: 100,
-                fontWeight: 600,
-                fontSize: '0.78rem',
-                textTransform: 'none',
-                border: `1px solid rgba(255,255,255,0.12)`,
-                '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
-                '&.Mui-disabled': { opacity: 0.28, color: t.text },
-              }}
-            >
-              Suivant
-            </Button>
-          </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: -0.5 }}>
-            {ttsSupported ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, minWidth: 0 }}>
-                <AudioLines size={14} />
-                <Button
-                  size="small"
-                  variant="text"
-                  onClick={() => {
-                    const steps = [0.75, 1, 1.25, 1.5];
-                    const idx = steps.findIndex((v) => Math.abs(v - ttsRate) < 0.01);
-                    const next = steps[(idx + 1) % steps.length];
-                    setTtsRate(next);
-                  }}
-                  sx={{ minWidth: 0, px: 0.7, py: 0.1, color: t.text, fontSize: '0.72rem', textTransform: 'none' }}
-                >
-                  x{ttsRate.toFixed(2).replace(/\.00$/, '')}
-                </Button>
-                <TextField
-                  select
-                  size="small"
-                  value={ttsVoiceUri}
-                  onChange={(e) => setTtsVoiceUri(e.target.value)}
-                  sx={{
-                    minWidth: { xs: 110, md: 170 },
-                    maxWidth: 210,
-                    '& .MuiInputBase-input': { py: 0.2, fontSize: '0.7rem' },
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: t.border },
-                  }}
-                >
-                  {ttsVoices.map((voice) => (
-                    <MenuItem key={voice.voiceURI} value={voice.voiceURI} sx={{ fontSize: '0.75rem' }}>
-                      {voice.name} ({voice.lang})
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Button
-                  size="small"
-                  variant={ttsInlineHighlightEnabled ? 'contained' : 'outlined'}
-                  onClick={() => setTtsInlineHighlightEnabled((v) => !v)}
-                  sx={{
-                    minWidth: 0,
-                    px: 0.8,
-                    py: 0.15,
-                    fontSize: '0.68rem',
-                    textTransform: 'none',
-                    color: ttsInlineHighlightEnabled ? '#fff' : t.text,
-                    bgcolor: ttsInlineHighlightEnabled ? primary : 'transparent',
-                    borderColor: t.border,
-                    '&:hover': { bgcolor: ttsInlineHighlightEnabled ? primary : t.hoverBg, borderColor: t.border },
-                  }}
-                >
-                  HL TTS
-                </Button>
-              </Box>
-            ) : null}
-            {!ttsSupported ? (
-              <Typography sx={{ fontSize: '0.72rem', opacity: 0.5 }}>
-                Synthèse vocale indisponible sur ce navigateur.
-              </Typography>
-            ) : null}
-            {isEpub && epubPageInfo.total > 0 ? (
-              <Typography sx={{ fontSize: '0.72rem', opacity: 0.55 }}>
-                Page {epubPageInfo.page} / {epubPageInfo.total}
-              </Typography>
-            ) : null}
-            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, opacity: 0.6 }}>
-              {content.format === 'pdf'
-                ? `Page ${currentPage} / ${totalPages}`
-                : `${Math.round(progress)} %`}
-            </Typography>
-            {isEpub && activeTocIndex >= 0 && tocItems[activeTocIndex] ? (
-              <Typography sx={{ fontSize: '0.72rem', opacity: 0.45, maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {tocItems[activeTocIndex].title || tocItems[activeTocIndex].label}
-              </Typography>
-            ) : null}
-          </Box>
-          {(ttsSpeaking || ttsPaused) && ttsNowText ? (
-            <Box sx={{ mt: 0.2, textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '0.68rem', opacity: 0.5, maxWidth: 760, mx: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {ttsPaused ? 'Pause TTS: ' : 'Lecture TTS: '}{ttsNowText}
-              </Typography>
-            </Box>
-          ) : null}
-        </Box>
+        <Button
+          onClick={goPrev}
+          disabled={!canNavigateEpub}
+          startIcon={<ChevronLeft size={14} />}
+          size="small"
+          sx={{
+            flexShrink: 0,
+            color: t.text,
+            bgcolor: 'rgba(255,255,255,0.07)',
+            borderRadius: '6px',
+            px: 1.2,
+            py: 0.4,
+            minWidth: 90,
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            textTransform: 'none',
+            border: '1px solid rgba(255,255,255,0.1)',
+            '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+            '&.Mui-disabled': { opacity: 0.25, color: t.text },
+          }}
+        >
+          Précédent
+        </Button>
+        <Slider
+          value={sliderValue}
+          onChange={handleProgressChange}
+          onChangeCommitted={handleProgressCommit}
+          sx={{
+            color: primary,
+            mx: 0.5,
+            '& .MuiSlider-thumb': { width: 12, height: 12 },
+            '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.12)' },
+          }}
+        />
+        <Button
+          onClick={goNext}
+          disabled={!canNavigateEpub}
+          endIcon={<ChevronRight size={14} />}
+          size="small"
+          sx={{
+            flexShrink: 0,
+            color: t.text,
+            bgcolor: 'rgba(255,255,255,0.07)',
+            borderRadius: '6px',
+            px: 1.2,
+            py: 0.4,
+            minWidth: 90,
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            textTransform: 'none',
+            border: '1px solid rgba(255,255,255,0.1)',
+            '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+            '&.Mui-disabled': { opacity: 0.25, color: t.text },
+          }}
+        >
+          Suivant
+        </Button>
       </Box>
     </Box>
   );
