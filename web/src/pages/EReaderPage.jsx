@@ -136,6 +136,7 @@ export default function EReaderPage() {
   const prefetchSourceHrefRef = useRef('');
   const mobileHideTimerRef = useRef(0);
   const isMobileViewportRef = useRef(false);
+  const isCoarsePointerRef = useRef(false);
   const epubContainerRef = useRef(null);
   const bookRef = useRef(null);
   const renditionRef = useRef(null);
@@ -1005,10 +1006,13 @@ export default function EReaderPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const mq = window.matchMedia('(max-width: 900px)');
+    const mq = window.matchMedia('(max-width: 899px)');
+    const coarseMq = window.matchMedia('(pointer: coarse)');
     const apply = () => {
       isMobileViewportRef.current = mq.matches;
-      if (!mq.matches) {
+      isCoarsePointerRef.current = coarseMq.matches;
+      const shouldAutoHideChrome = mq.matches && coarseMq.matches;
+      if (!shouldAutoHideChrome) {
         setMobileChromeVisible(true);
         if (mobileHideTimerRef.current) clearTimeout(mobileHideTimerRef.current);
       } else {
@@ -1017,8 +1021,10 @@ export default function EReaderPage() {
     };
     apply();
     mq.addEventListener?.('change', apply);
+    coarseMq.addEventListener?.('change', apply);
     return () => {
       mq.removeEventListener?.('change', apply);
+      coarseMq.removeEventListener?.('change', apply);
       if (mobileHideTimerRef.current) clearTimeout(mobileHideTimerRef.current);
     };
   }, [bumpMobileChromeVisibility]);
@@ -1967,8 +1973,13 @@ export default function EReaderPage() {
         borderBottom: `1px solid ${t.border}`,
         bgcolor: t.headerBg,
         px: { xs: 1, md: 1.5 },
-        display: { xs: mobileChromeVisible ? 'flex' : 'none', md: 'flex' },
+        display: 'flex',
+        visibility: { xs: mobileChromeVisible ? 'visible' : 'hidden', md: 'visible' },
+        opacity: { xs: mobileChromeVisible ? 1 : 0, md: 1 },
+        pointerEvents: { xs: mobileChromeVisible ? 'auto' : 'none', md: 'auto' },
         flexDirection: 'column',
+        minHeight: 48,
+        transition: 'opacity 0.18s ease, visibility 0.18s ease',
       }}>
         {/* Ligne 1 : titre + tous les contrôles */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, minHeight: 48, flexWrap: 'nowrap' }}>
@@ -2446,10 +2457,14 @@ export default function EReaderPage() {
         borderTop: `1px solid ${t.border}`,
         bgcolor: t.footerBg,
         px: { xs: 1, md: 3 },
-        display: { xs: mobileChromeVisible ? 'flex' : 'none', md: 'flex' },
+        display: 'flex',
+        visibility: { xs: mobileChromeVisible ? 'visible' : 'hidden', md: 'visible' },
+        opacity: { xs: mobileChromeVisible ? 1 : 0, md: 1 },
+        pointerEvents: { xs: mobileChromeVisible ? 'auto' : 'none', md: 'auto' },
         alignItems: 'center',
         gap: 1,
         height: 44,
+        transition: 'opacity 0.18s ease, visibility 0.18s ease',
       }}>
         <Button
           onClick={goPrev}
