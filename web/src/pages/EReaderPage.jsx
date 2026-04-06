@@ -1221,12 +1221,22 @@ export default function EReaderPage() {
       }
       // ──────────────────────────────────────────────────────────────────────
 
-      const rendition = book.renderTo(epubContainerRef.current, {
-        width: '100%',
-        height: '100%',
+      // Lire les dimensions RÉELLES du container avant renderTo.
+      // Sur mobile, '100%' peut ne pas être résolu correctement par epub.js.
+      const epubEl = epubContainerRef.current;
+      const initW = epubEl.clientWidth > 0 ? epubEl.clientWidth : window.innerWidth;
+      const initH = epubEl.clientHeight > 0 ? epubEl.clientHeight : window.innerHeight;
+
+      const rendition = book.renderTo(epubEl, {
+        width: initW,
+        height: initH,
         spread: 'none',
         flow: 'paginated',
-        allowScriptedContent: false,
+        // allowScriptedContent: true est nécessaire pour éviter que le browser
+        // sandbox l'iframe epub.js avec "allow-same-origin" seulement, ce qui
+        // bloque les scripts EPUB et empêche le re-rendu après resize sur mobile.
+        // Le contenu vient de notre R2 (source de confiance) — pas de risque XSS.
+        allowScriptedContent: true,
       });
 
       try {
@@ -1487,10 +1497,15 @@ export default function EReaderPage() {
 
         // Force a resize after display to ensure epub.js reads correct container dimensions.
         // This fixes cases where renderTo was called before CSS layout was fully computed.
+        // On mobile the initial dimensions may differ from what was passed to renderTo.
         try {
           const el = epubContainerRef.current;
           if (el && el.clientWidth > 0 && el.clientHeight > 0) {
-            rendition.resize(el.clientWidth, el.clientHeight);
+            const afterW = el.clientWidth;
+            const afterH = el.clientHeight;
+            if (afterW !== initW || afterH !== initH) {
+              rendition.resize(afterW, afterH);
+            }
           }
         } catch (_) {}
 
