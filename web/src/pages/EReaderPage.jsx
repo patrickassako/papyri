@@ -2077,7 +2077,11 @@ export default function EReaderPage() {
         </Box>
       </Box>
 
-      <Box sx={{ minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: `${(showToc || showSearch) ? '280px ' : ''}1fr${showAnnotations ? ' 300px' : ''}` } }}>
+      {/* gridAutoRows:'1fr' est CRITIQUE: sans ça, la rangée implicite prend la hauteur
+          naturelle du readerFrame (0, car ses enfants sont en position:absolute).
+          Sur mobile sans TOC, le row s'effondre à 0 → epub container 0px → écran noir.
+          Sur desktop avec TOC, le TOC a du contenu qui forçait la hauteur par accident. */}
+      <Box sx={{ minHeight: 0, display: 'grid', gridAutoRows: '1fr', gridTemplateColumns: { xs: '1fr', lg: `${(showToc || showSearch) ? '280px ' : ''}1fr${showAnnotations ? ' 300px' : ''}` } }}>
         {showSearch ? (
           <Box sx={{ borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column' }}>
             <Box sx={{ px: 1.5, py: 1.2, borderBottom: `1px solid ${t.border}` }}>
