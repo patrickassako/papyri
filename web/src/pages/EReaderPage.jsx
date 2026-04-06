@@ -29,28 +29,37 @@ import * as pdfjsLib from 'pdfjs-dist';
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-const primary = '#3211d4';
+const primary = '#f4a825'; // Amber Papyri — visible sur fond sombre
 
 const lightTheme = {
-  bg: '#faf8f3',
-  text: '#433422',
-  headerBg: 'rgba(250,248,243,0.95)',
-  sidebarBg: '#f6f2e8',
-  border: 'rgba(0,0,0,0.08)',
-  readerBg: '#fff',
-  hoverBg: 'rgba(0,0,0,0.04)',
-  subtleText: 'rgba(67,52,34,0.55)',
+  frameBg:   '#3e3e3e',               // fond sombre autour de la page (style visionneuse)
+  headerBg:  '#2b2b2b',               // barre du haut
+  footerBg:  '#2b2b2b',               // barre du bas
+  sidebarBg: '#303030',               // panneau latéral
+  border:    'rgba(255,255,255,0.09)',
+  text:      '#e2e2e2',               // texte chrome (icônes, labels)
+  subtleText:'rgba(226,226,226,0.45)',
+  hoverBg:   'rgba(255,255,255,0.1)',
+  readerBg:  '#ffffff',               // page de lecture — blanche
+  pageShadow:'0 8px 48px rgba(0,0,0,0.55)',
+  // conservé pour epub body override
+  epubPageBg:'#ffffff',
+  epubText:  '#2a2a2a',
 };
 
 const darkTheme = {
-  bg: '#1a1d23',
-  text: '#d8dee6',
-  headerBg: 'rgba(26,29,35,0.95)',
-  sidebarBg: '#21252d',
-  border: 'rgba(255,255,255,0.08)',
-  readerBg: '#1c2128',
-  hoverBg: 'rgba(255,255,255,0.06)',
-  subtleText: 'rgba(216,222,230,0.5)',
+  frameBg:   '#1a1a1a',
+  headerBg:  '#111111',
+  footerBg:  '#111111',
+  sidebarBg: '#1c1c1c',
+  border:    'rgba(255,255,255,0.07)',
+  text:      '#c8d0d8',
+  subtleText:'rgba(200,208,216,0.4)',
+  hoverBg:   'rgba(255,255,255,0.07)',
+  readerBg:  '#1c2128',               // page de lecture — sombre
+  pageShadow:'0 8px 48px rgba(0,0,0,0.75)',
+  epubPageBg:'#1c2128',
+  epubText:  '#e7edf2',
 };
 
 const highlightColors = {
@@ -1534,13 +1543,9 @@ export default function EReaderPage() {
   useEffect(() => {
     if (!isEpub || !renditionRef.current) return;
     const r = renditionRef.current;
-    if (nightMode) {
-      r.themes.override('color', '#e7edf2');
-      r.themes.override('background', '#1c2128');
-    } else {
-      r.themes.override('color', '#333');
-      r.themes.override('background', '#fff');
-    }
+    const theme = nightMode ? darkTheme : lightTheme;
+    r.themes.override('color', theme.epubText);
+    r.themes.override('background', theme.epubPageBg);
   }, [isEpub, nightMode]);
 
   useEffect(() => {
@@ -1882,12 +1887,12 @@ export default function EReaderPage() {
       onTouchStartCapture={bumpMobileChromeVisibility}
       sx={{
         height: '100vh',
-        bgcolor: t.bg,
+        bgcolor: t.frameBg,
         color: t.text,
         display: 'grid',
-        gridTemplateRows: lockState === 'displaced' ? '40px 66px 1fr auto' : '66px 1fr auto',
+        gridTemplateRows: lockState === 'displaced' ? '40px 52px 1fr auto' : '52px 1fr auto',
         overflow: 'hidden',
-        transition: 'background-color 0.3s ease, color 0.3s ease',
+        transition: 'background-color 0.3s ease',
       }}
     >
       {/* Bannière déplacement */}
@@ -1910,22 +1915,19 @@ export default function EReaderPage() {
       <Box sx={{
         borderBottom: `1px solid ${t.border}`,
         bgcolor: t.headerBg,
-        backdropFilter: 'blur(8px)',
-        px: { xs: 1.5, md: 2.5 },
+        px: { xs: 1.5, md: 2 },
         display: { xs: mobileChromeVisible ? 'flex' : 'none', md: 'flex' },
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 1,
-        transition: 'background-color 0.3s ease',
+        minHeight: 52,
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-          <IconButton onClick={() => navigate(-1)} sx={{ color: t.text }}><ArrowLeft size={18} /></IconButton>
-          <Box sx={{ minWidth: 0 }}>
-            <Box component="img" src={papyriMark} alt="Papyri" sx={{ height: 28, width: 28, objectFit: 'contain', borderRadius: '6px', opacity: 0.9 }} />
-            <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: { xs: 150, md: 360 } }}>
-              {content.title}
-            </Typography>
-          </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+          <IconButton onClick={() => navigate(-1)} size="small" sx={{ color: t.text }}><ArrowLeft size={17} /></IconButton>
+          <Box component="img" src={papyriMark} alt="Papyri" sx={{ height: 22, width: 22, objectFit: 'contain', borderRadius: '4px', opacity: 0.75, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: { xs: 130, md: 320 }, color: t.text, opacity: 0.85 }}>
+            {content.title}
+          </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
           {ttsSupported && (
@@ -1933,7 +1935,7 @@ export default function EReaderPage() {
               <IconButton
                 onClick={pauseResumeTts}
                 title={ttsSpeaking ? (ttsPaused ? 'Reprendre la lecture vocale' : 'Pause lecture vocale') : 'Lire à voix haute'}
-                sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.text }}
+                sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText }}
               >
                 {ttsSpeaking && !ttsPaused ? <Pause size={18} /> : <Play size={18} />}
               </IconButton>
@@ -1979,7 +1981,7 @@ export default function EReaderPage() {
 
       <Box sx={{ minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: `${(showToc || showSearch) ? '280px ' : ''}1fr${showAnnotations ? ' 300px' : ''}` } }}>
         {showSearch ? (
-          <Box sx={{ borderRight: { lg: `1px solid ${t.border}` }, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column', transition: 'background-color 0.3s ease' }}>
+          <Box sx={{ borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ px: 1.5, py: 1.2, borderBottom: `1px solid ${t.border}` }}>
               <TextField
                 size="small"
@@ -2031,7 +2033,7 @@ export default function EReaderPage() {
             </List>
           </Box>
         ) : showToc ? (
-          <Box sx={{ borderRight: { lg: `1px solid ${t.border}` }, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column', transition: 'background-color 0.3s ease' }}>
+          <Box sx={{ borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Sommaire</Typography>
               <Typography sx={{ fontSize: '0.72rem', opacity: 0.5 }}>{tocItems.length} chapitres</Typography>
@@ -2052,10 +2054,10 @@ export default function EReaderPage() {
                       alignItems: 'center',
                       gap: 1,
                       color: isActive ? primary : t.text,
-                      bgcolor: isActive ? 'rgba(50,17,212,0.08)' : 'transparent',
+                      bgcolor: isActive ? 'rgba(244,168,37,0.12)' : 'transparent',
                       borderLeft: isActive ? `3px solid ${primary}` : '3px solid transparent',
                       transition: 'all 0.15s ease',
-                      '&:hover': { bgcolor: isActive ? 'rgba(50,17,212,0.12)' : t.hoverBg },
+                      '&:hover': { bgcolor: isActive ? 'rgba(244,168,37,0.16)' : t.hoverBg },
                     }}
                     onClick={() => {
                       if (isEpub && renditionRef.current && item.href) {
@@ -2077,8 +2079,9 @@ export default function EReaderPage() {
           </Box>
         ) : null}
 
-        <Box ref={readerFrameRef} sx={{ minHeight: 0, p: { xs: 1, md: 2 }, position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: { xs: 8, md: 16 }, left: { xs: 8, md: 16 }, right: { xs: 8, md: 16 }, bottom: { xs: 8, md: 16 }, border: `1px solid ${t.border}`, borderRadius: 2, bgcolor: t.readerBg, overflow: 'hidden', transition: 'background-color 0.3s ease' }}>
+        <Box ref={readerFrameRef} sx={{ minHeight: 0, p: 0, position: 'relative' }}>
+          {/* Page flottante — style visionneuse PDF */}
+          <Box sx={{ position: 'absolute', top: { xs: 0, md: 20 }, left: { xs: 0, md: 52 }, right: { xs: 0, md: 52 }, bottom: { xs: 0, md: 20 }, borderRadius: { xs: 0, md: '3px' }, bgcolor: t.readerBg, overflow: 'hidden', boxShadow: t.pageShadow, transition: 'background-color 0.3s ease' }}>
             {content.format === 'pdf' && fileBuffer ? (
               <Box ref={pdfContainerRef} sx={{ width: '100%', height: '100%', overflow: 'auto', display: 'grid', placeItems: 'start center', py: 2 }}>
                 <canvas ref={pdfCanvasRef} style={{ maxWidth: '100%', height: 'auto', boxShadow: '0 4px 18px rgba(0,0,0,0.12)' }} />
@@ -2235,7 +2238,7 @@ export default function EReaderPage() {
 
         {/* Annotations sidebar panel */}
         {showAnnotations && (
-          <Box sx={{ borderLeft: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column', transition: 'background-color 0.3s ease' }}>
+          <Box sx={{ borderLeft: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Annotations</Typography>
               <IconButton size="small" onClick={() => setShowAnnotations(false)} sx={{ color: t.subtleText }}>
@@ -2336,35 +2339,33 @@ export default function EReaderPage() {
 
       <Box sx={{
         borderTop: `1px solid ${t.border}`,
-        bgcolor: t.headerBg,
-        backdropFilter: 'blur(8px)',
+        bgcolor: t.footerBg,
         px: { xs: 1, md: 3 },
         py: 0.5,
-        minHeight: 64,
+        minHeight: 56,
         display: { xs: mobileChromeVisible ? 'block' : 'none', md: 'block' },
-        transition: 'background-color 0.3s ease',
       }}>
         <Box sx={{ maxWidth: 980, mx: 'auto' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Button
               onClick={goPrev}
               disabled={!canNavigateEpub}
-              startIcon={<ChevronLeft size={16} />}
+              startIcon={<ChevronLeft size={15} />}
               size="small"
               sx={{
                 flexShrink: 0,
                 color: t.text,
-                bgcolor: t.hoverBg,
-                borderRadius: '10px',
-                px: 1.5,
-                py: 0.6,
-                minWidth: 110,
+                bgcolor: 'rgba(255,255,255,0.08)',
+                borderRadius: '6px',
+                px: 1.4,
+                py: 0.5,
+                minWidth: 100,
                 fontWeight: 600,
-                fontSize: '0.8rem',
+                fontSize: '0.78rem',
                 textTransform: 'none',
-                border: `1px solid ${t.border}`,
-                '&:hover': { bgcolor: `${primary}18`, borderColor: primary, color: primary },
-                '&.Mui-disabled': { opacity: 0.35 },
+                border: `1px solid rgba(255,255,255,0.12)`,
+                '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+                '&.Mui-disabled': { opacity: 0.28, color: t.text },
               }}
             >
               Précédent
@@ -2373,27 +2374,32 @@ export default function EReaderPage() {
               value={sliderValue}
               onChange={handleProgressChange}
               onChangeCommitted={handleProgressCommit}
-              sx={{ color: primary, mx: 1 }}
+              sx={{
+                color: primary,
+                mx: 1.5,
+                '& .MuiSlider-thumb': { width: 14, height: 14 },
+                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.15)' },
+              }}
             />
             <Button
               onClick={goNext}
               disabled={!canNavigateEpub}
-              endIcon={<ChevronRight size={16} />}
+              endIcon={<ChevronRight size={15} />}
               size="small"
               sx={{
                 flexShrink: 0,
                 color: t.text,
-                bgcolor: t.hoverBg,
-                borderRadius: '10px',
-                px: 1.5,
-                py: 0.6,
-                minWidth: 110,
+                bgcolor: 'rgba(255,255,255,0.08)',
+                borderRadius: '6px',
+                px: 1.4,
+                py: 0.5,
+                minWidth: 100,
                 fontWeight: 600,
-                fontSize: '0.8rem',
+                fontSize: '0.78rem',
                 textTransform: 'none',
-                border: `1px solid ${t.border}`,
-                '&:hover': { bgcolor: `${primary}18`, borderColor: primary, color: primary },
-                '&.Mui-disabled': { opacity: 0.35 },
+                border: `1px solid rgba(255,255,255,0.12)`,
+                '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+                '&.Mui-disabled': { opacity: 0.28, color: t.text },
               }}
             >
               Suivant
