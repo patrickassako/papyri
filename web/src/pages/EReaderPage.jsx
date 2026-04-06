@@ -2178,8 +2178,11 @@ export default function EReaderPage() {
         ) : null}
 
         <Box ref={readerFrameRef} sx={{ minHeight: 0, p: 0, position: 'relative' }}>
-          {/* Page flottante — style visionneuse PDF */}
-          <Box sx={{ position: 'absolute', top: { xs: 0, md: 20 }, left: { xs: 0, md: 52 }, right: { xs: 0, md: 52 }, bottom: { xs: 0, md: 20 }, borderRadius: { xs: 0, md: '3px' }, bgcolor: t.readerBg, overflow: 'hidden', boxShadow: t.pageShadow, transition: 'background-color 0.3s ease' }}>
+          {/* Page flottante — remplit tout l'espace disponible.
+              Les offsets responsifs (md: 52/20) ont été supprimés car ils provoquent
+              un saut brutal de dimensions au breakpoint 900px qui crashe epub.js.
+              L'effet "floating" est conservé via le fond sombre du frame + box-shadow. */}
+          <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 0, bgcolor: t.readerBg, overflow: 'hidden', boxShadow: t.pageShadow, transition: 'background-color 0.3s ease' }}>
             {content.format === 'pdf' && fileBuffer ? (
               <Box ref={pdfContainerRef} sx={{ width: '100%', height: '100%', overflow: 'auto', display: 'grid', placeItems: 'start center', py: 2 }}>
                 <canvas ref={pdfCanvasRef} style={{ maxWidth: '100%', height: 'auto', boxShadow: '0 4px 18px rgba(0,0,0,0.12)' }} />
