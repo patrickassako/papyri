@@ -37,6 +37,7 @@ import { subscriptionsService } from '../services/subscriptions.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
+import { useCurrency } from '../hooks/useCurrency';
 
 const primary = '#f4a825';
 const background = '#f8f7f5';
@@ -154,17 +155,32 @@ function MemberSelector({ count, min, max, onChange }) {
   );
 }
 
-function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange }) {
+function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange, localCurrency, convertFromEUR }) {
   const isPremium = getPlanFamilyKey(plan) === 'personal';
   const isFamily = getPlanFamilyKey(plan) === 'family';
 
   const minMembers = Number(plan.includedUsers || 1);
-  const isLocalized = Boolean(plan.localizedCurrency && plan.localizedCurrency !== plan.currency);
-  const displayCurrency = plan.localizedCurrency || plan.currency || 'EUR';
-  const basePriceCents = isLocalized ? Number(plan.localizedPriceCents || 0) : Number(plan.basePriceCents || 0);
-  const extraUserPriceCents = isLocalized
+
+  // Priorité: localisé par le backend → localisé par le frontend → EUR par défaut
+  const backendLocalized = Boolean(plan.localizedCurrency && plan.localizedCurrency !== (plan.currency || 'EUR'));
+  const frontendLocalized = Boolean(localCurrency && localCurrency !== 'EUR' && !backendLocalized);
+  const isLocalized = backendLocalized || frontendLocalized;
+
+  const displayCurrency = backendLocalized
+    ? plan.localizedCurrency
+    : (frontendLocalized ? localCurrency : (plan.currency || 'EUR'));
+
+  const basePriceCentsEUR = Number(plan.basePriceCents || 0);
+  const extraUserPriceCentsEUR = Number(plan.extraUserPriceCents || 0);
+
+  const basePriceCents = backendLocalized
+    ? Number(plan.localizedPriceCents || 0)
+    : (frontendLocalized && convertFromEUR ? convertFromEUR(basePriceCentsEUR) : basePriceCentsEUR);
+
+  const extraUserPriceCents = backendLocalized
     ? Number(plan.localizedExtraUserPriceCents || 0)
-    : Number(plan.extraUserPriceCents || 0);
+    : (frontendLocalized && convertFromEUR ? convertFromEUR(extraUserPriceCentsEUR) : extraUserPriceCentsEUR);
+
   const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
   const computedPriceCents = basePriceCents + extraMembers * extraUserPriceCents;
 
@@ -273,6 +289,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 export default function PricingPage() {
   const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width:900px)');
+  const { currency: localCurrency, country: localCountry, isLocalized: isFrontendLocalized, convertFromEUR, formatPrice: formatLocalPrice } = useCurrency();
 
   const [plans, setPlans] = useState([]);
   const [geoInfo, setGeoInfo] = useState(null);
@@ -520,7 +537,11 @@ export default function PricingPage() {
   const comparisonRows = [
     {
       key: 'Prix',
-      value: (p) => formatMoney(p.localizedPriceCents ?? p.basePriceCents, p.localizedCurrency ?? p.currency),
+      value: (p) => {
+        if (p.localizedPriceCents && p.localizedCurrency) return formatMoney(p.localizedPriceCents, p.localizedCurrency);
+        if (isFrontendLocalized) return formatLocalPrice(p.basePriceCents);
+        return formatMoney(p.basePriceCents, p.currency || 'EUR');
+      },
     },
     {
       key: 'Utilisateurs inclus',
@@ -562,11 +583,12 @@ export default function PricingPage() {
             Forfaits connectés aux données backend en temps réel.
           </Typography>
 
-          {geoInfo?.currency && geoInfo.currency !== 'EUR' && (
+          {(geoInfo?.currency && geoInfo.currency !== 'EUR') || isFrontendLocalized ? (
             <Typography sx={{ mt: 1, fontSize: '0.82rem', color: '#9a7f4d', bgcolor: 'rgba(244,168,37,0.08)', display: 'inline-block', px: 2, py: 0.5, borderRadius: '20px', border: '1px solid rgba(244,168,37,0.2)' }}>
-              Prix affichés en {geoInfo.currency} · basé sur votre localisation ({geoInfo.country || geoInfo.zone})
+              Prix affichés en {geoInfo?.currency || localCurrency} · basé sur votre localisation
+              {(geoInfo?.country || localCountry) ? ` (${geoInfo?.country || localCountry})` : ''}
             </Typography>
-          )}
+          ) : null}
 
           <Box sx={{ mt: 4.5, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5 }}>
             {!isMobile && <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>Facturation mensuelle</Typography>}
@@ -670,6 +692,8 @@ export default function PricingPage() {
                   actionDisabled={actionDisabled}
                   membersCount={isFamily ? familyMembersCount : undefined}
                   onMembersCountChange={isFamily ? setFamilyMembersCount : undefined}
+                  localCurrency={localCurrency}
+                  convertFromEUR={convertFromEUR}
                 />
               );
             })}

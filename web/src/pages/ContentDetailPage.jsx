@@ -31,6 +31,7 @@ import { readingService } from '../services/reading.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 import TopNavBar from '../components/TopNavBar';
 import PublicHeader from '../components/PublicHeader';
+import { useCurrency } from '../hooks/useCurrency';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '-';
@@ -319,13 +320,15 @@ export default function ContentDetailPage() {
     navigate(`/listen/${id}`);
   };
 
+  const { formatBoth: formatCurrencyBoth } = useCurrency();
+
   const isAudiobook = content?.content_type === 'audiobook';
   const accessType = content?.access_type || 'subscription';
   const isSubscriptionBook = ['subscription', 'subscription_or_paid'].includes(accessType);
   const isPaidBook = accessType === 'paid' || accessType === 'subscription_or_paid' || Number(content?.price_cents || 0) > 0;
 
   const localizedPrice = content?.localized_price || null;
-  const pricingCurrency = accessInfo?.pricing?.currency || localizedPrice?.currency || content?.price_currency || 'USD';
+  const pricingCurrency = accessInfo?.pricing?.currency || localizedPrice?.currency || content?.price_currency || 'EUR';
   const basePriceCents = Number(accessInfo?.pricing?.base_price_cents ?? localizedPrice?.price_cents ?? content?.price_cents ?? 0);
   const defaultDiscountPercent = Number(content?.subscription_discount_percent ?? 30);
   const discountPercent = Number(
@@ -683,12 +686,15 @@ export default function ContentDetailPage() {
                       ? 'Connectez-vous ou prenez un abonnement pour accéder à ce livre.'
                       : 'Connectez-vous pour acheter ce livre.'}
                   </Typography>
-                  {isPaidBook && basePriceCents > 0 ? (
-                    <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
-                      Prix: <strong>{formatMoney(basePriceCents, pricingCurrency)}</strong>. Avec un abonnement actif, vous bénéficiez de
-                      {' '}<strong>{defaultDiscountPercent}%</strong> de réduction.
-                    </Typography>
-                  ) : null}
+                  {isPaidBook && basePriceCents > 0 ? (() => {
+                    const p = formatCurrencyBoth(basePriceCents);
+                    return (
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                        Prix: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}. Avec un abonnement actif, vous bénéficiez de
+                        {' '}<strong>{defaultDiscountPercent}%</strong> de réduction.
+                      </Typography>
+                    );
+                  })() : null}
                 </Box>
               ) : scenario === 'active_subscriber' ? (
                 <Box>
@@ -706,13 +712,17 @@ export default function ContentDetailPage() {
                       {' '}({quotaRemaining} restant{quotaRemaining > 1 ? 's' : ''})
                     </Typography>
                   ) : null}
-                  {isPaidBook && basePriceCents > 0 ? (
-                    <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
-                      Prix public: <strong>{formatMoney(basePriceCents, pricingCurrency)}</strong>
-                      {' '}• Prix abonné: <strong>{formatMoney(reducedPriceCents, pricingCurrency)}</strong>
-                      {' '}({discountPercent}% de réduction)
-                    </Typography>
-                  ) : null}
+                  {isPaidBook && basePriceCents > 0 ? (() => {
+                    const pBase = formatCurrencyBoth(basePriceCents);
+                    const pReduced = formatCurrencyBoth(reducedPriceCents);
+                    return (
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                        Prix public: <strong>{pBase.local}</strong>{pBase.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pBase.eur})</span> : ''}
+                        {' '}• Prix abonné: <strong>{pReduced.local}</strong>{pReduced.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pReduced.eur})</span> : ''}
+                        {' '}({discountPercent}% de réduction)
+                      </Typography>
+                    );
+                  })() : null}
                 </Box>
               ) : (
                 <Box>
@@ -722,11 +732,14 @@ export default function ContentDetailPage() {
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     Prenez un abonnement pour accéder aux livres inclus et profiter de la réduction sur les livres payants.
                   </Typography>
-                  {isPaidBook && basePriceCents > 0 ? (
-                    <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
-                      Achat sans réduction: <strong>{formatMoney(basePriceCents, pricingCurrency)}</strong>.
-                    </Typography>
-                  ) : null}
+                  {isPaidBook && basePriceCents > 0 ? (() => {
+                    const p = formatCurrencyBoth(basePriceCents);
+                    return (
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                        Achat sans réduction: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}.
+                      </Typography>
+                    );
+                  })() : null}
                   {hasAnySubscription ? (
                     <Typography sx={{ mt: 0.8, color: '#9c7e49', fontSize: '0.86rem' }}>
                       Votre abonnement précédent n’est plus actif.
