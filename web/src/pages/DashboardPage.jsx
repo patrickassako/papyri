@@ -25,6 +25,7 @@ import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
 import { contentsService } from '../services/contents.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -372,7 +373,7 @@ export default function DashboardPage() {
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light }}>
       <UserSpaceSidebar user={user} activeKey="overview" subscriptionLabel={subscriptionLabel} />
 
-      <Box sx={{ flex: 1, p: 4, overflow: 'auto' }}>
+      <Box sx={{ flex: 1, p: { xs: 2, md: 4 }, overflow: 'auto', minWidth: 0 }}>
         <Box sx={{ background: `linear-gradient(135deg, ${tokens.colors.primary} 0%, ${tokens.colors.primaryDark} 100%)`, borderRadius: '16px', p: 4, mb: 3, position: 'relative', overflow: 'hidden' }}>
           <Box sx={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.08)' }} />
           <Box sx={{ position: 'absolute', bottom: -20, right: 80, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.05)' }} />
@@ -438,7 +439,7 @@ export default function DashboardPage() {
           </Box>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2.5, mb: usage ? 2 : 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: usage ? 2 : 3 }}>
           {statCards.map((stat) => {
             const StatIcon = stat.icon;
             return (
@@ -460,7 +461,7 @@ export default function DashboardPage() {
         </Box>
 
         {usage && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2.5, mb: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: 3 }}>
             {[
               {
                 label: 'Crédits livres texte',
@@ -512,7 +513,7 @@ export default function DashboardPage() {
           </Box>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2.5 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: { xs: 2, md: 2.5 } }}>
           <Box sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
@@ -526,7 +527,7 @@ export default function DashboardPage() {
               </Button>
             </Box>
             {continueReading.length > 0 ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: { xs: 1.5, md: 2 } }}>
                 {continueReading.map((book) => {
                   const contentId = book.content_id || book.id;
                   const fmt = String(book.format || '').toLowerCase();
@@ -699,7 +700,10 @@ export default function DashboardPage() {
             </Paper>
           </Box>
         </Box>
+
       </Box>
+
+      <MobileBottomNav />
     </Box>
   );
 }

@@ -33,6 +33,7 @@ import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { supabase } from '../config/supabase';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 
 const primary = tokens.colors.primary;
 const bgLight = tokens.colors.backgrounds.light;
@@ -523,6 +524,7 @@ export default function SecurityPage() {
       <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack((s) => ({ ...s, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity={snack.severity} onClose={() => setSnack((s) => ({ ...s, open: false }))} sx={{ borderRadius: '10px' }}>{snack.msg}</Alert>
       </Snackbar>
+      <MobileBottomNav />
     </Box>
   );
 }

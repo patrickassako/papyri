@@ -35,6 +35,7 @@ import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -1102,6 +1103,7 @@ export default function HistoryPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      <MobileBottomNav />
     </Box>
   );
 }

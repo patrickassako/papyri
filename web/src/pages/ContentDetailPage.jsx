@@ -538,14 +538,14 @@ export default function ContentDetailPage() {
       }
 
       <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9c7e49', fontSize: '0.95rem', mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#9c7e49', fontSize: { xs: '0.82rem', md: '0.95rem' }, mb: { xs: 2, md: 4 }, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: 'inherit', cursor: 'pointer' }} onClick={() => navigate('/catalogue')}>
             Bibliotheque
           </Typography>
           <ChevronRight size={14} />
           <Typography sx={{ fontSize: 'inherit' }}>{categories[0] || 'Detail'}</Typography>
           <ChevronRight size={14} />
-          <Typography sx={{ fontSize: 'inherit', color: '#1c160d', fontWeight: 700 }}>{content.title}</Typography>
+          <Typography sx={{ fontSize: 'inherit', color: '#1c160d', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: { xs: '160px', md: 'none' } }}>{content.title}</Typography>
         </Box>
 
         <Box
@@ -560,6 +560,8 @@ export default function ContentDetailPage() {
             <Box
               sx={{
                 width: '100%',
+                maxWidth: { xs: '220px', md: '100%' },
+                mx: { xs: 'auto', md: 0 },
                 aspectRatio: '3 / 4.2',
                 borderRadius: '18px',
                 overflow: 'hidden',
@@ -612,6 +614,7 @@ export default function ContentDetailPage() {
 
             <Box sx={{ mt: 2.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
               <Button
+                fullWidth
                 onClick={handlePrimaryAccessAction}
                 startIcon={<Play size={18} />}
                 disabled={accessActionLoading || authContextLoading}
@@ -627,6 +630,7 @@ export default function ContentDetailPage() {
                 {accessActionLoading ? 'Traitement...' : primaryActionLabel}
               </Button>
               <Button
+                fullWidth
                 variant="outlined"
                 onClick={handleSecondaryAction}
                 startIcon={<BookmarkPlus size={18} />}
@@ -649,16 +653,16 @@ export default function ContentDetailPage() {
               sx={{
                 fontFamily: 'Newsreader, Playfair Display, Georgia, serif',
                 fontWeight: 700,
-                fontSize: { xs: '2.2rem', md: '4rem' },
+                fontSize: { xs: '1.5rem', sm: '2rem', md: '4rem' },
                 letterSpacing: '-0.02em',
-                lineHeight: 0.95,
-                maxWidth: '92%'
+                lineHeight: 1.05,
+                maxWidth: '100%'
               }}
             >
               {content.title}
             </Typography>
 
-            <Typography sx={{ mt: 1.6, color: '#e6970c', fontSize: '1.45rem', fontFamily: 'Newsreader, serif', fontWeight: 500 }}>
+            <Typography sx={{ mt: 1.6, color: '#e6970c', fontSize: { xs: '1.1rem', md: '1.45rem' }, fontFamily: 'Newsreader, serif', fontWeight: 500 }}>
               Par {content.author}
             </Typography>
 

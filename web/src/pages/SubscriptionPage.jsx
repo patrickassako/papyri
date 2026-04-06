@@ -34,6 +34,7 @@ import { subscriptionsService } from '../services/subscriptions.service';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 
 function toMajorAmount(amount) {
   const value = Number(amount || 0);
@@ -806,6 +807,7 @@ export default function SubscriptionPage() {
           </Stack>
         </DialogContent>
       </Dialog>
+      <MobileBottomNav />
     </Box>
   );
 }

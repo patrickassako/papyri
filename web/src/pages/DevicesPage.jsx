@@ -26,6 +26,7 @@ import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
 import tokens from '../config/tokens';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 import { authFetch } from '../services/auth.service';
 import * as authService from '../services/auth.service';
 import { deviceService } from '../services/device.service';
@@ -339,6 +340,7 @@ export default function DevicesPage() {
       >
         <Alert severity={snack.severity} sx={{ borderRadius: 2 }}>{snack.message}</Alert>
       </Snackbar>
+      <MobileBottomNav />
     </Box>
   );
 }

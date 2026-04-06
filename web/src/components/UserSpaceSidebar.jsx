@@ -56,9 +56,10 @@ export default function UserSpaceSidebar({
         height: '100vh',
         bgcolor: '#fff',
         borderRight: `1px solid ${tokens.colors.surfaces.light.variant}`,
-        display: 'flex',
+        display: { xs: 'none', md: 'flex' },
         flexDirection: 'column',
         overflow: 'auto',
+        flexShrink: 0,
       }}
     >
       {/* Logo */}

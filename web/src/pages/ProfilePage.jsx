@@ -41,6 +41,7 @@ import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
 import { getPreferences as getNotifPrefs, updatePreferences as updateNotifPrefs } from '../services/notifications.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
+import MobileBottomNav from '../components/MobileBottomNav';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -1256,6 +1257,7 @@ export default function ProfilePage() {
           {errorMsg}
         </Alert>
       </Snackbar>
+      <MobileBottomNav />
     </Box>
   );
 }
