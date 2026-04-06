@@ -1548,16 +1548,42 @@ export default function EReaderPage() {
     r.themes.override('background', theme.epubPageBg);
   }, [isEpub, nightMode]);
 
-  // Quand le sommaire ou les annotations changent, forcer epub.js à recalculer sa largeur
+  // ResizeObserver sur le container epub — réagit aux vraies dimensions après chaque
+  // changement de layout (ouverture/fermeture du sommaire, plein-écran, redimensionnement).
+  // Plus fiable qu'un setTimeout car il obtient les dimensions APRÈS le repaint.
   useEffect(() => {
-    if (!isEpub || !renditionRef.current) return;
-    const timer = setTimeout(() => {
-      try {
-        renditionRef.current.resize();
-      } catch (_) {}
-    }, 80); // laisser le temps à la transition CSS de finir
-    return () => clearTimeout(timer);
-  }, [isEpub, showToc, showSearch, showAnnotations]);
+    if (!isEpub) return;
+    const el = epubContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+
+    let debounceTimer;
+    let lastW = 0;
+    let lastH = 0;
+
+    const observer = new ResizeObserver((entries) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const entry = entries[entries.length - 1]; // prendre la dernière valeur
+        const w = Math.round(entry.contentRect.width);
+        const h = Math.round(entry.contentRect.height);
+        if (w === lastW && h === lastH) return; // rien n'a changé
+        if (w === 0 || h === 0) return;
+        lastW = w;
+        lastH = h;
+        if (renditionRef.current) {
+          try {
+            renditionRef.current.resize(w, h);
+          } catch (_) {}
+        }
+      }, 60); // 60ms debounce — les transitions CSS sont finies
+    });
+
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      clearTimeout(debounceTimer);
+    };
+  }, [isEpub]); // s'attache une seule fois, l'observer suit les changements automatiquement
 
   useEffect(() => {
     if (!isEpub || !renditionRef.current) return;
