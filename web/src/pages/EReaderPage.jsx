@@ -99,7 +99,9 @@ export default function EReaderPage() {
   const [fontPercent, setFontPercent] = useState(100);
   const [nightMode, setNightMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showToc, setShowToc] = useState(true);
+  // Sur mobile (<lg), on démarre avec le sommaire fermé pour éviter un recalcul
+  // de grille au chargement qui peut crasher epub.js au resize.
+  const [showToc, setShowToc] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1200);
   const [sliderValue, setSliderValue] = useState(0);
   const [currentHref, setCurrentHref] = useState('');
   const [currentSectionKey, setCurrentSectionKey] = useState('');
@@ -1559,10 +1561,12 @@ export default function EReaderPage() {
     let debounceTimer;
     let lastW = 0;
     let lastH = 0;
+    let resizeLocked = false; // évite les appels resize() concurrents dans epub.js
 
     const observer = new ResizeObserver((entries) => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
+        if (resizeLocked) return; // resize déjà en cours — ignorer
         const entry = entries[entries.length - 1]; // prendre la dernière valeur
         const w = Math.round(entry.contentRect.width);
         const h = Math.round(entry.contentRect.height);
@@ -1571,11 +1575,18 @@ export default function EReaderPage() {
         lastW = w;
         lastH = h;
         if (renditionRef.current) {
+          resizeLocked = true;
           try {
-            renditionRef.current.resize(w, h);
+            const result = renditionRef.current.resize(w, h);
+            // resize() peut retourner une Promise — absorber les rejets
+            if (result && typeof result.catch === 'function') {
+              result.catch(() => {});
+            }
           } catch (_) {}
+          // Libérer le verrou après la prochaine frame de repaint
+          setTimeout(() => { resizeLocked = false; }, 250);
         }
-      }, 60); // 60ms debounce — les transitions CSS sont finies
+      }, 250); // 250ms debounce — laisse CSS et epub.js finir leur layout
     });
 
     observer.observe(el);
