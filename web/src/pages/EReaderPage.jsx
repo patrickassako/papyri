@@ -2077,13 +2077,12 @@ export default function EReaderPage() {
         </Box>
       </Box>
 
-      {/* gridAutoRows:'1fr' est CRITIQUE: sans ça, la rangée implicite prend la hauteur
-          naturelle du readerFrame (0, car ses enfants sont en position:absolute).
-          Sur mobile sans TOC, le row s'effondre à 0 → epub container 0px → écran noir.
-          Sur desktop avec TOC, le TOC a du contenu qui forçait la hauteur par accident. */}
-      <Box sx={{ minHeight: 0, display: 'grid', gridAutoRows: '1fr', gridTemplateColumns: { xs: '1fr', lg: `${(showToc || showSearch) ? '280px ' : ''}1fr${showAnnotations ? ' 300px' : ''}` } }}>
+      {/* Flexbox: plus fiable que grid pour la propagation de hauteur.
+          Le reader frame prend flex:1 et remplit toute la hauteur disponible.
+          Les sidebars ont une largeur fixe et sont masqués sur mobile. */}
+      <Box sx={{ minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {showSearch ? (
-          <Box sx={{ borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column' }}>
+          <Box sx={{ width: 280, flexShrink: 0, borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ px: 1.5, py: 1.2, borderBottom: `1px solid ${t.border}` }}>
               <TextField
                 size="small"
@@ -2135,7 +2134,7 @@ export default function EReaderPage() {
             </List>
           </Box>
         ) : showToc ? (
-          <Box sx={{ borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column' }}>
+          <Box sx={{ width: 280, flexShrink: 0, borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Sommaire</Typography>
               <Typography sx={{ fontSize: '0.72rem', opacity: 0.5 }}>{tocItems.length} chapitres</Typography>
@@ -2181,7 +2180,7 @@ export default function EReaderPage() {
           </Box>
         ) : null}
 
-        <Box ref={readerFrameRef} sx={{ minHeight: 0, p: 0, position: 'relative' }}>
+        <Box ref={readerFrameRef} sx={{ flex: '1 1 0', minWidth: 0, minHeight: 0, p: 0, position: 'relative' }}>
           {/* Page flottante — remplit tout l'espace disponible.
               Les offsets responsifs (md: 52/20) ont été supprimés car ils provoquent
               un saut brutal de dimensions au breakpoint 900px qui crashe epub.js.
@@ -2343,7 +2342,7 @@ export default function EReaderPage() {
 
         {/* Annotations sidebar panel */}
         {showAnnotations && (
-          <Box sx={{ borderLeft: `1px solid ${t.border}`, bgcolor: t.sidebarBg, minHeight: 0, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column' }}>
+          <Box sx={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${t.border}`, bgcolor: t.sidebarBg, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Annotations</Typography>
               <IconButton size="small" onClick={() => setShowAnnotations(false)} sx={{ color: t.subtleText }}>
