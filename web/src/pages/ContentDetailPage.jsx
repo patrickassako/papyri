@@ -747,15 +747,16 @@ export default function ContentDetailPage() {
                     const pReduced = formatCurrencyBoth(reducedPriceCents);
                     return (
                       <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
-                        <Typography sx={{ color: '#5f513d', fontSize: '0.9rem' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem' }}>
                           {isSubscriptionBook ? 'Ou achetez-le' : 'Prix abonné'}:{' '}
                           <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
                           {'  '}
                           <strong style={{ color: '#b5651d' }}>{pReduced.local}</strong>
                           {pReduced.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.82em' }}> (≈ {pReduced.eur})</span> : ''}
-                          {'  '}
-                          <Chip label={`-${discountPercent}%`} size="small" sx={{ bgcolor: '#b5651d', color: '#fff', fontWeight: 700, fontSize: '0.72rem', height: 20, ml: 0.5 }} />
-                        </Typography>
+                          </Typography>
+                          <Chip label={`-${discountPercent}%`} size="small" sx={{ bgcolor: '#b5651d', color: '#fff', fontWeight: 700, fontSize: '0.72rem', height: 20 }} />
+                        </Box>
                       </Box>
                     );
                   })() : isPaidBook && basePriceCents > 0 && discountPercent === 0 ? (() => {

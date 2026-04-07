@@ -179,8 +179,8 @@ async function createPaymentCheckoutSession({
   const successUrl = buildUrl(frontendUrl, successPath, {
     provider: 'stripe',
     status: 'successful',
-    session_id: '{CHECKOUT_SESSION_ID}',
-  });
+    session_id: '__STRIPE_CHECKOUT_SESSION_ID__',
+  }).replace('__STRIPE_CHECKOUT_SESSION_ID__', '{CHECKOUT_SESSION_ID}');
   const cancelUrl = buildUrl(frontendUrl, cancelPath, {
     provider: 'stripe',
     payment: 'cancelled',

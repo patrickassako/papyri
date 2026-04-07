@@ -11,6 +11,41 @@ const contentAccessService = require('../services/content-access.service');
 const geoService = require('../services/geo.service');
 const { supabaseAdmin } = require('../config/database');
 
+async function ensurePaidContentUnlock({
+  userId,
+  content,
+  paymentRecord,
+  providerMetadata = {},
+}) {
+  const existingUnlock = await contentsService.getUserContentUnlock(userId, content.id);
+  if (existingUnlock) return existingUnlock;
+
+  const paymentMeta = paymentRecord?.metadata || {};
+  const basePriceCents = Number(paymentMeta.base_price_cents ?? content.price_cents ?? 0);
+  const paidAmountCents = Number(paymentMeta.final_price_cents ?? Math.round(Number(paymentRecord?.amount || 0) * 100));
+  const discountPercent = Number(paymentMeta.discount_percent ?? 0);
+
+  try {
+    return await contentsService.createContentUnlock({
+      user_id: userId,
+      content_id: content.id,
+      source: 'paid',
+      payment_id: paymentRecord.id,
+      base_price_cents: basePriceCents,
+      paid_amount_cents: paidAmountCents,
+      currency: content.price_currency || paymentRecord.currency || 'USD',
+      discount_applied_percent: discountPercent,
+      metadata: providerMetadata,
+    });
+  } catch (error) {
+    if (error?.code === '23505') {
+      const concurrentUnlock = await contentsService.getUserContentUnlock(userId, content.id);
+      if (concurrentUnlock) return concurrentUnlock;
+    }
+    throw error;
+  }
+}
+
 /**
  * GET /contents
  * Get contents with pagination and filters
@@ -657,22 +692,11 @@ async function verifyUnlockPayment(req, res) {
       await subscriptionsService.updatePaymentStatus(paymentRecord.id, 'succeeded');
     }
 
-    const hasActiveSubscription = (await subscriptionsService.checkSubscriptionStatus(userId)).isActive === true;
-    const pricing = contentAccessService.computePricing(content, hasActiveSubscription);
-    const basePriceCents = pricing.base_price_cents;
-    const discountPercent = pricing.discount_percent;
-    const finalPriceCents = pricing.final_price_cents;
-
-    const unlock = await contentsService.createContentUnlock({
-      user_id: userId,
-      content_id: content.id,
-      source: 'paid',
-      payment_id: paymentRecord.id,
-      base_price_cents: basePriceCents,
-      paid_amount_cents: finalPriceCents,
-      currency: content.price_currency || paymentRecord.currency || 'USD',
-      discount_applied_percent: discountPercent,
-      metadata: providerMetadata,
+    const unlock = await ensurePaidContentUnlock({
+      userId,
+      content,
+      paymentRecord,
+      providerMetadata,
     });
 
     return res.status(200).json({

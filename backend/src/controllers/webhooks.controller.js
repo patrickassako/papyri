@@ -11,6 +11,67 @@ const { generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/in
 const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
 
+async function ensureStripeContentUnlockFromPayment(session, payment) {
+  const userId = session.metadata?.user_id || payment.user_id;
+  const contentId = session.metadata?.content_id || payment.metadata?.content_id;
+
+  if (!userId || !contentId) {
+    console.warn('⚠️  Missing user_id/content_id for Stripe content unlock', {
+      sessionId: session.id,
+      paymentId: payment.id,
+    });
+    return null;
+  }
+
+  const { data: existingUnlock, error: existingUnlockError } = await supabaseAdmin
+    .from('content_unlocks')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('content_id', contentId)
+    .maybeSingle();
+
+  if (existingUnlockError) throw existingUnlockError;
+  if (existingUnlock) return existingUnlock;
+
+  const paymentMeta = payment.metadata || {};
+
+  try {
+    const { data: unlock, error: unlockError } = await supabaseAdmin
+      .from('content_unlocks')
+      .insert({
+        user_id: userId,
+        content_id: contentId,
+        source: 'paid',
+        payment_id: payment.id,
+        base_price_cents: Number(paymentMeta.base_price_cents || 0),
+        paid_amount_cents: Number(paymentMeta.final_price_cents || Math.round(Number(payment.amount || 0) * 100)),
+        currency: payment.currency || 'USD',
+        discount_applied_percent: Number(paymentMeta.discount_percent || 0),
+        metadata: {
+          provider: 'stripe',
+          session_id: session.id,
+        },
+      })
+      .select()
+      .single();
+
+    if (unlockError) throw unlockError;
+    return unlock;
+  } catch (error) {
+    if (error?.code === '23505') {
+      const { data: concurrentUnlock, error: concurrentError } = await supabaseAdmin
+        .from('content_unlocks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('content_id', contentId)
+        .maybeSingle();
+      if (concurrentError) throw concurrentError;
+      return concurrentUnlock || null;
+    }
+    throw error;
+  }
+}
+
 /**
  * POST /webhooks/flutterwave
  * Handle Flutterwave webhook events
@@ -448,6 +509,7 @@ async function handleStripeCheckoutCompleted(session) {
 
   if (payment_type === 'content_unlock') {
     console.log(`ℹ️  Content unlock payment confirmed via Stripe: ${session.id}`);
+    await ensureStripeContentUnlockFromPayment(session, payment);
     return;
   }
 

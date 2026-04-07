@@ -24,6 +24,7 @@ import ArrowForwardOutlined from '@mui/icons-material/ArrowForwardOutlined';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
+import { subscriptionsService } from '../services/subscriptions.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
 
@@ -102,6 +103,7 @@ function getItemRoute(item) {
 export default function MyListPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [subscriptionLabel, setSubscriptionLabel] = useState('Chargement de l abonnement...');
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [catalogItems, setCatalogItems] = useState([]);
@@ -115,6 +117,29 @@ export default function MyListPage() {
       try {
         const u = await authService.getUser();
         if (alive) setUser(u);
+
+        try {
+          const sub = await subscriptionsService.getMySubscription();
+          if (!alive) return;
+          const subscription = sub?.subscription || null;
+          const isActive = sub?.isActive === true;
+          const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
+          const endDate = subscription?.current_period_end
+            ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
+            : '';
+
+          if (isActive && cancelAtPeriodEnd && endDate) {
+            setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
+          } else if (isActive && endDate) {
+            setSubscriptionLabel(`Actif jusqu au ${endDate}`);
+          } else if (isActive) {
+            setSubscriptionLabel('Abonnement actif');
+          } else {
+            setSubscriptionLabel('Aucun abonnement actif');
+          }
+        } catch (_) {
+          if (alive) setSubscriptionLabel('Aucun abonnement actif');
+        }
 
         const [historyRes, playlistRes, ebookListRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
@@ -313,7 +338,7 @@ export default function MyListPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: bgLight, display: 'flex' }}>
-      <UserSpaceSidebar user={user} activeKey="library" />
+      <UserSpaceSidebar user={user} activeKey="library" subscriptionLabel={subscriptionLabel} />
 
       <Box sx={{ flex: 1 }}>
         <Box sx={{ display: 'flex', maxWidth: 1440, mx: 'auto', px: 3, py: 3, gap: 3 }}>

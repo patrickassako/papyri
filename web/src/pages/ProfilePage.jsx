@@ -196,10 +196,17 @@ export default function ProfilePage() {
           const payload = await safeJson(subscriptionRes.value);
           const isActive = Boolean(payload?.isActive);
           const subscription = payload?.subscription || null;
-          const planName = subscription?.plan_snapshot?.name || subscription?.plan_type || null;
           setHasActiveSubscription(isActive);
-          if (isActive) {
-            setSubscriptionLabel(planName ? `${planName} actif` : 'Abonnement actif');
+          const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
+          const endDate = subscription?.current_period_end
+            ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
+            : '';
+          if (isActive && cancelAtPeriodEnd && endDate) {
+            setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
+          } else if (isActive && endDate) {
+            setSubscriptionLabel(`Actif jusqu au ${endDate}`);
+          } else if (isActive) {
+            setSubscriptionLabel('Abonnement actif');
           } else if (payload?.hasSubscription) {
             setSubscriptionLabel('Abonnement inactif');
           } else {
