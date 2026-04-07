@@ -11,7 +11,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Headphones, Book } from 'lucide-react';
 import { useCurrency } from '../hooks/useCurrency';
-import { formatMinorUnits } from '../services/currency.service';
 
 /**
  * Carte de contenu pour le catalogue
@@ -134,13 +133,9 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
 
           {(() => {
             const baseCents = content.localized_price?.price_cents ?? content.price_cents;
-            const currency = content.localized_price?.currency || content.price_currency || 'USD';
+            const currency = content.localized_price?.currency || content.price_currency || 'EUR';
             if (!baseCents || Number(baseCents) <= 0) return null;
-            const renderPrice = (cents) => (
-              content.localized_price?.price_cents != null || currency !== 'EUR'
-                ? formatMinorUnits(cents, currency)
-                : formatFrom(cents, 'EUR')
-            );
+            const renderPrice = (cents) => formatFrom(cents, currency);
 
             const discountPct = Number(
               (hasActiveSubscription ? content.subscriber_discount_percent : 0) ?? 0

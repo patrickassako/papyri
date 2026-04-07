@@ -34,7 +34,6 @@ import { subscriptionsService } from '../services/subscriptions.service';
 import TopNavBar from '../components/TopNavBar';
 import PublicHeader from '../components/PublicHeader';
 import { useCurrency } from '../hooks/useCurrency';
-import { formatMinorUnits } from '../services/currency.service';
 import { useTranslation } from 'react-i18next';
 
 function formatDuration(seconds) {
@@ -356,15 +355,7 @@ export default function ContentDetailPage() {
   const quotaUsed = Number(isAudiobook ? usageInfo?.audio_unlocked_count : usageInfo?.text_unlocked_count || 0);
   const quotaTotal = Number(isAudiobook ? usageInfo?.audio_quota : usageInfo?.text_quota || 0);
   const quotaRemaining = Math.max(0, quotaTotal - quotaUsed);
-  const showDirectPrice = Boolean(accessInfo?.pricing?.currency || localizedPrice?.currency || pricingCurrency !== 'EUR');
-  const formatDisplayedPrice = (cents) => (
-    showDirectPrice
-      ? {
-          local: formatMinorUnits(cents, pricingCurrency),
-          eur: pricingCurrency !== 'EUR' ? formatCurrencyBoth(cents, pricingCurrency).eur : null,
-        }
-      : formatCurrencyBoth(cents, 'EUR')
-  );
+  const formatDisplayedPrice = (cents) => formatCurrencyBoth(cents, pricingCurrency);
 
   const scenario = useMemo(() => {
     if (!isAuthenticated) return 'guest';
