@@ -73,6 +73,7 @@ const ZOOM_STEP = 0.25;
 export default function PdfReaderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { lockState } = useReadingLock(id);
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [content, setContent] = useState(null);
@@ -108,7 +109,13 @@ export default function PdfReaderPage() {
 
   const T = THEMES[theme];
 
-  useReadingLock(id);
+  useEffect(() => {
+    if (lockState !== 'displaced') return;
+    navigate(`/catalogue/${id}`, {
+      replace: true,
+      state: { readingLockLost: true },
+    });
+  }, [id, lockState, navigate]);
 
   // ── Chargement contenu ────────────────────────────────────────────────────
   useEffect(() => {

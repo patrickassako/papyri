@@ -110,6 +110,17 @@ export default function AudiobookPlayerPage() {
     loadContent(id, true);
   }, [id, loadContent]);
 
+  useEffect(() => {
+    if (lockState !== 'displaced') return;
+    if (isPlaying) {
+      try { togglePlayPause(); } catch (_) {}
+    }
+    navigate(`/catalogue/${id}`, {
+      replace: true,
+      state: { readingLockLost: true },
+    });
+  }, [id, isPlaying, lockState, navigate, togglePlayPause]);
+
   // Load bookmarks
   useEffect(() => {
     if (!id) return;

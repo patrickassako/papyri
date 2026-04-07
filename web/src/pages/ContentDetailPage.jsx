@@ -12,11 +12,12 @@ import {
   DialogTitle,
   Divider,
   Rating,
+  Snackbar,
   Skeleton,
   TextField,
   Typography,
 } from '@mui/material';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   BookmarkPlus,
   BookOpen,
@@ -86,6 +87,7 @@ function formatMoney(cents, currency = 'USD') {
 
 export default function ContentDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -105,6 +107,7 @@ export default function ContentDetailPage() {
   const [accessActionError, setAccessActionError] = useState('');
   const [callbackNotice, setCallbackNotice] = useState('');
   const [paymentDialog, setPaymentDialog] = useState({ open: false, providerBusy: '' });
+  const [lockLostNoticeOpen, setLockLostNoticeOpen] = useState(false);
 
   // ─── Avis lecteurs ───
   const [reviews, setReviews] = useState([]);
@@ -119,6 +122,12 @@ export default function ContentDetailPage() {
   // ─── Ebook reading list ───
   const [inEbookList, setInEbookList] = useState(false);
   const [ebookListLoading, setEbookListLoading] = useState(false);
+
+  useEffect(() => {
+    if (!location.state?.readingLockLost) return;
+    setLockLostNoticeOpen(true);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const loadContent = async () => {
@@ -532,6 +541,22 @@ export default function ContentDetailPage() {
 
   return (
     <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh', color: '#1c160d' }}>
+      <Snackbar
+        open={lockLostNoticeOpen}
+        autoHideDuration={4200}
+        onClose={() => setLockLostNoticeOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setLockLostNoticeOpen(false)}
+          severity="warning"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          La lecture a ete reprise sur un autre appareil connecte a ce compte.
+        </Alert>
+      </Snackbar>
+
       {isAuthenticated
         ? <TopNavBar user={user} />
         : <PublicHeader activeKey="catalogue" isAuthenticated={false} background="#fcfaf8" />

@@ -993,6 +993,15 @@ export default function EReaderPage() {
     stopTts();
   }, [stopTts]);
 
+  useEffect(() => {
+    if (lockState !== 'displaced') return;
+    stopTts();
+    navigate(`/catalogue/${id}`, {
+      replace: true,
+      state: { readingLockLost: true },
+    });
+  }, [id, lockState, navigate, stopTts]);
+
   const bumpMobileChromeVisibility = useCallback(() => {
     if (!isMobileViewportRef.current) return;
     setMobileChromeVisible(true);
