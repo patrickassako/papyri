@@ -471,9 +471,9 @@ export default function ProfilePage() {
 
       <Box sx={{ flex: 1 }}>
       {/* Page Content */}
-      <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
+      <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 1.25, sm: 2, md: 4 }, py: { xs: 1.5, md: 4 } }}>
         {/* Page Header */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 4 }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'flex-start' }, justifyContent: 'space-between', mb: 3, gap: 1.5 }}>
           <Box>
             <Typography
               variant="h4"
@@ -482,7 +482,7 @@ export default function ProfilePage() {
                 fontWeight: 700,
                 color: textMain,
                 fontFamily: '"Newsreader", Georgia, serif',
-                fontSize: { xs: '2rem', md: '3rem' },
+                fontSize: { xs: '1.9rem', sm: '2.2rem', md: '3rem' },
                 mb: 0.5,
                 letterSpacing: '-0.033em',
               }}
@@ -507,6 +507,7 @@ export default function ProfilePage() {
               borderRadius: '10px',
               textTransform: 'none',
               fontWeight: 500,
+              alignSelf: { xs: 'stretch', sm: 'auto' },
               '&:hover': {
                 borderColor: primary,
                 bgcolor: `${primary}08`,
@@ -517,6 +518,30 @@ export default function ProfilePage() {
           </Button>
         </Box>
 
+        <Box
+          sx={{
+            display: { xs: 'grid', md: 'none' },
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: 1,
+            mb: 2.5,
+          }}
+        >
+          {[
+            { label: 'Termines', value: `${stats.completedBooks}` },
+            { label: 'En cours', value: `${stats.inProgressBooks}` },
+            { label: 'Serie', value: `${stats.streakDays}j` },
+          ].map((item) => (
+            <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
+              <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {item.label}
+              </Typography>
+              <Typography sx={{ mt: 0.25, fontSize: '1rem', fontWeight: 800, color: textMain }}>
+                {item.value}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+
         {/* Two-column layout */}
         <Grid container spacing={3}>
           {/* Left Column (4/12) */}
@@ -525,7 +550,7 @@ export default function ProfilePage() {
             <Paper
               elevation={0}
               sx={{
-                p: 3,
+                p: { xs: 2, md: 3 },
                 borderRadius: '12px',
                 overflow: 'hidden',
                 position: 'relative',
@@ -547,17 +572,17 @@ export default function ProfilePage() {
               />
 
               {/* Avatar */}
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative', zIndex: 1, pt: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative', zIndex: 1, pt: { xs: 1.5, md: 2 } }}>
                 <Box sx={{ position: 'relative' }}>
                   <Avatar
                     src={user?.avatar_url}
                     onClick={openAvatarDialog}
                     sx={{
-                      width: 128,
-                      height: 128,
+                      width: { xs: 104, md: 128 },
+                      height: { xs: 104, md: 128 },
                       border: '4px solid #fff',
                       boxShadow: '0 4px 14px rgba(0,0,0,0.1)',
-                      fontSize: '3rem',
+                      fontSize: { xs: '2.25rem', md: '3rem' },
                       bgcolor: primary,
                       cursor: 'pointer',
                       '&:hover .camera-overlay': {
@@ -917,11 +942,11 @@ export default function ProfilePage() {
                 { icon: FormatListNumberedOutlined, value: stats.inProgressBooks, label: 'EN COURS', color: secondary },
                 { icon: HeadphonesOutlined, value: `${stats.totalHours}h`, label: 'TEMPS TOTAL', color: tokens.colors.accent },
               ].map((stat) => (
-                <Grid size={{ xs: 12, sm: 4 }} key={stat.label}>
+                <Grid size={{ xs: 4, sm: 4 }} key={stat.label}>
                   <Paper
                     elevation={0}
                     sx={{
-                      p: 3,
+                      p: { xs: 1.6, md: 3 },
                       borderRadius: '12px',
                       textAlign: 'center',
                       border: `1px solid ${surfaceVariant}`,
@@ -935,8 +960,8 @@ export default function ProfilePage() {
                   >
                     <Box
                       sx={{
-                        width: 56,
-                        height: 56,
+                        width: { xs: 44, md: 56 },
+                        height: { xs: 44, md: 56 },
                         borderRadius: '50%',
                         bgcolor: `${stat.color}14`,
                         display: 'flex',
@@ -946,11 +971,11 @@ export default function ProfilePage() {
                         mb: 1.5,
                       }}
                     >
-                      <stat.icon sx={{ fontSize: 28, color: stat.color }} />
+                      <stat.icon sx={{ fontSize: { xs: 22, md: 28 }, color: stat.color }} />
                     </Box>
                     <Typography
                       sx={{
-                        fontSize: '2rem',
+                        fontSize: { xs: '1.35rem', md: '2rem' },
                         fontWeight: 800,
                         color: textMain,
                         lineHeight: 1.1,
@@ -978,7 +1003,7 @@ export default function ProfilePage() {
             <Paper
               elevation={0}
               sx={{
-                p: 3,
+                p: { xs: 2, md: 3 },
                 borderRadius: '12px',
                 border: `1px solid ${surfaceVariant}`,
                 mb: 3,
@@ -1090,8 +1115,8 @@ export default function ProfilePage() {
                         <Box
                           sx={{
                             position: 'relative',
-                            width: 96,
-                            height: 96,
+                            width: { xs: 80, md: 96 },
+                            height: { xs: 80, md: 96 },
                             borderRadius: '50%',
                             background: `linear-gradient(135deg, ${badge.gradient[0]}, ${badge.gradient[1]})`,
                             border: `4px solid ${badge.borderColor}`,
@@ -1101,7 +1126,7 @@ export default function ProfilePage() {
                             mb: 1.5,
                           }}
                         >
-                          <BadgeIcon sx={{ fontSize: 40, color: badge.iconColor }} />
+                          <BadgeIcon sx={{ fontSize: { xs: 34, md: 40 }, color: badge.iconColor }} />
                           {/* Lock overlay for locked badges */}
                           {!badge.unlocked && (
                             <Box
@@ -1150,7 +1175,7 @@ export default function ProfilePage() {
             </Box>
 
             {/* Share Button */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Box sx={{ display: 'flex', justifyContent: { xs: 'stretch', md: 'flex-end' } }}>
               <Button
                 variant="outlined"
                 startIcon={<ShareOutlined />}
@@ -1162,6 +1187,7 @@ export default function ProfilePage() {
                   textTransform: 'none',
                   fontWeight: 600,
                   px: 3,
+                  width: { xs: '100%', md: 'auto' },
                   '&:hover': {
                     bgcolor: primary,
                     color: '#fff',

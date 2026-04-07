@@ -6,28 +6,33 @@ import {
   Avatar,
   InputAdornment,
   TextField,
+  IconButton,
   Menu,
   MenuItem,
   ListItemIcon,
   ListItemText,
   Divider,
+  Drawer,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import MenuIcon from '@mui/icons-material/Menu';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import tokens from '../config/tokens';
 import NotificationBell from './NotificationBell';
 import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 import * as authService from '../services/auth.service';
 
 const navLinks = [
-  { label: 'Bibliothèque', path: '/catalogue' },
-  { label: 'Explorer', path: '/catalogue' },
-  { label: 'Historique', path: '/history' },
-  { label: 'Favoris', path: '/my-list' },
+  { label: 'Bibliothèque', path: '/catalogue', icon: AutoStoriesOutlinedIcon },
+  { label: 'Explorer', path: '/catalogue', icon: SearchIcon },
+  { label: 'Historique', path: '/history', icon: HistoryOutlinedIcon },
+  { label: 'Favoris', path: '/my-list', icon: FavoriteOutlinedIcon },
 ];
 
 export default function TopNavBar({
@@ -40,6 +45,7 @@ export default function TopNavBar({
   const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuOpen = Boolean(anchorEl);
 
   const handleSearchKeyDown = (e) => {
@@ -63,6 +69,11 @@ export default function TopNavBar({
 
   const handleMenuNav = (path) => {
     handleMenuClose();
+    navigate(path);
+  };
+
+  const handleMobileNav = (path) => {
+    setMobileNavOpen(false);
     navigate(path);
   };
 
@@ -98,6 +109,18 @@ export default function TopNavBar({
       >
         {/* Left: Logo + Nav */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 } }}>
+          <IconButton
+            onClick={() => setMobileNavOpen(true)}
+            sx={{
+              display: { xs: 'inline-flex', md: 'none' },
+              color: tokens.colors.onBackground.light,
+              ml: -0.5,
+            }}
+            aria-label="Ouvrir le menu"
+          >
+            <MenuIcon />
+          </IconButton>
+
           <Box
             sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
             onClick={() => navigate('/dashboard')}
@@ -106,7 +129,7 @@ export default function TopNavBar({
               component="img"
               src={papyriWordmark}
               alt="Papyri"
-              sx={{ width: '150px', height: '50px', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
+              sx={{ width: { xs: 118, sm: 136, md: 150 }, height: { xs: 40, md: 50 }, objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
             />
           </Box>
 
@@ -137,7 +160,7 @@ export default function TopNavBar({
         </Box>
 
         {/* Right: Search + Notif + Avatar */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5, md: 2 } }}>
           <TextField
             size="small"
             placeholder={searchPlaceholder}
@@ -153,7 +176,7 @@ export default function TopNavBar({
               ),
             }}
             sx={{
-              width: { xs: 160, sm: 220, md: 280 },
+              width: { xs: 110, sm: 180, md: 280 },
               '& .MuiOutlinedInput-root': {
                 borderRadius: '12px',
                 bgcolor: '#f4efe7',
@@ -166,7 +189,9 @@ export default function TopNavBar({
             }}
           />
 
-          <NotificationBell />
+          <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <NotificationBell />
+          </Box>
 
           <Avatar
             src={user?.avatar_url}
@@ -185,6 +210,89 @@ export default function TopNavBar({
           </Avatar>
         </Box>
       </Box>
+
+      <Drawer
+        anchor="left"
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        PaperProps={{
+          sx: {
+            width: 300,
+            maxWidth: '86vw',
+            bgcolor: '#fcfaf8',
+          },
+        }}
+      >
+        <Box sx={{ px: 2.2, py: 2, borderBottom: '1px solid #f0e8dc' }}>
+          <Box component="img" src={papyriWordmark} alt="Papyri" sx={{ width: 132, height: 40, objectFit: 'contain', objectPosition: 'left center', display: 'block', cursor: 'pointer' }} onClick={() => handleMobileNav('/dashboard')} />
+          <Typography sx={{ mt: 1.2, fontSize: '0.78rem', color: '#9c7e49' }}>
+            Navigation
+          </Typography>
+        </Box>
+
+        <Box sx={{ px: 1.2, py: 1.2 }}>
+          {navLinks.map((link) => {
+            const Icon = link.icon;
+            const isActive = location.pathname === link.path;
+            return (
+              <Box
+                key={link.label}
+                onClick={() => handleMobileNav(link.path)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.25,
+                  px: 1.4,
+                  py: 1.25,
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  color: isActive ? '#f29e0d' : '#3d2c1e',
+                  bgcolor: isActive ? 'rgba(242,158,13,0.12)' : 'transparent',
+                  '&:hover': { bgcolor: isActive ? 'rgba(242,158,13,0.12)' : '#f6efe4' },
+                }}
+              >
+                <Icon sx={{ fontSize: 20 }} />
+                <Typography sx={{ fontSize: '0.92rem', fontWeight: isActive ? 700 : 600 }}>
+                  {link.label}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+
+        <Divider sx={{ borderColor: '#f0e8dc' }} />
+
+        <Box sx={{ px: 1.2, py: 1.2 }}>
+          {[
+            { label: 'Tableau de bord', path: '/dashboard', icon: DashboardOutlinedIcon },
+            { label: 'Mon profil', path: '/profile', icon: PersonOutlinedIcon },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Box
+                key={item.path}
+                onClick={() => handleMobileNav(item.path)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.25,
+                  px: 1.4,
+                  py: 1.25,
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  color: '#3d2c1e',
+                  '&:hover': { bgcolor: '#f6efe4' },
+                }}
+              >
+                <Icon sx={{ fontSize: 20 }} />
+                <Typography sx={{ fontSize: '0.92rem', fontWeight: 600 }}>
+                  {item.label}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </Drawer>
 
       {/* Profile dropdown menu */}
       <Menu

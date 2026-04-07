@@ -133,10 +133,12 @@ export default function MiniPlayer() {
     <Box
       sx={{
         position: 'fixed',
-        bottom: 32,
+        bottom: { xs: 16, sm: 24, md: 32 },
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 1200,
+        width: { xs: 'calc(100vw - 20px)', sm: 'auto' },
+        maxWidth: { xs: 'calc(100vw - 20px)', sm: 'none' },
       }}
     >
       {/* Close button — positioned above the pill */}
@@ -162,28 +164,30 @@ export default function MiniPlayer() {
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
-          minWidth: 340,
-          px: 1,
-          py: 1,
+          gap: { xs: 1, sm: 2 },
+          minWidth: { xs: 0, sm: 340 },
+          width: { xs: '100%', sm: 'auto' },
+          maxWidth: '100%',
+          px: { xs: 0.75, sm: 1 },
+          py: { xs: 0.75, sm: 1 },
           borderRadius: '9999px',
           backdropFilter: 'blur(20px)',
           bgcolor: 'rgba(30,30,30,0.6)',
           boxShadow: '0 8px 32px 0 rgba(0,0,0,0.3)',
           border: '1px solid rgba(255,255,255,0.1)',
           transition: 'transform 0.3s ease',
-          '&:hover': { transform: 'scale(1.02)' },
+          '&:hover': { transform: { xs: 'none', sm: 'scale(1.02)' } },
         }}
       >
         {/* Spinning cover */}
         <Box
-          sx={{ position: 'relative', flexShrink: 0, ml: 0.5, cursor: 'pointer' }}
+          sx={{ position: 'relative', flexShrink: 0, ml: { xs: 0.25, sm: 0.5 }, cursor: 'pointer' }}
           onClick={() => navigate(`/listen/${contentId}`)}
         >
           <Box
             sx={{
-              width: 48,
-              height: 48,
+              width: { xs: 40, sm: 48 },
+              height: { xs: 40, sm: 48 },
               borderRadius: '50%',
               overflow: 'hidden',
               border: '2px solid rgba(255,255,255,0.1)',
@@ -215,8 +219,8 @@ export default function MiniPlayer() {
         </Box>
 
         {/* Center: controls + title */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 2 } }}>
             {/* Prev */}
             <IconButton
               size="small"
@@ -255,13 +259,13 @@ export default function MiniPlayer() {
           <Typography
             noWrap
             sx={{
-              fontSize: '10px',
+              fontSize: { xs: '9px', sm: '10px' },
               fontWeight: 500,
               color: 'rgba(255,255,255,0.4)',
               letterSpacing: '0.05em',
               textTransform: 'uppercase',
               mt: 0.25,
-              maxWidth: 120,
+              maxWidth: { xs: 92, sm: 120 },
               textAlign: 'center',
             }}
           >
@@ -274,10 +278,11 @@ export default function MiniPlayer() {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
-            pr: 2,
-            pl: 1.5,
+            gap: { xs: 0.75, sm: 1.5 },
+            pr: { xs: 1, sm: 2 },
+            pl: { xs: 0.75, sm: 1.5 },
             borderLeft: '1px solid rgba(255,255,255,0.05)',
+            flexShrink: 0,
           }}
         >
           <EqualizerBars isPlaying={isPlaying} />

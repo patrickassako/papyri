@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -7,71 +7,79 @@ import Box from '@mui/material/Box';
 import theme from './theme/theme';
 import { AudioProvider } from './context/AudioContext';
 import MiniPlayer from './components/MiniPlayer';
-import Register from './pages/Register';
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import LandingPage from './pages/LandingPage';
-import CatalogPage from './pages/CatalogPage';
-import ContentDetailPage from './pages/ContentDetailPage';
-import PricingPage from './pages/PricingPage';
-import SubscriptionCallbackPage from './pages/SubscriptionCallbackPage';
-import EReaderPage from './pages/EReaderPage';
-import PdfReaderPage from './pages/PdfReaderPage';
-import AudiobookPlayerPage from './pages/AudiobookPlayerPage';
-import SubscriptionPage from './pages/SubscriptionPage';
-import DashboardPage from './pages/DashboardPage';
-import MyListPage from './pages/MyListPage';
-import HistoryPage from './pages/HistoryPage';
-import ProfilePage from './pages/ProfilePage';
-import DevicesPage from './pages/DevicesPage';
-import SecurityPage from './pages/SecurityPage';
-import MfaVerifyPage from './pages/MfaVerifyPage';
-import PublisherLayout from './components/PublisherLayout';
-import PublisherActivatePage from './pages/publisher/PublisherActivatePage';
-import PublisherDashboardPage from './pages/publisher/PublisherDashboardPage';
-import PublisherBooksPage from './pages/publisher/PublisherBooksPage';
-import PublisherBookDetailPage from './pages/publisher/PublisherBookDetailPage';
-import PublisherAddBookPage from './pages/publisher/PublisherAddBookPage';
-import PublisherRevenuePage from './pages/publisher/PublisherRevenuePage';
-import PublisherPromoCodesPage from './pages/publisher/PublisherPromoCodesPage';
-import PublisherProfilePage from './pages/publisher/PublisherProfilePage';
-import PublisherClaimsPage from './pages/publisher/PublisherClaimsPage';
-import PublisherStatsPage from './pages/publisher/PublisherStatsPage';
-import AdminPublisherLayout from './components/AdminPublisherLayout';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import AdminPublisherDashboardPage from './pages/admin/AdminPublisherDashboardPage';
-import AdminPublishersPage from './pages/admin/AdminPublishersPage';
-import AdminPublisherDetailPage from './pages/admin/AdminPublisherDetailPage';
-import AdminBookDetailPage from './pages/admin/AdminBookDetailPage';
-import AdminContentValidationPage from './pages/admin/AdminContentValidationPage';
-import AdminPayoutsPage from './pages/admin/AdminPayoutsPage';
-import AdminCreateContentPage from './pages/admin/AdminCreateContentPage';
-import AdminBooksModulePage from './pages/admin/AdminBooksModulePage';
-import AdminSubscriptionsPage from './pages/admin/AdminSubscriptionsPage';
-import AdminPublisherBooksListPage from './pages/admin/AdminPublisherBooksListPage';
-import AdminBookContentDetailPage from './pages/admin/AdminBookContentDetailPage';
-import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
-import AdminPromoCodesPage from './pages/admin/AdminPromoCodesPage';
-import AdminSettingsPage from './pages/admin/AdminSettingsPage';
-import AdminGeoPricingPage from './pages/admin/AdminGeoPricingPage';
-import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
-import AdminRevenueAnalyticsPage from './pages/admin/AdminRevenueAnalyticsPage';
-import AdminGdprPage from './pages/admin/AdminGdprPage';
-import AdminReadingStatsPage from './pages/admin/AdminReadingStatsPage';
-import AdminPublisherClaimsPage from './pages/admin/AdminPublisherClaimsPage';
-import AdminPublisherPromoCodesPage from './pages/admin/AdminPublisherPromoCodesPage';
-import AdminRolesPage from './pages/admin/AdminRolesPage';
 import * as authService from './services/auth.service';
 import CookieConsent from './components/CookieConsent';
-import PrivacyPage from './pages/PrivacyPage';
-import CGUPage from './pages/legal/CGUPage';
-import CGVPage from './pages/legal/CGVPage';
-import MentionsLegalesPage from './pages/legal/MentionsLegalesPage';
-import CookiesPage from './pages/legal/CookiesPage';
-import CopyrightPage from './pages/legal/CopyrightPage';
-import OnboardingPage from './pages/OnboardingPage';
+
+const Register = lazy(() => import('./pages/Register'));
+const Login = lazy(() => import('./pages/Login'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const CatalogPage = lazy(() => import('./pages/CatalogPage'));
+const ContentDetailPage = lazy(() => import('./pages/ContentDetailPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
+const SubscriptionCallbackPage = lazy(() => import('./pages/SubscriptionCallbackPage'));
+const EReaderPage = lazy(() => import('./pages/EReaderPage'));
+const PdfReaderPage = lazy(() => import('./pages/PdfReaderPage'));
+const AudiobookPlayerPage = lazy(() => import('./pages/AudiobookPlayerPage'));
+const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const MyListPage = lazy(() => import('./pages/MyListPage'));
+const HistoryPage = lazy(() => import('./pages/HistoryPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const DevicesPage = lazy(() => import('./pages/DevicesPage'));
+const SecurityPage = lazy(() => import('./pages/SecurityPage'));
+const MfaVerifyPage = lazy(() => import('./pages/MfaVerifyPage'));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
+const PublisherLayout = lazy(() => import('./components/PublisherLayout'));
+const PublisherActivatePage = lazy(() => import('./pages/publisher/PublisherActivatePage'));
+const PublisherDashboardPage = lazy(() => import('./pages/publisher/PublisherDashboardPage'));
+const PublisherBooksPage = lazy(() => import('./pages/publisher/PublisherBooksPage'));
+const PublisherBookDetailPage = lazy(() => import('./pages/publisher/PublisherBookDetailPage'));
+const PublisherAddBookPage = lazy(() => import('./pages/publisher/PublisherAddBookPage'));
+const PublisherRevenuePage = lazy(() => import('./pages/publisher/PublisherRevenuePage'));
+const PublisherPromoCodesPage = lazy(() => import('./pages/publisher/PublisherPromoCodesPage'));
+const PublisherProfilePage = lazy(() => import('./pages/publisher/PublisherProfilePage'));
+const PublisherClaimsPage = lazy(() => import('./pages/publisher/PublisherClaimsPage'));
+const PublisherStatsPage = lazy(() => import('./pages/publisher/PublisherStatsPage'));
+const AdminPublisherLayout = lazy(() => import('./components/AdminPublisherLayout'));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const AdminPublisherDashboardPage = lazy(() => import('./pages/admin/AdminPublisherDashboardPage'));
+const AdminPublishersPage = lazy(() => import('./pages/admin/AdminPublishersPage'));
+const AdminPublisherDetailPage = lazy(() => import('./pages/admin/AdminPublisherDetailPage'));
+const AdminBookDetailPage = lazy(() => import('./pages/admin/AdminBookDetailPage'));
+const AdminContentValidationPage = lazy(() => import('./pages/admin/AdminContentValidationPage'));
+const AdminPayoutsPage = lazy(() => import('./pages/admin/AdminPayoutsPage'));
+const AdminCreateContentPage = lazy(() => import('./pages/admin/AdminCreateContentPage'));
+const AdminBooksModulePage = lazy(() => import('./pages/admin/AdminBooksModulePage'));
+const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptionsPage'));
+const AdminPublisherBooksListPage = lazy(() => import('./pages/admin/AdminPublisherBooksListPage'));
+const AdminBookContentDetailPage = lazy(() => import('./pages/admin/AdminBookContentDetailPage'));
+const AdminCategoriesPage = lazy(() => import('./pages/admin/AdminCategoriesPage'));
+const AdminPromoCodesPage = lazy(() => import('./pages/admin/AdminPromoCodesPage'));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
+const AdminGeoPricingPage = lazy(() => import('./pages/admin/AdminGeoPricingPage'));
+const AdminNotificationsPage = lazy(() => import('./pages/admin/AdminNotificationsPage'));
+const AdminRevenueAnalyticsPage = lazy(() => import('./pages/admin/AdminRevenueAnalyticsPage'));
+const AdminGdprPage = lazy(() => import('./pages/admin/AdminGdprPage'));
+const AdminReadingStatsPage = lazy(() => import('./pages/admin/AdminReadingStatsPage'));
+const AdminPublisherClaimsPage = lazy(() => import('./pages/admin/AdminPublisherClaimsPage'));
+const AdminRolesPage = lazy(() => import('./pages/admin/AdminRolesPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const CGUPage = lazy(() => import('./pages/legal/CGUPage'));
+const CGVPage = lazy(() => import('./pages/legal/CGVPage'));
+const MentionsLegalesPage = lazy(() => import('./pages/legal/MentionsLegalesPage'));
+const CookiesPage = lazy(() => import('./pages/legal/CookiesPage'));
+const CopyrightPage = lazy(() => import('./pages/legal/CopyrightPage'));
+
+function RouteLoader() {
+  return (
+    <Box sx={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
+      <CircularProgress />
+    </Box>
+  );
+}
 
 function useAuth() {
   const [loading, setLoading] = useState(true);
@@ -150,7 +158,8 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AudioProvider>
-          <Routes>
+          <Suspense fallback={<RouteLoader />}>
+            <Routes>
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/register" element={<Register />} />
@@ -523,7 +532,8 @@ function App() {
 
             {/* Default redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+            </Routes>
+          </Suspense>
 
           {/* Mini-player global — visible on ALL pages when audio is loaded */}
           <MiniPlayer />

@@ -5,7 +5,7 @@ import React from 'react';
 import { Box, Container, Typography, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import tokens from '../../config/tokens';
-import papyriMark from '../../assets/papyri-mark.png';
+import papyriMark from '../../assets/papyri-logo-gold.png';
 
 export function LegalSection({ title, children }) {
   return (

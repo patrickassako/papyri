@@ -11,6 +11,26 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return null;
+          if (id.includes('pdfjs-dist')) {
+            return 'pdf-vendor';
+          }
+          if (id.includes('epubjs') || id.includes('jszip')) {
+            return 'reader-vendor';
+          }
+          if (id.includes('@supabase') || id.includes('firebase')) {
+            return 'backend-vendor';
+          }
+          if (id.includes('jspdf') || id.includes('xlsx') || id.includes('html2canvas')) {
+            return 'export-vendor';
+          }
+          return 'vendor';
+        },
+      },
+    },
   },
   esbuild: {
     loader: 'jsx',

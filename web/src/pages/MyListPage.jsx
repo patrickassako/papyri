@@ -341,15 +341,15 @@ export default function MyListPage() {
       <UserSpaceSidebar user={user} activeKey="library" subscriptionLabel={subscriptionLabel} />
 
       <Box sx={{ flex: 1 }}>
-        <Box sx={{ display: 'flex', maxWidth: 1440, mx: 'auto', px: 3, py: 3, gap: 3 }}>
+        <Box sx={{ display: 'flex', maxWidth: 1440, mx: 'auto', px: { xs: 1.25, sm: 2, md: 3 }, py: { xs: 1.5, md: 3 }, gap: 3 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
               <Typography
                 variant="h1"
                 sx={{
                   fontFamily: '"Newsreader", Georgia, serif',
-                  fontSize: { xs: '2.2rem', md: '3.1rem' },
+                  fontSize: { xs: '1.9rem', sm: '2.2rem', md: '3.1rem' },
                   fontWeight: 800,
                   color: textMain,
                   lineHeight: 1.2,
@@ -370,7 +370,34 @@ export default function MyListPage() {
             <Typography sx={{ fontSize: '1rem', color: textMuted }}>Gérez votre bibliothèque numérique personnelle</Typography>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1.5, mb: 4 }}>
+          <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.2, mb: 2.5 }}>
+            <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
+              <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
+                Aujourd hui
+              </Typography>
+              <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '1rem', color: textMain }}>
+                {stats.todayMinutes} min
+              </Typography>
+            </Paper>
+            <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
+              <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
+                Serie
+              </Typography>
+              <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '1rem', color: secondary }}>
+                {stats.streakDays} j
+              </Typography>
+            </Paper>
+            <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
+              <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
+                Statut
+              </Typography>
+              <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '0.86rem', color: primary, lineHeight: 1.2 }}>
+                {subscriptionLabel}
+              </Typography>
+            </Paper>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 3, alignItems: 'stretch' }}>
             <Box sx={{ flex: 1, bgcolor: surfaceVariant, borderRadius: '12px', height: 48, display: 'flex', alignItems: 'center', px: 2 }}>
               <SearchIcon sx={{ color: textMuted, mr: 1.5 }} />
               <InputBase
@@ -380,7 +407,7 @@ export default function MyListPage() {
                 sx={{ flex: 1, fontSize: '0.95rem', color: textMain, '& input::placeholder': { color: textMuted, opacity: 1 } }}
               />
             </Box>
-            <IconButton sx={{ bgcolor: surfaceVariant, borderRadius: '12px', width: 48, height: 48, color: textMain, '&:hover': { bgcolor: `${primary}22` } }}>
+            <IconButton sx={{ bgcolor: surfaceVariant, borderRadius: '12px', width: 48, height: 48, color: textMain, flexShrink: 0, '&:hover': { bgcolor: `${primary}22` } }}>
               <TuneOutlined />
             </IconButton>
           </Box>
@@ -415,7 +442,7 @@ export default function MyListPage() {
           </Box>
 
           <Box sx={{ mb: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1 }}>
               <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>Reprendre la lecture</Typography>
               <Box onClick={() => navigate('/history')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: primary, '&:hover': { textDecoration: 'underline' } }}>
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Tout voir</Typography>
@@ -481,7 +508,7 @@ export default function MyListPage() {
               </Typography>
             </Box>
 
-            <Grid container spacing={2}>
+            <Grid container spacing={{ xs: 1.5, md: 2 }}>
               {visibleItems.map((book) => (
                 <Grid size={{ xs: 6, sm: 4, md: 3 }} key={book.id}>
                   <Box
@@ -534,7 +561,7 @@ export default function MyListPage() {
               </Box>
             </Box>
 
-            <Grid container spacing={2}>
+            <Grid container spacing={{ xs: 1.5, md: 2 }}>
               {catalogItems.map((book) => (
                 <Grid size={{ xs: 6, sm: 4, md: 3 }} key={`catalog-${book.id}`}>
                   <Box

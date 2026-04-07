@@ -37,7 +37,7 @@ export default function CookieConsent() {
       boxShadow: '0 -4px 24px rgba(0,0,0,0.25)',
       borderTop: `3px solid ${tokens.colors.primary}`,
     }}>
-      <Typography sx={{ flex: 1, fontSize: '0.82rem', color: 'rgba(255,255,255,0.82)', minWidth: 200 }}>
+      <Typography sx={{ flex: 1, fontSize: '0.82rem', color: 'rgba(255,255,255,0.82)', minWidth: { xs: 0, sm: 200 } }}>
         Nous utilisons des cookies essentiels au fonctionnement du service (session, préférences) et des cookies analytiques anonymisés.{' '}
         <Box component="span"
           onClick={() => navigate('/privacy')}
@@ -46,13 +46,13 @@ export default function CookieConsent() {
           Politique de confidentialité
         </Box>
       </Typography>
-      <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+      <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'stretch', sm: 'flex-start' } }}>
         <Button size="small" onClick={reject}
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', '&:hover': { color: '#fff' } }}>
+          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', width: { xs: '50%', sm: 'auto' }, '&:hover': { color: '#fff' } }}>
           Refuser
         </Button>
         <Button size="small" onClick={accept} variant="contained"
-          sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', bgcolor: tokens.colors.primary, borderRadius: '8px', '&:hover': { bgcolor: '#9e5519' } }}>
+          sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', bgcolor: tokens.colors.primary, borderRadius: '8px', width: { xs: '50%', sm: 'auto' }, '&:hover': { bgcolor: '#9e5519' } }}>
           Accepter
         </Button>
       </Box>

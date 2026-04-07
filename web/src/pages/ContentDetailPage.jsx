@@ -562,7 +562,7 @@ export default function ContentDetailPage() {
         : <PublicHeader activeKey="catalogue" isAuthenticated={false} background="#fcfaf8" />
       }
 
-      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 5 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#9c7e49', fontSize: { xs: '0.82rem', md: '0.95rem' }, mb: { xs: 2, md: 4 }, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: 'inherit', cursor: 'pointer' }} onClick={() => navigate('/catalogue')}>
             Bibliotheque
@@ -577,7 +577,7 @@ export default function ContentDetailPage() {
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: '360px minmax(0, 1fr)' },
-            gap: { xs: 4, md: 8 },
+            gap: { xs: 3, md: 8 },
             alignItems: 'start'
           }}
         >
@@ -585,7 +585,7 @@ export default function ContentDetailPage() {
             <Box
               sx={{
                 width: '100%',
-                maxWidth: { xs: '220px', md: '100%' },
+                maxWidth: { xs: '190px', sm: '220px', md: '100%' },
                 mx: { xs: 'auto', md: 0 },
                 aspectRatio: '3 / 4.2',
                 borderRadius: '18px',
@@ -602,7 +602,7 @@ export default function ContentDetailPage() {
               />
             </Box>
 
-            <Box sx={{ mt: 2.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', md: 'flex-start' } }}>
               <Chip
                 label={content.format ? content.format.toUpperCase() : 'FORMAT'}
                 icon={isAudiobook ? <Headphones size={15} /> : <BookOpen size={15} />}
@@ -637,7 +637,7 @@ export default function ContentDetailPage() {
               />
             </Box>
 
-            <Box sx={{ mt: 2.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            <Box sx={{ mt: 2.25, display: 'flex', flexDirection: 'column', gap: 1.1 }}>
               <Button
                 fullWidth
                 onClick={handlePrimaryAccessAction}
@@ -678,7 +678,7 @@ export default function ContentDetailPage() {
               sx={{
                 fontFamily: 'Newsreader, Playfair Display, Georgia, serif',
                 fontWeight: 700,
-                fontSize: { xs: '1.5rem', sm: '2rem', md: '4rem' },
+                fontSize: { xs: '1.8rem', sm: '2.25rem', md: '4rem' },
                 letterSpacing: '-0.02em',
                 lineHeight: 1.05,
                 maxWidth: '100%'
@@ -693,8 +693,29 @@ export default function ContentDetailPage() {
 
             <Box
               sx={{
+                display: { xs: 'grid', md: 'none' },
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 1,
+                mt: 2,
+                maxWidth: 560,
+              }}
+            >
+              {[
+                { label: 'Format', value: content.format ? content.format.toUpperCase() : '-' },
+                { label: 'Langue', value: formatLanguage(content.language) },
+                { label: isAudiobook ? 'Audio' : 'Taille', value: isAudiobook ? formatDuration(content.duration_seconds) : formatSize(content.file_size_bytes) },
+              ].map((item) => (
+                <Box key={item.label} sx={{ p: 1.2, borderRadius: 3, border: '1px solid #f0e7d8', bgcolor: '#fffdfa' }}>
+                  <Typography sx={{ color: '#9c7e49', fontSize: '0.62rem', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>{item.label}</Typography>
+                  <Typography sx={{ mt: 0.25, fontWeight: 700, fontSize: '0.86rem', color: '#1c160d' }}>{item.value}</Typography>
+                </Box>
+              ))}
+            </Box>
+
+            <Box
+              sx={{
                 mt: 2.4,
-                p: 2.2,
+                p: { xs: 1.6, md: 2.2 },
                 borderRadius: '14px',
                 border: '1px solid #f0e7d8',
                 bgcolor: '#fffdfa',
@@ -804,7 +825,7 @@ export default function ContentDetailPage() {
               </Alert>
             ) : null}
 
-            <Box sx={{ mt: 2.5, py: 2, borderTop: '1px solid #f4efe7', borderBottom: '1px solid #f4efe7', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <Box sx={{ mt: 2.5, py: 2, borderTop: '1px solid #f4efe7', borderBottom: '1px solid #f4efe7', display: { xs: 'none', md: 'flex' }, gap: 4, flexWrap: 'wrap' }}>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{content.format ? content.format.toUpperCase() : '-'}</Typography>
                 <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>FORMAT</Typography>
@@ -845,8 +866,8 @@ export default function ContentDetailPage() {
             )}
 
             <Box sx={{ mt: 3.3 }}>
-              <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.2rem', lineHeight: 0.95 }}>Synopsis</Typography>
-              <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: '1.08rem', lineHeight: 1.7, maxWidth: 740, whiteSpace: 'pre-line' }}>
+              <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 0.95 }}>Synopsis</Typography>
+              <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740, whiteSpace: 'pre-line' }}>
                 {content.description || 'Aucune description disponible pour ce livre.'}
               </Typography>
             </Box>

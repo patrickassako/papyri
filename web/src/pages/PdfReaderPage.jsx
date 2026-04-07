@@ -18,7 +18,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
 import { contentsService } from '../services/contents.service';
-import papyriMark from '../assets/papyri-mark.png';
+import papyriMark from '../assets/papyri-logo-gold.png';
 import tokens from '../config/tokens';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;

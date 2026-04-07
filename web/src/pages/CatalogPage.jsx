@@ -250,14 +250,14 @@ export default function CatalogPage() {
         : <PublicHeader activeKey="catalogue" isAuthenticated={false} background="#fcfaf8" />
       }
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
       {/* En-tête */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: { xs: 3, md: 4 } }}>
         <Typography
           variant="h3"
           component="h1"
           gutterBottom
-          sx={{ fontFamily: 'Playfair Display, serif', color: 'primary.main' }}
+          sx={{ fontFamily: 'Playfair Display, serif', color: 'primary.main', fontSize: { xs: '2rem', md: '3rem' } }}
         >
           Catalogue
         </Typography>
@@ -272,8 +272,32 @@ export default function CatalogPage() {
         </Typography>
       </Box>
 
+      <Box
+        sx={{
+          display: { xs: 'grid', md: 'none' },
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 1,
+          mb: 2.5,
+        }}
+      >
+        {[
+          { label: 'Titres', value: `${totalItems}` },
+          { label: 'Filtres', value: `${activeFiltersCount}` },
+          { label: 'Vue', value: searchQuery ? 'Recherche' : 'Catalogue' },
+        ].map((item) => (
+          <Paper key={item.label} elevation={0} sx={{ p: 1.25, borderRadius: 3, border: '1px solid #ece7dd' }}>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {item.label}
+            </Typography>
+            <Typography sx={{ mt: 0.2, fontWeight: 800, color: '#1c160d', fontSize: '1rem' }}>
+              {item.value}
+            </Typography>
+          </Paper>
+        ))}
+      </Box>
+
       {/* Barre de recherche et filtres */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: { xs: 3, md: 4 } }}>
         {/* Recherche avec autocomplete */}
         <ClickAwayListener onClickAway={handleSearchBlurAway}>
           <Box ref={searchRef} sx={{ position: 'relative', mb: 2 }}>
@@ -349,7 +373,7 @@ export default function CatalogPage() {
         </ClickAwayListener>
 
         {/* Filtres */}
-        <Grid container spacing={2}>
+        <Grid container spacing={{ xs: 1.25, md: 2 }}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Type</InputLabel>
@@ -417,7 +441,7 @@ export default function CatalogPage() {
         {/* Filtres actifs */}
         {activeFiltersCount > 0 && (
           <Box sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
               Filtres actifs :
             </Typography>
             <Chip
@@ -438,11 +462,11 @@ export default function CatalogPage() {
       )}
 
       {/* Grille de contenus */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: 4 }}>
         {loading ? (
           // Skeleton loading
           Array.from(new Array(limit)).map((_, index) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={index}>
+            <Grid size={{ xs: 6, sm: 6, md: 4, lg: 3 }} key={index}>
               <Skeleton variant="rectangular" height={280} sx={{ mb: 1 }} />
               <Skeleton variant="text" width="80%" />
               <Skeleton variant="text" width="60%" />
@@ -462,7 +486,7 @@ export default function CatalogPage() {
           </Grid>
         ) : (
           Array.isArray(contents) && contents.map((content) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={content.id}>
+            <Grid size={{ xs: 6, sm: 6, md: 4, lg: 3 }} key={content.id}>
               <ContentCard content={content} hasActiveSubscription={hasActiveSubscription} />
             </Grid>
           ))

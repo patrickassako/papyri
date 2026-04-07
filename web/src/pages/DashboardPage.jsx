@@ -380,19 +380,19 @@ export default function DashboardPage() {
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light }}>
       <UserSpaceSidebar user={user} activeKey="overview" subscriptionLabel={subscriptionLabel} />
 
-      <Box sx={{ flex: 1, p: { xs: 2, md: 4 }, overflow: 'auto', minWidth: 0 }}>
-        <Box sx={{ background: `linear-gradient(135deg, ${tokens.colors.primary} 0%, ${tokens.colors.primaryDark} 100%)`, borderRadius: '16px', p: 4, mb: 3, position: 'relative', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 4 }, overflow: 'auto', minWidth: 0 }}>
+        <Box sx={{ background: `linear-gradient(135deg, ${tokens.colors.primary} 0%, ${tokens.colors.primaryDark} 100%)`, borderRadius: '16px', p: { xs: 2.2, md: 4 }, mb: 3, position: 'relative', overflow: 'hidden' }}>
           <Box sx={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.08)' }} />
           <Box sx={{ position: 'absolute', bottom: -20, right: 80, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.05)' }} />
-          <Typography variant="h4" sx={{ color: '#fff', fontWeight: 700, mb: 0.5, position: 'relative', zIndex: 1 }}>
+          <Typography variant="h4" sx={{ color: '#fff', fontWeight: 700, mb: 0.5, position: 'relative', zIndex: 1, fontSize: { xs: '1.7rem', md: '2.125rem' }, lineHeight: 1.05 }}>
             Bon retour, {userName.split(' ')[0]} !
           </Typography>
-          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 2, position: 'relative', zIndex: 1 }}>
+          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 2, position: 'relative', zIndex: 1, fontSize: { xs: '0.92rem', md: '1rem' }, maxWidth: { md: 460 } }}>
             Prêt à explorer de nouveaux horizons aujourd&apos;hui ?
           </Typography>
           <Chip
             label={`Temps total: ${stats.total_hours} heures`}
-            sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: '0.85rem', height: 32, position: 'relative', zIndex: 1 }}
+            sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: '0.85rem', height: 32, position: 'relative', zIndex: 1, maxWidth: '100%' }}
           />
         </Box>
 
@@ -407,8 +407,8 @@ export default function DashboardPage() {
               bgcolor: '#FFF8F0',
               border: `1px solid ${tokens.colors.primary}40`,
               borderRadius: '12px',
-              px: 3,
-              py: 2,
+              px: { xs: 1.6, md: 3 },
+              py: { xs: 1.5, md: 2 },
               mb: 3,
               flexWrap: 'wrap',
             }}
@@ -445,6 +445,23 @@ export default function DashboardPage() {
             </Button>
           </Box>
         )}
+
+        <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.2, mb: 2.5 }}>
+          {[
+            { label: 'Aujourd hui', value: `${Math.max(0, Math.round((stats.weekly_hours_done || 0) * 60))} min`, color: tokens.colors.primary },
+            { label: 'Serie', value: `${stats.streak_days} j`, color: tokens.colors.secondary },
+            { label: 'Mois', value: `${stats.monthly_goal_percent}%`, color: tokens.colors.semantic.success },
+          ].map((item) => (
+            <Paper key={item.label} elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
+              <Typography sx={{ fontSize: '0.66rem', color: '#9c7e49', textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
+                {item.label}
+              </Typography>
+              <Typography sx={{ mt: 0.4, fontSize: '1.05rem', color: item.color, fontWeight: 800, lineHeight: 1.1 }}>
+                {item.value}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: usage ? 2 : 3 }}>
           {statCards.map((stat) => {
@@ -522,7 +539,7 @@ export default function DashboardPage() {
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: { xs: 2, md: 2.5 } }}>
           <Box sx={{ minWidth: 0 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
                 Continuer la lecture
               </Typography>
@@ -534,7 +551,7 @@ export default function DashboardPage() {
               </Button>
             </Box>
             {continueReading.length > 0 ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: { xs: 1.5, md: 2 } }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: { xs: 1.5, md: 2 } }}>
                 {continueReading.map((book) => {
                   const contentId = book.content_id || book.id;
                   const fmt = String(book.format || '').toLowerCase();

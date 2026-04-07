@@ -55,7 +55,7 @@ function SectionCard({ icon, title, subtitle, children }) {
         mb: 3,
       }}
     >
-      <Box sx={{ px: 3, py: 2.5, display: 'flex', alignItems: 'flex-start', gap: 2, borderBottom: `1px solid ${surfaceVariant}` }}>
+      <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 2.5 }, display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, md: 2 }, borderBottom: `1px solid ${surfaceVariant}` }}>
         <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: `${primary}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {React.cloneElement(icon, { sx: { fontSize: 20, color: primary } })}
         </Box>
@@ -64,7 +64,7 @@ function SectionCard({ icon, title, subtitle, children }) {
           <Typography sx={{ fontSize: '0.82rem', color: textMuted, mt: 0.25 }}>{subtitle}</Typography>
         </Box>
       </Box>
-      <Box sx={{ px: 3, py: 3 }}>{children}</Box>
+      <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 } }}>{children}</Box>
     </Paper>
   );
 }
@@ -250,17 +250,40 @@ export default function SecurityPage() {
     <Box sx={{ minHeight: '100vh', bgcolor: bgLight, display: 'flex' }}>
       <UserSpaceSidebar user={user} activeKey="security" />
 
-      <Box sx={{ flex: 1, px: { xs: 2, md: 4 }, py: 4, maxWidth: 760, mx: 'auto', width: '100%' }}>
+      <Box sx={{ flex: 1, px: { xs: 1.25, sm: 2, md: 4 }, py: { xs: 1.5, md: 4 }, maxWidth: 760, mx: 'auto', width: '100%' }}>
         <Box sx={{ mb: 4 }}>
           <Typography
             variant="h1"
-            sx={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: { xs: '2rem', md: '2.6rem' }, fontWeight: 800, color: textMain, lineHeight: 1.2 }}
+            sx={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: { xs: '1.85rem', sm: '2rem', md: '2.6rem' }, fontWeight: 800, color: textMain, lineHeight: 1.2 }}
           >
             Sécurité
           </Typography>
           <Typography sx={{ fontSize: '0.95rem', color: textMuted, mt: 0.5 }}>
             Gérez votre mot de passe, la double authentification et les accès à votre compte.
           </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: { xs: 'grid', md: 'none' },
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 1,
+            mb: 2.5,
+          }}
+        >
+          {[
+            { label: '2FA', value: mfaEnabled ? 'Activee' : 'Inactive' },
+            { label: 'Compte', value: user?.email ? 'Protege' : 'Session' },
+          ].map((item) => (
+            <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {item.label}
+              </Typography>
+              <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: textMain, mt: 0.3 }}>
+                {item.value}
+              </Typography>
+            </Paper>
+          ))}
         </Box>
 
         {/* ── Mot de passe ─────────────────────────────── */}
@@ -315,7 +338,7 @@ export default function SecurityPage() {
               type="submit"
               variant="contained"
               disabled={!pwdForm.current || !pwdForm.next || !pwdForm.confirm || pwdLoading}
-              sx={{ alignSelf: 'flex-start', borderRadius: '10px', textTransform: 'none', fontWeight: 600, bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }}
+              sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' }, borderRadius: '10px', textTransform: 'none', fontWeight: 600, bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }}
             >
               {pwdLoading ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : 'Mettre à jour le mot de passe'}
             </Button>
@@ -360,6 +383,7 @@ export default function SecurityPage() {
                   borderRadius: '8px',
                   textTransform: 'none',
                   fontWeight: 600,
+                  width: { xs: '100%', sm: 'auto' },
                   ...(mfaEnabled
                     ? { borderColor: '#c0392b', color: '#c0392b', '&:hover': { bgcolor: '#fdf0ef', borderColor: '#c0392b' } }
                     : { bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }),

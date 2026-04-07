@@ -22,7 +22,7 @@ import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
 import ePub from 'epubjs';
 import tokens from '../config/tokens';
-import papyriMark from '../assets/papyri-mark.png';
+import papyriMark from '../assets/papyri-logo-gold.png';
 import JSZip from 'jszip';
 import * as pdfjsLib from 'pdfjs-dist';
 

@@ -68,11 +68,11 @@ function RingCard({ title, value, hint, pct }) {
     <Paper
       elevation={0}
       sx={{
-        p: 3,
+        p: { xs: 2, md: 3 },
         borderRadius: 4,
         border: '1px solid #ece7dd',
         background: '#ffffff',
-        minHeight: 220,
+        minHeight: { xs: 190, md: 220 },
       }}
     >
       <Typography sx={{ fontWeight: 700, color: '#2e2e2e', mb: 2 }}>{title}</Typography>
@@ -98,7 +98,7 @@ function RingCard({ title, value, hint, pct }) {
               lineHeight: 1.1,
             }}
           >
-            <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: '#1e1e1e' }}>{value}</Typography>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.55rem', md: '1.9rem' }, color: '#1e1e1e' }}>{value}</Typography>
           </Box>
         </Box>
       </Box>
@@ -324,7 +324,7 @@ export default function SubscriptionPage() {
     <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', display: 'flex' }}>
       <UserSpaceSidebar user={user} activeKey="subscription" subscriptionLabel={subscriptionLabel} />
 
-      <Box sx={{ flex: 1, p: { xs: 2, md: 4 } }}>
+      <Box sx={{ flex: 1, p: { xs: 1.25, sm: 2, md: 4 } }}>
         <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
           <Stack
             direction={{ xs: 'column', md: 'row' }}
@@ -338,15 +338,35 @@ export default function SubscriptionPage() {
               </Typography>
               <Typography sx={{ color: '#918a80' }}>Gérez votre plan, suivez votre utilisation et consultez l'historique de facturation.</Typography>
             </Box>
-            <Stack direction="row" spacing={1.2}>
-              <Button variant="outlined" sx={{ borderColor: '#d7d7d7', color: '#555', textTransform: 'none', borderRadius: 3 }} onClick={loadData}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} sx={{ width: { xs: '100%', md: 'auto' } }}>
+              <Button variant="outlined" sx={{ borderColor: '#d7d7d7', color: '#555', textTransform: 'none', borderRadius: 3, width: { xs: '100%', sm: 'auto' } }} onClick={loadData}>
                 Actualiser
               </Button>
-              <Button variant="contained" sx={{ bgcolor: '#f1a10a', textTransform: 'none', borderRadius: 3, '&:hover': { bgcolor: '#d9900a' } }} onClick={() => navigate('/pricing')}>
+              <Button variant="contained" sx={{ bgcolor: '#f1a10a', textTransform: 'none', borderRadius: 3, width: { xs: '100%', sm: 'auto' }, '&:hover': { bgcolor: '#d9900a' } }} onClick={() => navigate('/pricing')}>
                 Changer de plan
               </Button>
             </Stack>
           </Stack>
+
+          <Box
+            sx={{
+              display: { xs: 'grid', lg: 'none' },
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: 1,
+              mb: 2,
+            }}
+          >
+            {[
+              { label: 'Plan', value: hasActive ? 'Actif' : 'Inactif' },
+              { label: 'Sieges', value: `${activeMembersCount}/${usersLimit}` },
+              { label: 'Bonus', value: `${bonusAvailableTotal}` },
+            ].map((item) => (
+              <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: '1px solid #ece7dd' }}>
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#8a8175', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</Typography>
+                <Typography sx={{ mt: 0.25, fontWeight: 800, fontSize: '1rem', color: '#1f1f1f' }}>{item.value}</Typography>
+              </Paper>
+            ))}
+          </Box>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
@@ -382,7 +402,7 @@ export default function SubscriptionPage() {
                   </Stack>
                 </Box>
               </Stack>
-              <Box sx={{ minWidth: 170, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 } }}>
+              <Box sx={{ minWidth: { md: 170 }, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 } }}>
                 <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>PROCHAIN PAIEMENT</Typography>
                 <Typography sx={{ fontSize: '2.1rem', color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1 }}>
                   {subscription ? formatMoney(subscription.amount, subscription.currency || 'USD') : '-'}
@@ -416,7 +436,7 @@ export default function SubscriptionPage() {
           </Paper>
 
           {/* Usage ring cards */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mb: 2.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2, mb: 2.5 }}>
             <RingCard title="Déblocages texte" value={`${textUsed}`} hint={`${textUsed} sur ${textQuota} ce cycle`} pct={progressValue(textUsed, textQuota)} />
             <RingCard title="Appareils actifs" value={`${Math.min(activeMembersCount, usersLimit)}`} hint={`${activeMembersCount} membres actifs sur ${usersLimit}`} pct={progressValue(activeMembersCount, usersLimit)} />
             <RingCard title="Crédits bonus" value={`${bonusAvailableTotal}`} hint="Crédits bonus restants" pct={progressValue(bonusAvailableTotal, Math.max(1, usageData.bonus_quota || bonusAvailableTotal || 1))} />
@@ -426,7 +446,7 @@ export default function SubscriptionPage() {
             {/* Left panel */}
             <Stack spacing={2}>
               {/* Active Perks + Change Plan */}
-              <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid #ece7dd' }}>
+              <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
                 <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>Avantages actifs</Typography>
                 <Stack spacing={1.2}>
                   <Typography sx={{ color: '#4f4f4f' }}>- Réduction livres payants: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
@@ -447,7 +467,7 @@ export default function SubscriptionPage() {
                     label="Nouveau plan"
                     value={changePlanId}
                     onChange={(e) => setChangePlanId(e.target.value)}
-                    sx={{ minWidth: 200, flex: 1 }}
+                    sx={{ minWidth: { sm: 200 }, flex: 1 }}
                   >
                     {availablePlanOptions.map((plan) => (
                       <MenuItem key={plan.id} value={plan.id}>
@@ -476,7 +496,7 @@ export default function SubscriptionPage() {
 
               {/* Family management — only when family plan */}
               {isFamilyPlan && (
-                <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid #ece7dd' }}>
+                <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
                     <Users size={18} color="#f1a10a" />
                     <Typography sx={{ fontWeight: 800, color: '#262626', fontSize: '1rem' }}>
@@ -495,7 +515,7 @@ export default function SubscriptionPage() {
                     <>
                       <Typography sx={{ fontWeight: 700, color: '#444', fontSize: '0.88rem', mb: 1 }}>Places</Typography>
                       <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2.5, borderColor: '#ece7dd', bgcolor: '#fafafa' }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={1.2}>
                           <Box>
                             <Typography sx={{ fontWeight: 700, color: '#333', fontSize: '0.9rem' }}>
                               {usersLimit} place{usersLimit > 1 ? 's' : ''} au total
@@ -689,11 +709,50 @@ export default function SubscriptionPage() {
 
             {/* Right panel — invoices */}
             <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid #ece7dd', overflow: 'hidden', alignSelf: 'start' }}>
-              <Box sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #efefef' }}>
+              <Box sx={{ p: { xs: 2, md: 2.5 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #efefef' }}>
                 <Typography sx={{ fontWeight: 800, color: '#262626' }}>Historique de facturation</Typography>
                 <Typography sx={{ color: '#f1a10a', fontWeight: 700 }}>Tout voir</Typography>
               </Box>
-              <Box sx={{ overflowX: 'auto' }}>
+              <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1.5 }}>
+                <Stack spacing={1}>
+                  {(payments || []).slice(0, 8).map((p) => {
+                    const ptLabel = {
+                      subscription_initial: 'Souscription',
+                      subscription_renewal: 'Renouvellement',
+                      extra_seat: 'Place supplémentaire',
+                      content_unlock: 'Achat contenu',
+                    }[p.metadata?.payment_type] || 'Abonnement';
+                    const isBusy = Boolean(invoiceBusy[p.id]);
+                    const canDownload = p.status === 'succeeded';
+                    return (
+                      <Paper key={p.id} variant="outlined" sx={{ p: 1.5, borderRadius: 3, borderColor: '#ece7dd' }}>
+                        <Stack spacing={0.5}>
+                          <Typography sx={{ fontSize: '0.76rem', fontWeight: 700, color: '#8a8175', textTransform: 'uppercase' }}>
+                            {formatDate(p.paid_at || p.created_at)}
+                          </Typography>
+                          <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: '#2d2d2d' }}>{ptLabel}</Typography>
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography sx={{ fontSize: '0.9rem', color: '#3d3d3d' }}>{formatMoney(p.amount, p.currency || 'USD')}</Typography>
+                            <Button
+                              size="small"
+                              variant="text"
+                              disabled={!canDownload || isBusy}
+                              onClick={canDownload ? () => handleDownloadInvoice(p.id) : undefined}
+                              sx={{ textTransform: 'none', minWidth: 0, px: 0.5 }}
+                            >
+                              {isBusy ? <CircularProgress size={14} /> : 'Facture'}
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+                  {payments.length === 0 && (
+                    <Typography sx={{ color: '#8c8c8c', px: 0.5 }}>Aucun paiement pour le moment.</Typography>
+                  )}
+                </Stack>
+              </Box>
+              <Box sx={{ overflowX: 'auto', display: { xs: 'none', sm: 'block' } }}>
                 <Box sx={{ minWidth: 500 }}>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 0.6fr', px: 2.5, py: 1.3, bgcolor: '#fafafa', color: '#7f7f7f', fontSize: '0.78rem', fontWeight: 700 }}>
                     <Box>DATE</Box>
