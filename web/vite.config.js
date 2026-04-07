@@ -18,9 +18,6 @@ export default defineConfig({
           if (id.includes('pdfjs-dist')) {
             return 'pdf-vendor';
           }
-          if (id.includes('epubjs') || id.includes('jszip')) {
-            return 'reader-vendor';
-          }
           if (id.includes('@supabase') || id.includes('firebase')) {
             return 'backend-vendor';
           }

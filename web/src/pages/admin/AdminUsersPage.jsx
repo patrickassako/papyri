@@ -23,9 +23,6 @@ import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import tokens from '../../config/tokens';
 import * as adminService from '../../services/admin.service';
 import * as authService from '../../services/auth.service';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import papyriExportLogoUrl from '../../assets/papyri-export-logo.jpg';
 
 const C = { primary: tokens.colors.primary, green: '#27ae60', red: '#e74c3c', blue: '#2196F3', indigo: tokens.colors.accent, or: tokens.colors.secondary, purple: '#7b1fa2' };
@@ -707,6 +704,7 @@ function TabHistory({ history }) {
 
 // ── Side Panel ────────────────────────────────────────────────────────────────
 function UserPanel({ userId, onClose, onUserUpdated, currentUserId, roleOpts }) {
+  const frontendUrl = (import.meta.env.VITE_FRONTEND_URL || window.location.origin).replace(/\/$/, '');
   const [data, setData]       = useState(null);
   const [unlocks, setUnlocks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -751,6 +749,22 @@ function UserPanel({ userId, onClose, onUserUpdated, currentUserId, roleOpts }) 
               </>
           }
         </Box>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => window.open(frontendUrl, '_blank', 'noopener,noreferrer')}
+          sx={{
+            borderRadius: '10px',
+            textTransform: 'none',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            borderColor: '#d9d4cb',
+            color: '#555',
+            '&:hover': { borderColor: C.primary, color: C.primary, bgcolor: '#fff8f0' },
+          }}
+        >
+          Visiter le site
+        </Button>
         <IconButton size="small" onClick={onClose}><CloseOutlinedIcon fontSize="small" /></IconButton>
       </Box>
 
@@ -985,6 +999,7 @@ export default function AdminUsersPage() {
   async function handleExportExcel() {
     setExporting('excel');
     try {
+      const XLSX = await import('xlsx');
       const all = await fetchAllForExport();
       const filterLabel = FILTERS.find(f => f.key === activeFilter)?.label || 'Tous';
       const dateStr = new Date().toLocaleDateString('fr-FR');
@@ -1016,6 +1031,10 @@ export default function AdminUsersPage() {
   async function handleExportPDF() {
     setExporting('pdf');
     try {
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
       const [all, logoBase64] = await Promise.all([fetchAllForExport(), loadLogoBase64()]);
       const rows = all.map(userToRow);
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
