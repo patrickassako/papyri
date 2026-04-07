@@ -41,6 +41,7 @@ export default function FamilyProfilePickerPage() {
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [submittingPin, setSubmittingPin] = useState(false);
+  const [selectingProfileId, setSelectingProfileId] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -67,6 +68,7 @@ export default function FamilyProfilePickerPage() {
   }, [profiles.length, subscriptionMeta, t]);
 
   const handleSelect = async (profile) => {
+    if (selectingProfileId || submittingPin) return;
     setError('');
     if (profile?.pin_enabled) {
       setPin('');
@@ -76,16 +78,19 @@ export default function FamilyProfilePickerPage() {
     }
 
     try {
+      setSelectingProfileId(profile.id);
       await familyService.selectProfile(profile.id);
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err.message || t('familyPicker.cannotSelect'));
+      setSelectingProfileId('');
     }
   };
 
   const handlePinSubmit = async () => {
     if (!pinDialog.profile) return;
     setSubmittingPin(true);
+    setSelectingProfileId(pinDialog.profile.id);
     setPinError('');
     try {
       await familyService.selectProfile(pinDialog.profile.id, pin);
@@ -93,6 +98,7 @@ export default function FamilyProfilePickerPage() {
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setPinError(err.message || t('familyPicker.pinError'));
+      setSelectingProfileId('');
     } finally {
       setSubmittingPin(false);
     }
@@ -145,7 +151,9 @@ export default function FamilyProfilePickerPage() {
                   p: 2,
                   borderRadius: 4,
                   border: '1px solid #ece7dd',
-                  cursor: 'pointer',
+                  cursor: selectingProfileId ? 'progress' : 'pointer',
+                  opacity: selectingProfileId && selectingProfileId !== profile.id ? 0.6 : 1,
+                  pointerEvents: selectingProfileId ? 'none' : 'auto',
                   transition: 'transform .18s ease, border-color .18s ease, box-shadow .18s ease',
                   '&:hover': {
                     transform: 'translateY(-2px)',
@@ -171,6 +179,11 @@ export default function FamilyProfilePickerPage() {
                 <Typography sx={{ fontWeight: 800, color: '#1f1f1f', textAlign: 'center', mb: 0.5 }}>
                   {profile.name}
                 </Typography>
+                {selectingProfileId === profile.id && (
+                  <Box sx={{ display: 'grid', placeItems: 'center', my: 1 }}>
+                    <CircularProgress size={20} />
+                  </Box>
+                )}
                 <Stack direction="row" spacing={0.8} justifyContent="center" flexWrap="wrap">
                   {profile.is_owner_profile && (
                     <Typography sx={{ fontSize: '0.72rem', color: '#9b6a00', fontWeight: 700 }}>{t('familyPicker.owner')}</Typography>
@@ -191,7 +204,16 @@ export default function FamilyProfilePickerPage() {
         )}
       </Stack>
 
-      <Dialog open={pinDialog.open} onClose={() => !submittingPin && setPinDialog({ open: false, profile: null })} fullWidth maxWidth="xs">
+      <Dialog
+        open={pinDialog.open}
+        onClose={() => {
+          if (submittingPin) return;
+          setPinDialog({ open: false, profile: null });
+          setSelectingProfileId('');
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
         <DialogTitle>{t('familyPicker.pinDialogTitle')}</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#6f6559', mb: 2 }}>
@@ -208,7 +230,15 @@ export default function FamilyProfilePickerPage() {
           {pinError && <Alert severity="error" sx={{ mt: 2 }}>{pinError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setPinDialog({ open: false, profile: null })} disabled={submittingPin}>{t('familyPicker.cancel')}</Button>
+          <Button
+            onClick={() => {
+              setPinDialog({ open: false, profile: null });
+              setSelectingProfileId('');
+            }}
+            disabled={submittingPin}
+          >
+            {t('familyPicker.cancel')}
+          </Button>
           <Button variant="contained" onClick={handlePinSubmit} disabled={submittingPin || pin.length < 4} sx={{ bgcolor: '#f1a10a', '&:hover': { bgcolor: '#d9900a' } }}>
             {submittingPin ? t('familyPicker.verifying') : t('familyPicker.continue')}
           </Button>

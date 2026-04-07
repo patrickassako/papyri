@@ -38,7 +38,6 @@ import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
 import FamilyProfilesManager from '../components/FamilyProfilesManager';
 import { useCurrency } from '../hooks/useCurrency';
-import { formatMinorUnits } from '../services/currency.service';
 
 const MAX_FAMILY_SEATS = 10;
 
@@ -104,7 +103,7 @@ export default function SubscriptionPage() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
-  const { formatPrice: formatLocalPrice } = useCurrency();
+  const { formatPrice: formatLocalPrice, formatFrom: formatMoneyFromSource } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -147,7 +146,7 @@ export default function SubscriptionPage() {
   const currentPlan = plans.find((p) => p.id === subscription?.plan_id);
   const extraUserPriceCents = currentPlan?.extraUserPriceCents || 600;
   const minFamilyMembers = currentPlan?.includedUsers || 3;
-  const formatDirectMoney = (cents, currency = 'EUR') => formatMinorUnits(cents, currency);
+  const formatDirectMoney = (cents, currency = 'EUR') => formatMoneyFromSource(cents, currency);
   const loadData = async () => {
     setLoading(true);
     setError('');

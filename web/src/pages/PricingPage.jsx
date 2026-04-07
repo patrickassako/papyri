@@ -58,7 +58,7 @@ function planCta(slug, t) {
   return t('pricing.chooseBasic');
 }
 
-function planFeatures(plan, formatDirectMoney, t) {
+function planFeatures(plan, formatMoney, t) {
   const features = [
     t('pricing.textBooksQuota', { n: plan.textQuotaPerUser || 0 }),
     t('pricing.audioBooksQuota', { n: plan.audioQuotaPerUser || 0 }),
@@ -68,7 +68,12 @@ function planFeatures(plan, formatDirectMoney, t) {
 
   if ((plan.includedUsers || 1) > 1) {
     features.unshift(t('pricing.includedUsers', { n: plan.includedUsers }));
-    features.push(t('pricing.extraUser', { price: formatDirectMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency) }));
+    features.push(t('pricing.extraUser', {
+      price: formatMoney(
+        plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0,
+        plan.localizedCurrency ?? plan.currency,
+      ),
+    }));
   }
 
   if (plan.bonusQuantityPerUser > 0) {
@@ -151,7 +156,6 @@ function MemberSelector({ count, min, max, onChange }) {
 
 function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange, localCurrency, convertFromEUR, formatLocalFromEUR }) {
   const { t } = useTranslation();
-  const formatDirectMoney = React.useCallback((cents, currency) => formatMinorUnits(cents, currency || 'EUR'), []);
   const isPremium = getPlanFamilyKey(plan) === 'personal';
   const isFamily = getPlanFamilyKey(plan) === 'family';
 
@@ -179,6 +183,10 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
   const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
   const computedPriceCents = basePriceCents + extraMembers * extraUserPriceCents;
+  const formatDisplayMoney = React.useCallback(
+    (cents) => formatMinorUnits(cents, displayCurrency),
+    [displayCurrency],
+  );
 
   return (
     <Box
@@ -228,27 +236,27 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
       <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5, flexWrap: 'wrap' }}>
         <Typography sx={{ fontSize: { xs: '2rem', sm: '2.4rem' }, lineHeight: 1, fontWeight: 900, overflowWrap: 'anywhere' }}>
-          {formatDirectMoney(computedPriceCents, displayCurrency)}
+          {formatDisplayMoney(computedPriceCents)}
         </Typography>
         <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>{t('pricing.perDays', { n: plan.durationDays })}</Typography>
       </Box>
 
       {isLocalized && (
         <Typography sx={{ mt: 0.4, fontSize: '0.78rem', color: '#9a8c7f', overflowWrap: 'anywhere' }}>
-          ≈ {formatDirectMoney(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
+          ≈ {formatMinorUnits(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
         </Typography>
       )}
 
       {isFamily && extraMembers > 0 && (
         <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
-          {formatDirectMoney(basePriceCents, displayCurrency)} base · +{formatDirectMoney(extraUserPriceCents, displayCurrency)} × {extraMembers}
+          {formatDisplayMoney(basePriceCents)} base · +{formatDisplayMoney(extraUserPriceCents)} × {extraMembers}
         </Typography>
       )}
 
       {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
           {t('pricing.soit', { price: isLocalized
-            ? formatDirectMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))), displayCurrency)
+            ? formatDisplayMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))))
             : formatLocalFromEUR(plan.monthlyEquivalentCents) })}
         </Typography>
       ) : null}
@@ -273,7 +281,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
       </Button>
 
       <Stack spacing={1.7} sx={{ mt: 2.2 }}>
-        {planFeatures(plan, formatDirectMoney, t).map((feature) => (
+        {planFeatures(plan, (cents) => formatDisplayMoney(cents), t).map((feature) => (
           <Box key={feature} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
             <CheckCircleOutlineIcon sx={{ color: isPremium ? primary : isFamily ? '#2563eb' : '#30a46c', fontSize: 20 }} />
             <Typography sx={{ fontSize: '0.9rem', color: '#1c160d' }}>{feature}</Typography>
