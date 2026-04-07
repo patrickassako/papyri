@@ -26,6 +26,7 @@ import { authFetch } from '../services/auth.service';
 import { contentsService } from '../services/contents.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
+import { useCurrency } from '../hooks/useCurrency';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -251,6 +252,7 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
 }
 
 export default function DashboardPage() {
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(emptyStats);
@@ -420,7 +422,7 @@ export default function DashboardPage() {
                   Passez à l'abonnement pour accéder à tout le catalogue
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Ebooks + Audio · 5€/mois ou 50€/an · Annulez à tout moment
+                  Ebooks + Audio · {formatPrice(500)}/mois ou {formatPrice(5000)}/an · Annulez à tout moment
                 </Typography>
               </Box>
             </Box>

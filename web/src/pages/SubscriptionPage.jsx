@@ -35,19 +35,8 @@ import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
-
-function toMajorAmount(amount) {
-  const value = Number(amount || 0);
-  if (!Number.isFinite(value)) return 0;
-  if (Number.isInteger(value) && Math.abs(value) >= 1000) {
-    return value / 100;
-  }
-  return value;
-}
-
-function formatMoney(amount, currency = 'USD') {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(toMajorAmount(amount));
-}
+import { useCurrency } from '../hooks/useCurrency';
+import { formatMinorUnits } from '../services/currency.service';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -109,6 +98,7 @@ function RingCard({ title, value, hint, pct }) {
 
 export default function SubscriptionPage() {
   const navigate = useNavigate();
+  const { formatPrice: formatLocalPrice } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -157,6 +147,7 @@ export default function SubscriptionPage() {
   const currentPlan = plans.find((p) => p.id === subscription?.plan_id);
   const extraUserPriceCents = currentPlan?.extraUserPriceCents || 600;
   const minFamilyMembers = currentPlan?.includedUsers || 3;
+  const formatDirectMoney = (cents, currency = 'EUR') => formatMinorUnits(cents, currency);
 
   const loadData = async () => {
     setLoading(true);
@@ -405,7 +396,7 @@ export default function SubscriptionPage() {
               <Box sx={{ minWidth: { md: 170 }, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 } }}>
                 <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>PROCHAIN PAIEMENT</Typography>
                 <Typography sx={{ fontSize: '2.1rem', color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1 }}>
-                  {subscription ? formatMoney(subscription.amount, subscription.currency || 'USD') : '-'}
+                  {subscription ? formatDirectMoney(subscription.amount, subscription.currency || 'USD') : '-'}
                 </Typography>
                 <Typography sx={{ color: '#b5770c', fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }} onClick={() => navigate('/pricing')}>
                   Gérer mon plan
@@ -471,7 +462,7 @@ export default function SubscriptionPage() {
                   >
                     {availablePlanOptions.map((plan) => (
                       <MenuItem key={plan.id} value={plan.id}>
-                        {plan.name} ({formatMoney((plan.basePriceCents || 0) / 100, plan.currency || 'USD')})
+                        {plan.name} ({formatLocalPrice(plan.basePriceCents || 0)})
                       </MenuItem>
                     ))}
                   </TextField>
@@ -521,14 +512,14 @@ export default function SubscriptionPage() {
                               {usersLimit} place{usersLimit > 1 ? 's' : ''} au total
                             </Typography>
                             <Typography sx={{ color: '#999', fontSize: '0.8rem' }}>
-                              +{formatMoney(extraUserPriceCents / 100, subscription?.currency || 'USD')}/place supplémentaire/mois
+                              +{formatLocalPrice(extraUserPriceCents)}/place supplémentaire/mois
                             </Typography>
                           </Box>
                           <Stack direction="row" spacing={1} alignItems="center">
                             <Typography sx={{ fontWeight: 800, fontSize: '1.3rem', minWidth: 32, textAlign: 'center', color: '#1f1f1f' }}>
                               {usersLimit}
                             </Typography>
-                            <Tooltip title={`Ajouter une place — ${formatMoney(extraUserPriceCents / 100, subscription?.currency || 'USD')}/mois`}>
+                            <Tooltip title={`Ajouter une place — ${formatLocalPrice(extraUserPriceCents)}/mois`}>
                               <span>
                                 <IconButton
                                   size="small"
@@ -732,7 +723,7 @@ export default function SubscriptionPage() {
                           </Typography>
                           <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: '#2d2d2d' }}>{ptLabel}</Typography>
                           <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography sx={{ fontSize: '0.9rem', color: '#3d3d3d' }}>{formatMoney(p.amount, p.currency || 'USD')}</Typography>
+                            <Typography sx={{ fontSize: '0.9rem', color: '#3d3d3d' }}>{formatDirectMoney(p.amount, p.currency || 'USD')}</Typography>
                             <Button
                               size="small"
                               variant="text"
@@ -773,7 +764,7 @@ export default function SubscriptionPage() {
                       <Box key={p.id} sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 0.6fr', px: 2.5, py: 1.5, borderTop: '1px solid #f1f1f1', alignItems: 'center' }}>
                         <Typography sx={{ color: '#565656', fontSize: '0.9rem' }}>{formatDate(p.paid_at || p.created_at)}</Typography>
                         <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{ptLabel}</Typography>
-                        <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{formatMoney(p.amount, p.currency || 'USD')}</Typography>
+                        <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{formatDirectMoney(p.amount, p.currency || 'USD')}</Typography>
                         <Tooltip title={canDownload ? 'Télécharger la facture' : 'Paiement en attente'} placement="top">
                           <Box
                             component="span"
@@ -819,7 +810,7 @@ export default function SubscriptionPage() {
             {usersLimit} → <b>{usersLimit + 1} places</b>
           </Typography>
           <Typography sx={{ color: '#b5770c', fontWeight: 700, fontSize: '1rem', mb: 2.5 }}>
-            +{formatMoney(extraUserPriceCents / 100, subscription?.currency || 'USD')} / mois
+            +{formatLocalPrice(extraUserPriceCents)} / mois
           </Typography>
           <Stack spacing={1.5}>
             <Button

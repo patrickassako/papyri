@@ -3,6 +3,7 @@ import {
   convertCents,
   currencyLabel,
   detectCurrency,
+  formatMinorUnits,
   formatInCurrency,
   isNonEuro,
 } from '../services/currency.service';
@@ -45,6 +46,20 @@ export function useCurrency() {
     [currency],
   );
 
+  const formatFrom = useCallback(
+    (sourceCents, sourceCurrency = 'EUR') => {
+      const normalizedSourceCurrency = sourceCurrency || 'EUR';
+      if (normalizedSourceCurrency === currency) {
+        return formatMinorUnits(sourceCents, normalizedSourceCurrency);
+      }
+      return formatMinorUnits(
+        convertCents(sourceCents, normalizedSourceCurrency, currency),
+        currency,
+      );
+    },
+    [currency],
+  );
+
   const convertFromEUR = useCallback(
     (eurCents) => convertCents(eurCents, 'EUR', currency),
     [currency],
@@ -61,6 +76,22 @@ export function useCurrency() {
     [currency],
   );
 
+  const formatBothFrom = useCallback(
+    (sourceCents, sourceCurrency = 'EUR') => {
+      const normalizedSourceCurrency = sourceCurrency || 'EUR';
+      const local = formatFrom(sourceCents, normalizedSourceCurrency);
+      if (!isNonEuro(currency)) return { local, eur: null };
+      return {
+        local,
+        eur: formatMinorUnits(
+          convertCents(sourceCents, normalizedSourceCurrency, 'EUR'),
+          'EUR',
+        ),
+      };
+    },
+    [currency, formatFrom],
+  );
+
   return {
     currency,
     country,
@@ -68,7 +99,9 @@ export function useCurrency() {
     isLocalized: isNonEuro(currency),
     label: currencyLabel(currency),
     formatPrice,
+    formatFrom,
     convertFromEUR,
     formatBoth,
+    formatBothFrom,
   };
 }

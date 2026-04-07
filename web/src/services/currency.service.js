@@ -170,18 +170,24 @@ export function convertCents(centsInSource, fromCurrency = 'EUR', toCurrency = '
  */
 export function formatInCurrency(centsEUR, toCurrency = 'EUR') {
   const converted = convertCents(centsEUR, 'EUR', toCurrency);
-  const amount = converted / 100;
-  const noDecimal = NO_DECIMAL_CURRENCIES.has(toCurrency);
+  return formatMinorUnits(converted, toCurrency);
+}
+
+/**
+ * Formate un montant déjà exprimé dans sa devise source.
+ */
+export function formatMinorUnits(cents, currency = 'EUR') {
+  const amount = Number(cents || 0) / 100;
+  const noDecimal = NO_DECIMAL_CURRENCIES.has(currency);
   try {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: toCurrency,
+      currency,
       minimumFractionDigits: noDecimal ? 0 : (amount % 1 === 0 ? 0 : 2),
       maximumFractionDigits: noDecimal ? 0 : 2,
     }).format(amount);
   } catch (_) {
-    // Fallback si la devise n'est pas supportée par Intl
-    return `${Math.round(amount).toLocaleString('fr-FR')} ${toCurrency}`;
+    return `${Math.round(amount).toLocaleString('fr-FR')} ${currency}`;
   }
 }
 

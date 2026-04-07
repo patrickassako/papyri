@@ -10,21 +10,15 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { Headphones, Book } from 'lucide-react';
-
-function formatMoney(cents, currency = 'USD') {
-  const amount = Number(cents || 0) / 100;
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-}
+import { useCurrency } from '../hooks/useCurrency';
+import { formatMinorUnits } from '../services/currency.service';
 
 /**
  * Carte de contenu pour le catalogue
  */
 export default function ContentCard({ content, hasActiveSubscription = false }) {
   const navigate = useNavigate();
+  const { formatFrom } = useCurrency();
 
   const handleClick = () => {
     navigate(`/catalogue/${content.id}`);
@@ -142,6 +136,11 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
             const baseCents = content.localized_price?.price_cents ?? content.price_cents;
             const currency = content.localized_price?.currency || content.price_currency || 'USD';
             if (!baseCents || Number(baseCents) <= 0) return null;
+            const renderPrice = (cents) => (
+              content.localized_price?.price_cents != null || currency !== 'EUR'
+                ? formatMinorUnits(cents, currency)
+                : formatFrom(cents, 'EUR')
+            );
 
             const discountPct = Number(
               (hasActiveSubscription ? content.subscriber_discount_percent : 0) ?? 0
@@ -156,7 +155,7 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
             return (
               <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                 <Chip
-                  label={formatMoney(hasDiscount ? discountedCents : baseCents, currency)}
+                  label={renderPrice(hasDiscount ? discountedCents : baseCents)}
                   size="small"
                   sx={{
                     fontWeight: 700,
@@ -167,7 +166,7 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
                 {hasDiscount && (
                   <>
                     <Typography variant="caption" sx={{ textDecoration: 'line-through', color: 'text.disabled' }}>
-                      {formatMoney(baseCents, currency)}
+                      {renderPrice(baseCents)}
                     </Typography>
                     <Chip
                       label={`-${discountPct}%`}

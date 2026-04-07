@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -81,6 +81,30 @@ function RouteLoader() {
   );
 }
 
+function ScrollToTop() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.history) return;
+    window.history.scrollRestoration = 'manual';
+  }, []);
+
+  useEffect(() => {
+    const path = location.pathname || '';
+    const preserveScroll = path.startsWith('/read/')
+      || path.startsWith('/pdf/')
+      || path.startsWith('/listen/');
+
+    if (preserveScroll) return;
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 function useAuth() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -158,6 +182,7 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AudioProvider>
+          <ScrollToTop />
           <Suspense fallback={<RouteLoader />}>
             <Routes>
             {/* Public routes */}

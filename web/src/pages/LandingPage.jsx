@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { contentsService } from '../services/contents.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
+import { useCurrency } from '../hooks/useCurrency';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
@@ -176,6 +177,7 @@ function SectionHeader({ icon, title, subtitle, onViewAll }) {
 
 /* ═══ MAIN COMPONENT ══════════════════════════════════════════ */
 export default function LandingPage() {
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -626,10 +628,10 @@ export default function LandingPage() {
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5, mb: 4, flexWrap: 'wrap' }}>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>5 € / mois</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>{formatPrice(500)} / mois</Typography>
                   </Box>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>50 € / an</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>{formatPrice(5000)} / an</Typography>
                   </Box>
                 </Box>
                 <Button variant="contained" size="large"

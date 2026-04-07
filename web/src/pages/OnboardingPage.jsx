@@ -13,6 +13,7 @@ import PhoneAndroidOutlinedIcon from '@mui/icons-material/PhoneAndroidOutlined';
 import WifiOffOutlinedIcon from '@mui/icons-material/WifiOffOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import * as authService from '../services/auth.service';
+import { useCurrency } from '../hooks/useCurrency';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
@@ -45,6 +46,7 @@ const AVANTAGES = [
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const [firstName, setFirstName] = useState('');
 
   useEffect(() => {
@@ -154,11 +156,11 @@ export default function OnboardingPage() {
             Abonnement individuel
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.5, my: 1 }}>
-            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent }}>5€</Typography>
+            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent }}>{formatPrice(500)}</Typography>
             <Typography variant="body1" color="text.secondary">/mois</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-            ou <strong>50€/an</strong> — 2 mois offerts
+            ou <strong>{formatPrice(5000)}/an</strong> — 2 mois offerts
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Accès illimité · Ebooks + Audio · Web & Mobile · Mode hors-ligne

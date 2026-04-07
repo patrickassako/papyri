@@ -38,18 +38,10 @@ import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatMinorUnits } from '../services/currency.service';
 
 const primary = '#f4a825';
 const background = '#f8f7f5';
-
-function formatMoney(cents, currency = 'USD') {
-  const amount = Number(cents || 0) / 100;
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-  }).format(amount);
-}
 
 function planBadge(slug) {
   const key = getPlanFamilyKey({ slug });
@@ -65,7 +57,7 @@ function planCta(slug) {
   return 'Commencer Slow';
 }
 
-function planFeatures(plan) {
+function planFeatures(plan, formatDirectMoney) {
   const features = [
     `${plan.textQuotaPerUser || 0} livres texte par utilisateur`,
     `${plan.audioQuotaPerUser || 0} livres audio par utilisateur`,
@@ -75,7 +67,7 @@ function planFeatures(plan) {
 
   if ((plan.includedUsers || 1) > 1) {
     features.unshift(`${plan.includedUsers} utilisateurs inclus`);
-    features.push(`+ ${formatMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency)} par utilisateur supplémentaire`);
+    features.push(`+ ${formatDirectMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency)} par utilisateur supplémentaire`);
   }
 
   if (plan.bonusQuantityPerUser > 0) {
@@ -155,7 +147,8 @@ function MemberSelector({ count, min, max, onChange }) {
   );
 }
 
-function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange, localCurrency, convertFromEUR }) {
+function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange, localCurrency, convertFromEUR, formatLocalFromEUR }) {
+  const formatDirectMoney = React.useCallback((cents, currency) => formatMinorUnits(cents, currency || 'EUR'), []);
   const isPremium = getPlanFamilyKey(plan) === 'personal';
   const isFamily = getPlanFamilyKey(plan) === 'family';
 
@@ -232,26 +225,28 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
       <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
         <Typography sx={{ fontSize: '2.4rem', lineHeight: 1, fontWeight: 900 }}>
-          {formatMoney(computedPriceCents, displayCurrency)}
+          {formatDirectMoney(computedPriceCents, displayCurrency)}
         </Typography>
         <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>/ {plan.durationDays} jours</Typography>
       </Box>
 
       {isLocalized && (
         <Typography sx={{ mt: 0.4, fontSize: '0.78rem', color: '#9a8c7f' }}>
-          ≈ {formatMoney(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
+          ≈ {formatDirectMoney(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
         </Typography>
       )}
 
       {isFamily && extraMembers > 0 && (
         <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d' }}>
-          {formatMoney(basePriceCents, displayCurrency)} base · +{formatMoney(extraUserPriceCents, displayCurrency)} × {extraMembers}
+          {formatDirectMoney(basePriceCents, displayCurrency)} base · +{formatDirectMoney(extraUserPriceCents, displayCurrency)} × {extraMembers}
         </Typography>
       )}
 
       {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d' }}>
-          Soit {formatMoney(isLocalized ? Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))) : plan.monthlyEquivalentCents, displayCurrency)} / mois
+          Soit {isLocalized
+            ? formatDirectMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))), displayCurrency)
+            : formatLocalFromEUR(plan.monthlyEquivalentCents)} / mois
         </Typography>
       ) : null}
 
@@ -275,7 +270,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
       </Button>
 
       <Stack spacing={1.7} sx={{ mt: 2.2 }}>
-        {planFeatures(plan).map((feature) => (
+        {planFeatures(plan, formatDirectMoney).map((feature) => (
           <Box key={feature} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
             <CheckCircleOutlineIcon sx={{ color: isPremium ? primary : isFamily ? '#2563eb' : '#30a46c', fontSize: 20 }} />
             <Typography sx={{ fontSize: '0.9rem', color: '#1c160d' }}>{feature}</Typography>
@@ -538,9 +533,9 @@ export default function PricingPage() {
     {
       key: 'Prix',
       value: (p) => {
-        if (p.localizedPriceCents && p.localizedCurrency) return formatMoney(p.localizedPriceCents, p.localizedCurrency);
+        if (p.localizedPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedPriceCents, p.localizedCurrency);
         if (isFrontendLocalized) return formatLocalPrice(p.basePriceCents);
-        return formatMoney(p.basePriceCents, p.currency || 'EUR');
+        return formatMinorUnits(p.basePriceCents, p.currency || 'EUR');
       },
     },
     {
@@ -561,7 +556,12 @@ export default function PricingPage() {
     },
     {
       key: 'Coût utilisateur supplémentaire',
-      value: (p) => (Number(p.extraUserPriceCents || 0) > 0 ? formatMoney(p.extraUserPriceCents, p.currency) : <RemoveIcon sx={{ color: '#b9b3aa' }} />),
+      value: (p) => {
+        if (Number(p.extraUserPriceCents || 0) <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
+        if (p.localizedExtraUserPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraUserPriceCents, p.localizedCurrency);
+        if (isFrontendLocalized) return formatLocalPrice(p.extraUserPriceCents);
+        return formatMinorUnits(p.extraUserPriceCents, p.currency || 'EUR');
+      },
     },
   ];
 
@@ -694,6 +694,7 @@ export default function PricingPage() {
                   onMembersCountChange={isFamily ? setFamilyMembersCount : undefined}
                   localCurrency={localCurrency}
                   convertFromEUR={convertFromEUR}
+                  formatLocalFromEUR={formatLocalPrice}
                 />
               );
             })}
@@ -839,13 +840,13 @@ export default function PricingPage() {
                   <Typography sx={{ fontSize: '0.82rem', color: '#166534', mt: 0.3 }}>
                     Remise : {promoResult.discountType === 'percent'
                       ? `-${promoResult.discountValue}%`
-                      : `-${(promoResult.discountCents / 100).toFixed(2)} €`
+                      : `-${formatMinorUnits(promoResult.discountCents, paymentDialog.plan?.currency || 'EUR')}`
                     }
                     {' '}→ Total :{' '}
                     <strong>
-                      {(promoResult.finalAmountCents / 100).toFixed(2)} {paymentDialog.plan?.currency || 'EUR'}
+                      {formatMinorUnits(promoResult.finalAmountCents, paymentDialog.plan?.currency || 'EUR')}
                     </strong>
-                    {' '}au lieu de {(promoResult.originalAmountCents / 100).toFixed(2)} {paymentDialog.plan?.currency || 'EUR'}
+                    {' '}au lieu de {formatMinorUnits(promoResult.originalAmountCents, paymentDialog.plan?.currency || 'EUR')}
                   </Typography>
                 </Box>
               )}
