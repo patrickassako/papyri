@@ -25,28 +25,33 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import tokens from '../config/tokens';
 import NotificationBell from './NotificationBell';
+import LanguageToggle from './LanguageToggle';
 import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 import * as authService from '../services/auth.service';
-
-const navLinks = [
-  { label: 'Bibliothèque', path: '/catalogue', icon: AutoStoriesOutlinedIcon },
-  { label: 'Explorer', path: '/catalogue', icon: SearchIcon },
-  { label: 'Historique', path: '/history', icon: HistoryOutlinedIcon },
-  { label: 'Favoris', path: '/my-list', icon: FavoriteOutlinedIcon },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function TopNavBar({
   user,
-  searchPlaceholder = 'Rechercher un titre...',
+  searchPlaceholder,
   searchValue = '',
   onSearchChange,
   onSearch,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuOpen = Boolean(anchorEl);
+
+  const navLinks = [
+    { label: t('nav.library'), path: '/catalogue', icon: AutoStoriesOutlinedIcon },
+    { label: t('nav.explore'), path: '/catalogue', icon: SearchIcon },
+    { label: t('nav.history'), path: '/history', icon: HistoryOutlinedIcon },
+    { label: t('nav.favorites'), path: '/my-list', icon: FavoriteOutlinedIcon },
+  ];
+
+  const resolvedSearchPlaceholder = searchPlaceholder || t('nav.searchPlaceholder');
 
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
@@ -116,7 +121,7 @@ export default function TopNavBar({
               color: tokens.colors.onBackground.light,
               ml: -0.5,
             }}
-            aria-label="Ouvrir le menu"
+            aria-label={t('nav.openMenu')}
           >
             <MenuIcon />
           </IconButton>
@@ -163,7 +168,7 @@ export default function TopNavBar({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5, md: 2 } }}>
           <TextField
             size="small"
-            placeholder={searchPlaceholder}
+            placeholder={resolvedSearchPlaceholder}
             value={searchValue}
             onChange={(e) => onSearchChange?.(e.target.value)}
             onKeyDown={handleSearchKeyDown}
@@ -226,7 +231,7 @@ export default function TopNavBar({
         <Box sx={{ px: 2.2, py: 2, borderBottom: '1px solid #f0e8dc' }}>
           <Box component="img" src={papyriWordmark} alt="Papyri" sx={{ width: 132, height: 40, objectFit: 'contain', objectPosition: 'left center', display: 'block', cursor: 'pointer' }} onClick={() => handleMobileNav('/dashboard')} />
           <Typography sx={{ mt: 1.2, fontSize: '0.78rem', color: '#9c7e49' }}>
-            Navigation
+            {t('nav.navigation')}
           </Typography>
         </Box>
 
@@ -264,8 +269,8 @@ export default function TopNavBar({
 
         <Box sx={{ px: 1.2, py: 1.2 }}>
           {[
-            { label: 'Tableau de bord', path: '/dashboard', icon: DashboardOutlinedIcon },
-            { label: 'Mon profil', path: '/profile', icon: PersonOutlinedIcon },
+            { label: t('common.dashboard'), path: '/dashboard', icon: DashboardOutlinedIcon },
+            { label: t('common.profile'), path: '/profile', icon: PersonOutlinedIcon },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -332,7 +337,7 @@ export default function TopNavBar({
         {/* User info header */}
         <Box sx={{ px: 2, py: 1.5 }}>
           <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#3d2c1e' }}>
-            {user?.full_name || 'Utilisateur'}
+            {user?.full_name || t('common.unknown')}
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49' }}>
             {user?.email || ''}
@@ -343,29 +348,35 @@ export default function TopNavBar({
 
         <MenuItem onClick={() => handleMenuNav('/dashboard')} sx={menuItemSx}>
           <ListItemIcon><DashboardOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-          <ListItemText primary="Tableau de bord" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+          <ListItemText primary={t('common.dashboard')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
 
         <MenuItem onClick={() => handleMenuNav('/my-list')} sx={menuItemSx}>
           <ListItemIcon><FavoriteOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-          <ListItemText primary="Ma liste" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+          <ListItemText primary={t('common.myList')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
 
         <MenuItem onClick={() => handleMenuNav('/notifications')} sx={menuItemSx}>
           <ListItemIcon><NotificationsOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-          <ListItemText primary="Notifications" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+          <ListItemText primary={t('common.notifications')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
 
         <MenuItem onClick={() => handleMenuNav('/profile')} sx={menuItemSx}>
           <ListItemIcon><PersonOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-          <ListItemText primary="Mon profil" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+          <ListItemText primary={t('common.profile')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
+
+        <Divider sx={{ borderColor: '#f0e8dc' }} />
+
+        <Box sx={{ px: 2, py: 0.5 }}>
+          <LanguageToggle variant="icon" sx={{ width: '100%', justifyContent: 'flex-start' }} />
+        </Box>
 
         <Divider sx={{ borderColor: '#f0e8dc' }} />
 
         <MenuItem onClick={handleLogout} sx={{ ...menuItemSx, color: '#c0392b', '& .MuiListItemIcon-root': { color: '#c0392b' } }}>
           <ListItemIcon><LogoutIcon sx={{ fontSize: 18 }} /></ListItemIcon>
-          <ListItemText primary="Déconnexion" primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 600 }} />
+          <ListItemText primary={t('common.logout')} primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 600 }} />
         </MenuItem>
       </Menu>
     </Box>

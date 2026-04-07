@@ -8,18 +8,20 @@ import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import tokens from '../config/tokens';
-
-const navItems = [
-  { label: 'Accueil', icon: DashboardOutlined, route: '/dashboard' },
-  { label: 'Bibliothèque', icon: AutoStoriesOutlined, route: '/my-list' },
-  { label: 'Stats', icon: AnalyticsOutlined, route: '/history' },
-  { label: 'Abonnement', icon: PaymentOutlined, route: '/subscription' },
-  { label: 'Profil', icon: SettingsOutlined, route: '/profile' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function MobileBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { label: t('mobileNav.home'), icon: DashboardOutlined, route: '/dashboard' },
+    { label: t('mobileNav.library'), icon: AutoStoriesOutlined, route: '/my-list' },
+    { label: t('mobileNav.stats'), icon: AnalyticsOutlined, route: '/history' },
+    { label: t('mobileNav.subscription'), icon: PaymentOutlined, route: '/subscription' },
+    { label: t('mobileNav.settings'), icon: SettingsOutlined, route: '/profile', matchRoutes: ['/profile', '/devices', '/security'] },
+  ];
 
   return (
     <>
@@ -39,6 +41,7 @@ export default function MobileBottomNav() {
           variant="contained"
           startIcon={<LanguageOutlined sx={{ fontSize: 16 }} />}
           onClick={() => navigate('/')}
+          aria-label={t('mobileNav.visitSite')}
           sx={{
             textTransform: 'none',
             borderRadius: '999px',
@@ -53,7 +56,7 @@ export default function MobileBottomNav() {
             '&:hover': { bgcolor: tokens.colors.primaryDark },
           }}
         >
-          Visiter le site
+          {t('mobileNav.visitSite')}
         </Button>
       </Box>
 
@@ -76,8 +79,10 @@ export default function MobileBottomNav() {
       >
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.route
-            || (item.route !== '/dashboard' && location.pathname.startsWith(item.route));
+          const isActive = item.matchRoutes
+            ? item.matchRoutes.some((route) => location.pathname === route || location.pathname.startsWith(`${route}/`))
+            : location.pathname === item.route
+              || (item.route !== '/dashboard' && location.pathname.startsWith(item.route));
           return (
             <Box
               key={item.route}

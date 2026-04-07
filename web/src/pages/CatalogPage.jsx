@@ -36,12 +36,14 @@ import * as authService from '../services/auth.service';
 import tokens from '../config/tokens';
 import PublicHeader from '../components/PublicHeader';
 import TopNavBar from '../components/TopNavBar';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Page de catalogue des contenus
  */
 export default function CatalogPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
 
@@ -241,7 +243,7 @@ export default function CatalogPage() {
         ? (
           <TopNavBar
             user={user}
-            searchPlaceholder="Rechercher un titre, un auteur…"
+            searchPlaceholder={t('catalog.searchPlaceholder')}
             searchValue={searchQuery}
             onSearchChange={(v) => { setSearchQuery(v); setPage(1); }}
             onSearch={(q) => { setSearchQuery(q); setPage(1); setSearchParams((prev) => { const p = new URLSearchParams(prev); if (q) p.set('q', q); else p.delete('q'); return p; }); }}
@@ -259,15 +261,15 @@ export default function CatalogPage() {
           gutterBottom
           sx={{ fontFamily: 'Playfair Display, serif', color: 'primary.main', fontSize: { xs: '2rem', md: '3rem' } }}
         >
-          Catalogue
+          {t('catalog.title')}
         </Typography>
         <Typography variant="body1" color="text.secondary">
           {searchQuery ? (
             <>
-              <strong>{totalItems}</strong> résultat{totalItems > 1 ? 's' : ''} pour "{searchQuery}"
+              <strong>{totalItems}</strong> {t('catalog.resultsCount', { count: totalItems })} "{searchQuery}"
             </>
           ) : (
-            <>Découvrez notre collection de {totalItems} livres et livres audio</>
+            <>{t('common.seeAll')} — {totalItems} {t('catalog.ebook')}s & {t('catalog.audiobook')}s</>
           )}
         </Typography>
       </Box>
@@ -281,9 +283,9 @@ export default function CatalogPage() {
         }}
       >
         {[
-          { label: 'Titres', value: `${totalItems}` },
-          { label: 'Filtres', value: `${activeFiltersCount}` },
-          { label: 'Vue', value: searchQuery ? 'Recherche' : 'Catalogue' },
+          { label: t('catalog.title'), value: `${totalItems}` },
+          { label: t('catalog.filterBy'), value: `${activeFiltersCount}` },
+          { label: 'Vue', value: searchQuery ? t('common.search') : t('catalog.title') },
         ].map((item) => (
           <Paper key={item.label} elevation={0} sx={{ p: 1.25, borderRadius: 3, border: '1px solid #ece7dd' }}>
             <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -303,7 +305,7 @@ export default function CatalogPage() {
           <Box ref={searchRef} sx={{ position: 'relative', mb: 2 }}>
             <TextField
               fullWidth
-              placeholder="Rechercher un titre, un auteur…"
+              placeholder={t('catalog.searchPlaceholder')}
               value={searchQuery}
               onChange={handleSearchChange}
               onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
@@ -376,43 +378,43 @@ export default function CatalogPage() {
         <Grid container spacing={{ xs: 1.25, md: 2 }}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Type</InputLabel>
+              <InputLabel>{t('catalog.format')}</InputLabel>
               <Select
                 value={contentType}
-                label="Type"
+                label={t('catalog.format')}
                 onChange={(e) => updateFilter('type', e.target.value)}
               >
-                <MenuItem value="">Tous</MenuItem>
-                <MenuItem value="ebook">Ebooks</MenuItem>
-                <MenuItem value="audiobook">Livres audio</MenuItem>
+                <MenuItem value="">{t('catalog.allFormats')}</MenuItem>
+                <MenuItem value="ebook">{t('catalog.ebook')}s</MenuItem>
+                <MenuItem value="audiobook">{t('catalog.audiobook')}s</MenuItem>
               </Select>
             </FormControl>
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Langue</InputLabel>
+              <InputLabel>{t('catalog.language')}</InputLabel>
               <Select
                 value={language}
-                label="Langue"
+                label={t('catalog.language')}
                 onChange={(e) => updateFilter('lang', e.target.value)}
               >
-                <MenuItem value="">Toutes</MenuItem>
+                <MenuItem value="">{t('catalog.allLanguages')}</MenuItem>
                 <MenuItem value="fr">Français</MenuItem>
-                <MenuItem value="en">Anglais</MenuItem>
+                <MenuItem value="en">English</MenuItem>
               </Select>
             </FormControl>
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Catégorie</InputLabel>
+              <InputLabel>{t('catalog.category')}</InputLabel>
               <Select
                 value={category}
-                label="Catégorie"
+                label={t('catalog.category')}
                 onChange={(e) => updateFilter('category', e.target.value)}
               >
-                <MenuItem value="">Toutes</MenuItem>
+                <MenuItem value="">{t('catalog.allCategories')}</MenuItem>
                 {Array.isArray(categories) && categories.map((cat) => (
                   <MenuItem key={cat.id} value={cat.slug}>
                     {cat.name}
@@ -424,15 +426,15 @@ export default function CatalogPage() {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Trier par</InputLabel>
+              <InputLabel>{t('catalog.sortBy')}</InputLabel>
               <Select
                 value={sortBy}
-                label="Trier par"
+                label={t('catalog.sortBy')}
                 onChange={(e) => updateFilter('sort', e.target.value)}
               >
-                <MenuItem value="newest">Plus récents</MenuItem>
-                <MenuItem value="title">Titre (A-Z)</MenuItem>
-                <MenuItem value="popular">Populaires</MenuItem>
+                <MenuItem value="newest">{t('catalog.sortNewest')}</MenuItem>
+                <MenuItem value="title">{t('catalog.sortAlpha')}</MenuItem>
+                <MenuItem value="popular">{t('catalog.sortPopular')}</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -477,10 +479,10 @@ export default function CatalogPage() {
           <Grid size={{ xs: 12 }}>
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                Aucun contenu trouvé
+                {t('catalog.noResults')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Essayez de modifier vos critères de recherche
+                {t('catalog.noResultsHint')}
               </Typography>
             </Box>
           </Grid>

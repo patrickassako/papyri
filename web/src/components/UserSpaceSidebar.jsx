@@ -15,25 +15,30 @@ import PhotoCameraOutlined from '@mui/icons-material/PhotoCameraOutlined';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import NotificationBell from './NotificationBell';
+import LanguageToggle from './LanguageToggle';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
-
-const navItems = [
-  { label: 'Vue d\'ensemble', icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
-  { label: 'Ma bibliothèque', icon: AutoStoriesOutlined, key: 'library', route: '/my-list' },
-  { label: 'Catalogue', icon: MenuBookOutlined, key: 'catalog', route: '/library-catalog' },
-  { label: 'Statistiques', icon: AnalyticsOutlined, key: 'stats', route: '/history' },
-  { label: 'Préférences', icon: SettingsOutlined, key: 'preferences', route: '/profile' },
-  { label: 'Abonnement', icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
-  { label: 'Appareils', icon: DevicesOutlined, key: 'devices', route: '/devices' },
-  { label: 'Sécurité', icon: SecurityOutlined, key: 'security', route: '/security' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function UserSpaceSidebar({
   user,
   activeKey = 'overview',
-  subscriptionLabel = 'Abonnement actif',
+  subscriptionLabel,
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { label: t('sidebar.overview'), icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
+    { label: t('sidebar.myLibrary'), icon: AutoStoriesOutlined, key: 'library', route: '/my-list' },
+    { label: t('sidebar.catalog'), icon: MenuBookOutlined, key: 'catalog', route: '/library-catalog' },
+    { label: t('sidebar.stats'), icon: AnalyticsOutlined, key: 'stats', route: '/history' },
+    { label: t('sidebar.preferences'), icon: SettingsOutlined, key: 'preferences', route: '/profile' },
+    { label: t('sidebar.subscription'), icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
+    { label: t('sidebar.devices'), icon: DevicesOutlined, key: 'devices', route: '/devices' },
+    { label: t('sidebar.security'), icon: SecurityOutlined, key: 'security', route: '/security' },
+  ];
+
+  const resolvedSubscriptionLabel = subscriptionLabel || t('sidebar.activeSubscription');
 
   const handleLogout = async () => {
     try {
@@ -90,7 +95,7 @@ export default function UserSpaceSidebar({
           </Avatar>
           <IconButton
             size="small"
-            aria-label="Modifier la photo de profil"
+            aria-label={t('sidebar.editPhoto')}
             sx={{
               position: 'absolute',
               bottom: 0,
@@ -169,34 +174,36 @@ export default function UserSpaceSidebar({
           <WorkspacePremiumOutlined sx={{ color: tokens.colors.secondary, fontSize: 22 }} />
           <Box>
             <Typography variant="body2" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, lineHeight: 1.2 }}>
-              Membre Premium
+              {t('sidebar.premiumMember')}
             </Typography>
             <Typography variant="caption" sx={{ color: '#9c7e49' }}>
-              {subscriptionLabel}
+              {resolvedSubscriptionLabel}
             </Typography>
           </Box>
         </Box>
 
-        <Button
-          onClick={() => navigate('/')}
-          fullWidth
-          sx={{
-            justifyContent: 'flex-start',
-            borderRadius: '12px',
-            px: 2,
-            py: 1.25,
-            textTransform: 'none',
-            fontSize: '0.9rem',
-            fontWeight: 600,
-            color: tokens.colors.primary,
-            bgcolor: `${tokens.colors.primary}14`,
-            mb: 1,
-            '&:hover': { bgcolor: `${tokens.colors.primary}22` },
-            gap: 1,
-          }}
-        >
-          Visiter le site
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+          <Button
+            onClick={() => navigate('/')}
+            sx={{
+              flex: 1,
+              justifyContent: 'flex-start',
+              borderRadius: '12px',
+              px: 2,
+              py: 1.25,
+              textTransform: 'none',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              color: tokens.colors.primary,
+              bgcolor: `${tokens.colors.primary}14`,
+              '&:hover': { bgcolor: `${tokens.colors.primary}22` },
+              gap: 1,
+            }}
+          >
+            {t('sidebar.visitSite')}
+          </Button>
+          <LanguageToggle variant="icon" />
+        </Box>
 
         <Button
           onClick={handleLogout}
@@ -215,18 +222,18 @@ export default function UserSpaceSidebar({
             gap: 1,
           }}
         >
-          Déconnexion
+          {t('sidebar.logout')}
         </Button>
 
         {/* Legal links */}
         <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${tokens.colors.surfaces.light.variant}`, display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
           {[
-            { label: 'CGU', path: '/cgu' },
-            { label: 'CGV', path: '/cgv' },
-            { label: 'Confidentialité', path: '/privacy' },
-            { label: 'Cookies', path: '/cookies' },
-            { label: 'Mentions légales', path: '/mentions-legales' },
-            { label: 'Copyright', path: '/copyright' },
+            { label: t('legal.cgu'), path: '/cgu' },
+            { label: t('legal.cgv'), path: '/cgv' },
+            { label: t('legal.privacy'), path: '/privacy' },
+            { label: t('legal.cookies'), path: '/cookies' },
+            { label: t('legal.legalNotice'), path: '/mentions-legales' },
+            { label: t('legal.copyright'), path: '/copyright' },
           ].map(link => (
             <Typography
               key={link.path}

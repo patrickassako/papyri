@@ -24,6 +24,7 @@ import {
   ChevronRight,
   Headphones,
   Play,
+  Share2,
 } from 'lucide-react';
 import { contentsService } from '../services/contents.service';
 import tokens from '../config/tokens';
@@ -34,6 +35,7 @@ import TopNavBar from '../components/TopNavBar';
 import PublicHeader from '../components/PublicHeader';
 import { useCurrency } from '../hooks/useCurrency';
 import { formatMinorUnits } from '../services/currency.service';
+import { useTranslation } from 'react-i18next';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '-';
@@ -82,6 +84,7 @@ export default function ContentDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation();
 
   const [content, setContent] = useState(null);
   const [recommendations, setRecommendations] = useState({ sameGenre: [], youllLike: [] });
@@ -361,25 +364,27 @@ export default function ContentDetailPage() {
 
   const primaryActionLabel = useMemo(() => {
     if (scenario === 'guest') {
-      return isPaidBook ? 'Se connecter pour acheter' : 'Se connecter pour accéder';
+      return isPaidBook ? t('content.readNow') : t('content.startReading');
     }
     if (scenario === 'active_subscriber') {
-      if (canOpenContent) return isAudiobook ? 'Écouter maintenant' : 'Lire maintenant';
-      if (isPaidBook) return 'Acheter au prix réduit';
-      return 'Débloquer avec mon abonnement';
+      if (canOpenContent) return isAudiobook ? t('content.listenNow') : t('content.readNow');
+      if (isPaidBook) return t('content.subscribeNow');
+      return t('content.subscribeNow');
     }
-    if (isPaidBook) return 'Acheter sans réduction';
-    return 'Prendre un abonnement';
-  }, [scenario, isPaidBook, canOpenContent, isAudiobook]);
+    if (isPaidBook) return t('content.subscribeNow');
+    return t('pricing.subscribeNow');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario, isPaidBook, canOpenContent, isAudiobook, t]);
 
   const secondaryActionLabel = useMemo(() => {
-    if (scenario === 'guest') return 'Voir les abonnements';
+    if (scenario === 'guest') return t('pricing.subscribeNow');
     if (scenario === 'active_subscriber') {
-      if (isAudiobook) return 'Ajouter à la playlist';
-      return inEbookList ? 'Retirer de ma liste' : 'Ajouter à ma liste';
+      if (isAudiobook) return t('content.addToList');
+      return inEbookList ? t('content.removeFromList') : t('content.addToList');
     }
-    return isPaidBook ? 'Prendre un abonnement' : 'Voir les abonnements';
-  }, [scenario, isPaidBook, isAudiobook, inEbookList]);
+    return t('pricing.subscribeNow');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario, isPaidBook, isAudiobook, inEbookList, t]);
 
   const doUnlock = async (provider) => {
     setAccessActionLoading(true);
@@ -506,6 +511,31 @@ export default function ContentDetailPage() {
     navigate('/pricing');
   };
 
+  const handleShare = useCallback(async () => {
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : `/catalogue/${id}`;
+    const title = content?.title || 'Papyri';
+    const text = content?.author
+      ? `Decouvrez "${content.title}" de ${content.author} sur Papyri.`
+      : `Decouvrez "${title}" sur Papyri.`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url: shareUrl });
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setCallbackNotice('Lien du livre copie.');
+        return;
+      }
+
+      setCallbackNotice(shareUrl);
+    } catch (_) {
+      // Ignore cancelled native share; show nothing.
+    }
+  }, [content, id]);
+
   const categories = useMemo(() => {
     if (!Array.isArray(content?.categories)) return [];
     return content.categories.map((item) => item?.name).filter(Boolean);
@@ -534,7 +564,7 @@ export default function ContentDetailPage() {
           {error || 'Contenu introuvable'}
         </Alert>
         <Button onClick={() => navigate('/catalogue')} variant="outlined">
-          Retour au catalogue
+          {t('common.back')}
         </Button>
       </Container>
     );
@@ -671,6 +701,22 @@ export default function ContentDetailPage() {
               >
                 {secondaryActionLabel}
               </Button>
+              <Button
+                fullWidth
+                variant="text"
+                onClick={handleShare}
+                startIcon={<Share2 size={18} />}
+                sx={{
+                  height: 44,
+                  borderRadius: 999,
+                  color: '#7e5d1b',
+                  fontWeight: 700,
+                  bgcolor: '#f7f0e4',
+                  '&:hover': { bgcolor: '#f1e4ce' }
+                }}
+              >
+                {t('content.shareContent')}
+              </Button>
             </Box>
           </Box>
 
@@ -702,8 +748,8 @@ export default function ContentDetailPage() {
               }}
             >
               {[
-                { label: 'Format', value: content.format ? content.format.toUpperCase() : '-' },
-                { label: 'Langue', value: formatLanguage(content.language) },
+                { label: t('content.format'), value: content.format ? content.format.toUpperCase() : '-' },
+                { label: t('content.language'), value: formatLanguage(content.language) },
                 { label: isAudiobook ? 'Audio' : 'Taille', value: isAudiobook ? formatDuration(content.duration_seconds) : formatSize(content.file_size_bytes) },
               ].map((item) => (
                 <Box key={item.label} sx={{ p: 1.2, borderRadius: 3, border: '1px solid #f0e7d8', bgcolor: '#fffdfa' }}>
@@ -993,7 +1039,7 @@ export default function ContentDetailPage() {
               {reviewsLoading ? (
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <CircularProgress size={16} sx={{ color: tokens.colors.primary }} />
-                  <Typography sx={{ color: '#9c7e49', fontSize: '0.85rem' }}>Chargement des avis…</Typography>
+                  <Typography sx={{ color: '#9c7e49', fontSize: '0.85rem' }}>{t('common.loading')}</Typography>
                 </Box>
               ) : reviews.length === 0 ? (
                 <Typography sx={{ color: '#9c7e49', fontSize: '0.9rem' }}>

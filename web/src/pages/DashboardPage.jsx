@@ -27,6 +27,7 @@ import { contentsService } from '../services/contents.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
 import { useCurrency } from '../hooks/useCurrency';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -68,7 +69,7 @@ function buildWeekActivity(historyItems) {
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
     const key = dayKey(d);
-    const weekday = d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+    const weekday = d.toLocaleDateString(undefined, { weekday: 'short' }).replace('.', '');
     labels.push(weekday.charAt(0).toUpperCase());
     values.push(Number(((byDay.get(key) || 0) / 3600).toFixed(1)));
   }
@@ -228,7 +229,7 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
             onClick={() => navigate(viewAllPath)}
             sx={{ textTransform: 'none', color: tokens.colors.primary, fontWeight: 600, fontSize: '0.8rem', minWidth: 0, ml: { xs: 0, sm: 0.5 }, '&:hover': { bgcolor: `${tokens.colors.primary}0D` } }}
           >
-            Voir tout
+            {typeof window !== 'undefined' && localStorage.getItem('papyri_lang') === 'en' ? 'See all' : 'Voir tout'}
           </Button>
         </Box>
       </Box>
@@ -265,6 +266,7 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
 export default function DashboardPage() {
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(emptyStats);
   const [continueReading, setContinueReading] = useState([]);
@@ -274,7 +276,7 @@ export default function DashboardPage() {
   const [sectionsLoading, setSectionsLoading] = useState(true);
   const [activity, setActivity] = useState({ labels: ['L', 'M', 'M', 'J', 'V', 'S', 'D'], values: [0, 0, 0, 0, 0, 0, 0] });
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
-  const [subscriptionLabel, setSubscriptionLabel] = useState('Aucun abonnement actif');
+  const [subscriptionInfo, setSubscriptionInfo] = useState({ type: 'none', endDate: '' });
   const [usage, setUsage] = useState(null);
   const nouveautesRef = useRef(null);
   const populairesRef = useRef(null);
@@ -328,23 +330,18 @@ export default function DashboardPage() {
             setHasActiveSubscription(isActive);
             const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
             const endDate = subscription?.current_period_end
-              ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
+              ? new Date(subscription.current_period_end).toLocaleDateString()
               : '';
-            if (isActive && cancelAtPeriodEnd && endDate) {
-              setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
-            } else if (isActive && endDate) {
-              setSubscriptionLabel(`Actif jusqu au ${endDate}`);
-            } else if (isActive) {
-              setSubscriptionLabel('Abonnement actif');
-            } else if (payload?.hasSubscription) {
-              setSubscriptionLabel('Abonnement inactif');
-            } else {
-              setSubscriptionLabel('Aucun abonnement actif');
-            }
+            let subType = 'none';
+            if (isActive && cancelAtPeriodEnd && endDate) subType = 'cancelled';
+            else if (isActive && endDate) subType = 'active_until';
+            else if (isActive) subType = 'active';
+            else if (payload?.hasSubscription) subType = 'inactive';
+            setSubscriptionInfo({ type: subType, endDate });
           }
         } else if (alive) {
           setHasActiveSubscription(false);
-          setSubscriptionLabel('Aucun abonnement actif');
+          setSubscriptionInfo({ type: 'none', endDate: '' });
         }
 
         if (usageRes.status === 'fulfilled' && usageRes.value.ok) {
@@ -376,14 +373,25 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, []);
 
-  const userName = user?.full_name || 'Utilisateur';
+  const userName = user?.full_name || t('common.unknown');
 
   const statCards = useMemo(() => ([
-    { label: 'Livres lus', value: stats.books_read, icon: MenuBookOutlined, color: tokens.colors.primary },
-    { label: 'Heures écoutées', value: `${stats.hours_listened}h`, icon: ScheduleOutlined, color: tokens.colors.secondary },
-    { label: 'Série', value: `${stats.streak_days}j`, icon: LocalFireDepartmentOutlined, color: tokens.colors.semantic.error },
-    { label: 'Objectif mensuel', value: `${stats.monthly_goal_percent}%`, icon: TrackChangesOutlined, color: tokens.colors.semantic.success },
-  ]), [stats]);
+    { label: t('dashboard.booksRead'), value: stats.books_read, icon: MenuBookOutlined, color: tokens.colors.primary },
+    { label: t('dashboard.hoursListened'), value: `${stats.hours_listened}h`, icon: ScheduleOutlined, color: tokens.colors.secondary },
+    { label: t('dashboard.streak'), value: `${stats.streak_days}j`, icon: LocalFireDepartmentOutlined, color: tokens.colors.semantic.error },
+    { label: t('history.readingGoal'), value: `${stats.monthly_goal_percent}%`, icon: TrackChangesOutlined, color: tokens.colors.semantic.success },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]), [stats, i18n.language]);
+
+  const subscriptionLabel = useMemo(() => {
+    const isEn = i18n.language?.startsWith('en');
+    const { type, endDate } = subscriptionInfo;
+    if (type === 'cancelled') return isEn ? `Cancelled, access until ${endDate}` : `Résilié, accès jusqu'au ${endDate}`;
+    if (type === 'active_until') return isEn ? `Active until ${endDate}` : `Actif jusqu'au ${endDate}`;
+    if (type === 'active') return isEn ? 'Active subscription' : 'Abonnement actif';
+    if (type === 'inactive') return isEn ? 'Inactive subscription' : 'Abonnement inactif';
+    return isEn ? 'No active subscription' : 'Aucun abonnement actif';
+  }, [subscriptionInfo, i18n.language]);
 
   const maxActivity = Math.max(...activity.values, 1);
   const monthlyProgress = Math.min(100, Math.round((stats.monthly_books_done / Math.max(stats.monthly_books_target, 1)) * 100));
@@ -398,13 +406,13 @@ export default function DashboardPage() {
           <Box sx={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.08)' }} />
           <Box sx={{ position: 'absolute', bottom: -20, right: 80, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.05)' }} />
           <Typography variant="h4" sx={{ color: '#fff', fontWeight: 700, mb: 0.5, position: 'relative', zIndex: 1, fontSize: { xs: '1.7rem', md: '2.125rem' }, lineHeight: 1.05 }}>
-            Bon retour, {userName.split(' ')[0]} !
+            {t('dashboard.welcomeBack')} {userName.split(' ')[0]} !
           </Typography>
           <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 2, position: 'relative', zIndex: 1, fontSize: { xs: '0.92rem', md: '1rem' }, maxWidth: { md: 460 } }}>
-            Prêt à explorer de nouveaux horizons aujourd&apos;hui ?
+            {i18n.language?.startsWith('en') ? 'Ready to explore new horizons today?' : 'Prêt à explorer de nouveaux horizons aujourd\'hui ?'}
           </Typography>
           <Chip
-            label={`Temps total: ${stats.total_hours} heures`}
+            label={`${i18n.language?.startsWith('en') ? 'Total time' : 'Temps total'}: ${stats.total_hours}h`}
             sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: '0.85rem', height: 32, position: 'relative', zIndex: 1, maxWidth: '100%' }}
           />
         </Box>
@@ -430,10 +438,10 @@ export default function DashboardPage() {
               <WorkspacePremiumOutlined sx={{ color: tokens.colors.primary, fontSize: 28 }} />
               <Box>
                 <Typography variant="body1" sx={{ fontWeight: 700, color: tokens.colors.accent, lineHeight: 1.2 }}>
-                  Passez à l'abonnement pour accéder à tout le catalogue
+                  {t('dashboard.upgradeNow')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                  Ebooks + Audio · {formatPrice(500)}/mois ou {formatPrice(5000)}/an · Annulez à tout moment
+                  Ebooks + Audio · {formatPrice(500)}{t('common.per_month')} {t('common.or')} {formatPrice(5000)}{t('common.per_year')}
                 </Typography>
               </Box>
             </Box>
@@ -454,16 +462,16 @@ export default function DashboardPage() {
                 '&:hover': { bgcolor: tokens.colors.primaryDark },
               }}
             >
-              Voir les offres
+              {i18n.language?.startsWith('en') ? 'View plans' : 'Voir les offres'}
             </Button>
           </Box>
         )}
 
         <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.2, mb: 2.5 }}>
           {[
-            { label: 'Aujourd hui', value: `${Math.max(0, Math.round((stats.weekly_hours_done || 0) * 60))} min`, color: tokens.colors.primary },
-            { label: 'Serie', value: `${stats.streak_days} j`, color: tokens.colors.secondary },
-            { label: 'Mois', value: `${stats.monthly_goal_percent}%`, color: tokens.colors.semantic.success },
+            { label: i18n.language?.startsWith('en') ? 'Today' : 'Aujourd\'hui', value: `${Math.max(0, Math.round((stats.weekly_hours_done || 0) * 60))} min`, color: tokens.colors.primary },
+            { label: i18n.language?.startsWith('en') ? 'Streak' : 'Série', value: `${stats.streak_days} j`, color: tokens.colors.secondary },
+            { label: i18n.language?.startsWith('en') ? 'Month' : 'Mois', value: `${stats.monthly_goal_percent}%`, color: tokens.colors.semantic.success },
           ].map((item) => (
             <Paper key={item.label} elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
               <Typography sx={{ fontSize: '0.66rem', color: '#9c7e49', textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
@@ -501,14 +509,14 @@ export default function DashboardPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: 3 }}>
             {[
               {
-                label: 'Crédits livres texte',
+                label: i18n.language?.startsWith('en') ? 'eBook credits' : 'Crédits livres texte',
                 icon: MenuBookOutlined,
                 color: tokens.colors.primary,
                 used: Number(usage.text_unlocked_count || 0),
                 quota: Number(usage.text_quota || 0),
               },
               {
-                label: 'Crédits livres audio',
+                label: i18n.language?.startsWith('en') ? 'Audiobook credits' : 'Crédits livres audio',
                 icon: HeadphonesOutlined,
                 color: tokens.colors.secondary,
                 used: Number(usage.audio_unlocked_count || 0),
@@ -532,7 +540,7 @@ export default function DashboardPage() {
                     <Typography variant="h4" sx={{ fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
                       {remaining}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#9c7e49' }}>/ {credit.quota} restants</Typography>
+                    <Typography variant="caption" sx={{ color: '#9c7e49' }}>/ {credit.quota} {i18n.language?.startsWith('en') ? 'remaining' : 'restants'}</Typography>
                   </Box>
                   <LinearProgress
                     variant="determinate"
@@ -554,13 +562,13 @@ export default function DashboardPage() {
           <Box sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
-                Continuer la lecture
+                {t('dashboard.continueReading')}
               </Typography>
               <Button
                 onClick={() => navigate('/my-list')}
                 sx={{ textTransform: 'none', color: tokens.colors.primary, fontWeight: 600, fontSize: '0.85rem', '&:hover': { bgcolor: `${tokens.colors.primary}0D` } }}
               >
-                Voir tout
+                {t('common.seeAll')}
               </Button>
             </Box>
             {continueReading.length > 0 ? (
@@ -626,13 +634,13 @@ export default function DashboardPage() {
             ) : (
               <Paper elevation={0} sx={{ p: 3, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
                 <Typography sx={{ color: '#9c7e49', fontSize: '0.9rem' }}>
-                  Aucune lecture en cours pour le moment.
+                  {i18n.language?.startsWith('en') ? 'No reading in progress.' : 'Aucune lecture en cours pour le moment.'}
                 </Typography>
               </Paper>
             )}
 
             <HScrollSection
-              title="Nouveautés"
+              title={i18n.language?.startsWith('en') ? 'New Releases' : 'Nouveautés'}
               viewAllPath="/catalogue?sort=newest"
               items={nouveautes}
               loading={sectionsLoading}
@@ -641,7 +649,7 @@ export default function DashboardPage() {
             />
 
             <HScrollSection
-              title="Populaires"
+              title={i18n.language?.startsWith('en') ? 'Popular' : 'Populaires'}
               viewAllPath="/catalogue?sort=popular"
               items={populaires}
               loading={sectionsLoading}
@@ -651,7 +659,7 @@ export default function DashboardPage() {
 
             {(sectionsLoading || recommendations.length > 0) && (
               <HScrollSection
-                title="Ça peut vous intéresser"
+                title={i18n.language?.startsWith('en') ? 'You might like' : 'Ça peut vous intéresser'}
                 viewAllPath="/catalogue"
                 items={recommendations}
                 loading={sectionsLoading}
@@ -663,13 +671,13 @@ export default function DashboardPage() {
 
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, mb: 2 }}>
-              Objectifs de lecture
+              {t('history.readingGoal')}
             </Typography>
             <Paper elevation={0} sx={{ p: 2.5, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
               <Box sx={{ mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600, color: tokens.colors.onBackground.light }}>
-                    Livres mensuels
+                    {i18n.language?.startsWith('en') ? 'Monthly books' : 'Livres mensuels'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600 }}>
                     {stats.monthly_books_done}/{stats.monthly_books_target}
@@ -690,7 +698,7 @@ export default function DashboardPage() {
               <Box sx={{ mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600, color: tokens.colors.onBackground.light }}>
-                    Heures hebdomadaires
+                    {i18n.language?.startsWith('en') ? 'Weekly hours' : 'Heures hebdomadaires'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600 }}>
                     {stats.weekly_hours_done}h/{stats.weekly_hours_target}h
@@ -710,7 +718,7 @@ export default function DashboardPage() {
 
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 600, color: tokens.colors.onBackground.light, mb: 1.5 }}>
-                  Activité cette semaine
+                  {t('history.weeklyActivity')}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'space-between' }}>
                   {activity.labels.map((day, i) => {
