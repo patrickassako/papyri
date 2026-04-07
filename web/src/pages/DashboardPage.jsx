@@ -26,6 +26,7 @@ import { authFetch } from '../services/auth.service';
 import { contentsService } from '../services/contents.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import { useTranslation } from 'react-i18next';
 
@@ -407,6 +408,7 @@ export default function DashboardPage() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light, overflowX: 'hidden' }}>
+      <CurrencyFloatingSelector />
       <UserSpaceSidebar user={user} activeKey="overview" subscriptionLabel={subscriptionLabel} />
 
       <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 4 }, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>

@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  clearCurrencyOverride,
   convertCents,
   currencyLabel,
   detectCurrency,
   formatMinorUnits,
   formatInCurrency,
+  getCurrencyOverride,
+  getCurrencyOverrideEventName,
+  getSupportedCurrencies,
   isNonEuro,
+  setCurrencyOverride,
 } from '../services/currency.service';
 
 /**
@@ -26,6 +31,7 @@ export function useCurrency() {
   const [currency, setCurrency] = useState('EUR');
   const [country, setCountry] = useState(null);
   const [ready, setReady] = useState(false);
+  const [manualOverride, setManualOverride] = useState(() => getCurrencyOverride());
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +45,28 @@ export function useCurrency() {
       if (!cancelled) setReady(true);
     });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const eventName = getCurrencyOverrideEventName();
+    const handleChange = (event) => {
+      const nextCurrency = event?.detail || getCurrencyOverride();
+      setManualOverride(nextCurrency || null);
+      if (nextCurrency) {
+        setCurrency(nextCurrency);
+        setCountry(null);
+        setReady(true);
+      } else {
+        detectCurrency().then(({ currency: c, country: co }) => {
+          setCurrency(c || 'EUR');
+          setCountry(co || null);
+          setReady(true);
+        }).catch(() => setReady(true));
+      }
+    };
+
+    window.addEventListener(eventName, handleChange);
+    return () => window.removeEventListener(eventName, handleChange);
   }, []);
 
   const formatPrice = useCallback(
@@ -98,6 +126,10 @@ export function useCurrency() {
     ready,
     isLocalized: isNonEuro(currency),
     label: currencyLabel(currency),
+    supportedCurrencies: getSupportedCurrencies(),
+    manualOverride,
+    setManualCurrency: setCurrencyOverride,
+    clearManualCurrency: clearCurrencyOverride,
     formatPrice,
     formatFrom,
     convertFromEUR,

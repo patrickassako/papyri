@@ -72,12 +72,19 @@ const NO_DECIMAL_CURRENCIES = new Set(['XAF', 'XOF', 'NGN', 'GHS', 'KES', 'RWF',
 
 const CACHE_KEY = 'papyri_geo_currency_v1';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const OVERRIDE_KEY = 'papyri_currency_override_v1';
+const OVERRIDE_EVENT = 'papyri:currency-override-changed';
 
 /**
  * Retourne { currency, country } détectés depuis l'IP.
  * Utilise le cache localStorage pour éviter les appels répétés.
  */
 export async function detectCurrency() {
+  const override = getCurrencyOverride();
+  if (override) {
+    return { currency: override, country: null, overridden: true };
+  }
+
   // 1. Lire le cache
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -110,6 +117,37 @@ export async function detectCurrency() {
   } catch (_) {}
 
   return { currency: 'EUR', country: null };
+}
+
+export function getCurrencyOverride() {
+  try {
+    const value = localStorage.getItem(OVERRIDE_KEY);
+    return value || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function setCurrencyOverride(currency) {
+  try {
+    if (!currency) {
+      localStorage.removeItem(OVERRIDE_KEY);
+    } else {
+      localStorage.setItem(OVERRIDE_KEY, currency);
+    }
+  } catch (_) {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(OVERRIDE_EVENT, { detail: currency || null }));
+  }
+}
+
+export function clearCurrencyOverride() {
+  setCurrencyOverride(null);
+}
+
+export function getCurrencyOverrideEventName() {
+  return OVERRIDE_EVENT;
 }
 
 /**
@@ -210,4 +248,11 @@ export function currencyLabel(code) {
     EUR: 'Euro',
   };
   return labels[code] || code;
+}
+
+export function getSupportedCurrencies() {
+  return Object.keys(RATES_FROM_EUR).map((code) => ({
+    code,
+    label: currencyLabel(code),
+  }));
 }

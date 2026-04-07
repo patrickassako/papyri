@@ -37,6 +37,7 @@ import * as authService from '../services/auth.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
 import FamilyProfilesManager from '../components/FamilyProfilesManager';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 
 const MAX_FAMILY_SEATS = 10;
@@ -320,6 +321,7 @@ export default function SubscriptionPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5', display: 'flex' }}>
+      <CurrencyFloatingSelector />
       <UserSpaceSidebar user={user} activeKey="subscription" subscriptionLabel={subscriptionLabel} />
 
       <Box sx={{ flex: 1, p: { xs: 1.25, sm: 2, md: 4 } }}>

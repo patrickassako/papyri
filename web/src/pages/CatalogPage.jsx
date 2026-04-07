@@ -36,6 +36,7 @@ import * as authService from '../services/auth.service';
 import tokens from '../config/tokens';
 import PublicHeader from '../components/PublicHeader';
 import TopNavBar from '../components/TopNavBar';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -239,6 +240,7 @@ export default function CatalogPage() {
 
   return (
     <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh' }}>
+      <CurrencyFloatingSelector />
       {isAuthenticated
         ? (
           <TopNavBar

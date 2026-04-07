@@ -33,6 +33,7 @@ import { readingService } from '../services/reading.service';
 import { subscriptionsService } from '../services/subscriptions.service';
 import TopNavBar from '../components/TopNavBar';
 import PublicHeader from '../components/PublicHeader';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import { useTranslation } from 'react-i18next';
 
@@ -573,6 +574,7 @@ export default function ContentDetailPage() {
 
   return (
     <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh', color: '#1c160d' }}>
+      <CurrencyFloatingSelector />
       <Snackbar
         open={lockLostNoticeOpen}
         autoHideDuration={4200}

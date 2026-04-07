@@ -37,6 +37,7 @@ import { useNavigate } from 'react-router-dom';
 import { subscriptionsService } from '../services/subscriptions.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 import { useCurrency } from '../hooks/useCurrency';
 import { formatMinorUnits } from '../services/currency.service';
@@ -585,6 +586,7 @@ export default function PricingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: background, color: '#1c160d' }}>
+      <CurrencyFloatingSelector />
       <PublicHeader
         activeKey="pricing"
         isAuthenticated={isAuthenticated}

@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 import { contentsService } from '../services/contents.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
+import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
@@ -283,6 +284,7 @@ export default function LandingPage() {
 
   return (
     <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh', overflowX: 'hidden' }}>
+      <CurrencyFloatingSelector />
       <PublicHeader activeKey="home" isAuthenticated={isAuthenticated} background="#fcfaf8" />
 
       {/* ── HERO ─────────────────────────────────────────────── */}
