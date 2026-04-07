@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Button } from '@mui/material';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined';
 import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
 import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import tokens from '../config/tokens';
 
 const navItems = [
@@ -23,7 +24,38 @@ export default function MobileBottomNav() {
   return (
     <>
       {/* Bottom padding so page content doesn't hide under the nav */}
-      <Box sx={{ display: { xs: 'block', md: 'none' }, height: 64, flexShrink: 0 }} />
+      <Box sx={{ display: { xs: 'block', md: 'none' }, height: 112, flexShrink: 0 }} />
+
+      <Box
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          position: 'fixed',
+          right: 12,
+          bottom: 76,
+          zIndex: 1201,
+        }}
+      >
+        <Button
+          variant="contained"
+          startIcon={<LanguageOutlined sx={{ fontSize: 16 }} />}
+          onClick={() => navigate('/')}
+          sx={{
+            textTransform: 'none',
+            borderRadius: '999px',
+            px: 1.6,
+            py: 0.85,
+            minHeight: 36,
+            bgcolor: tokens.colors.primary,
+            color: '#fff',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+            '&:hover': { bgcolor: tokens.colors.primaryDark },
+          }}
+        >
+          Visiter le site
+        </Button>
+      </Box>
 
       <Box
         sx={{
