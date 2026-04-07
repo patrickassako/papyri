@@ -21,6 +21,7 @@ import {
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import PhoneAndroidOutlinedIcon from '@mui/icons-material/PhoneAndroidOutlined';
+import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import Visibility from '@mui/icons-material/Visibility';
@@ -28,6 +29,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
@@ -78,9 +80,9 @@ function getStrength(password) {
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
   if (/\d/.test(password)) score++;
   if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
-  if (score <= 2) return { pct: 33, label: 'Faible', color: '#c0392b' };
-  if (score <= 3) return { pct: 66, label: 'Moyen', color: '#e67e22' };
-  return { pct: 100, label: 'Fort', color: '#27ae60' };
+  if (score <= 2) return { pct: 33, label: 'weak', color: '#c0392b' };
+  if (score <= 3) return { pct: 66, label: 'fair', color: '#e67e22' };
+  return { pct: 100, label: 'strong', color: '#27ae60' };
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -88,6 +90,7 @@ function getStrength(password) {
 ══════════════════════════════════════════════════════════════ */
 export default function SecurityPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [user, setUser] = useState(null);
   const [snack, setSnack] = useState({ open: false, msg: '', severity: 'success' });
 
@@ -100,6 +103,7 @@ export default function SecurityPage() {
   /* 2FA */
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaFactor, setMfaFactor] = useState(null);
+  const [mfaMethod, setMfaMethod] = useState('none');
   const [mfaDialog, setMfaDialog] = useState(false); // 'setup' | 'disable' | false
   const [mfaStep, setMfaStep] = useState('qr'); // 'qr' | 'verify'
   const [mfaEnrollData, setMfaEnrollData] = useState(null); // { id, totp: { uri, secret } }
@@ -123,12 +127,40 @@ export default function SecurityPage() {
 
   async function loadMfaStatus() {
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const preferredMethod = authData?.user?.user_metadata?.mfa_method || 'none';
       const { data, error } = await supabase.auth.mfa.listFactors();
       if (error) return;
       const totpFactor = data?.totp?.find((f) => f.status === 'verified');
       setMfaEnabled(Boolean(totpFactor));
       setMfaFactor(totpFactor || null);
+      setMfaMethod(totpFactor ? 'totp' : preferredMethod);
     } catch (_) {}
+  }
+
+  async function updatePreferredMfaMethod(method) {
+    setMfaLoading(true);
+    setMfaError('');
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          mfa_method: method,
+        },
+      });
+      if (error) throw error;
+      setMfaMethod(method);
+      notify(
+        method === 'email'
+          ? t('security.mfaEmailActivated')
+          : method === 'none'
+            ? t('security.mfaDeactivated')
+            : t('security.mfaAppSetAsMain')
+      );
+    } catch (err) {
+      setMfaError(err.message || t('security.mfaUpdateError'));
+    } finally {
+      setMfaLoading(false);
+    }
   }
 
   /* ── Change password ─────────────────────────── */
@@ -137,11 +169,11 @@ export default function SecurityPage() {
     setPwdError('');
 
     if (pwdForm.next !== pwdForm.confirm) {
-      setPwdError('Les mots de passe ne correspondent pas.');
+      setPwdError(t('security.passwordsMismatch'));
       return;
     }
     if (pwdForm.next.length < 8) {
-      setPwdError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      setPwdError(t('security.passwordTooShort'));
       return;
     }
 
@@ -149,9 +181,9 @@ export default function SecurityPage() {
     try {
       await authService.updatePassword(pwdForm.current, pwdForm.next);
       setPwdForm({ current: '', next: '', confirm: '' });
-      notify('Mot de passe modifié avec succès.');
+      notify(t('security.passwordChangedSuccess'));
     } catch (err) {
-      setPwdError(err.message || 'Impossible de modifier le mot de passe.');
+      setPwdError(err.message || t('security.passwordChangeError'));
     } finally {
       setPwdLoading(false);
     }
@@ -203,9 +235,11 @@ export default function SecurityPage() {
       if (error) throw error;
       setMfaDialog(false);
       await loadMfaStatus();
-      notify('Double authentification activée avec succès.');
+      setMfaMethod('totp');
+      await supabase.auth.updateUser({ data: { mfa_method: 'totp' } });
+      notify(t('security.mfa2faActivated'));
     } catch (err) {
-      setMfaError('Code incorrect. Vérifiez votre application et réessayez.');
+      setMfaError(t('security.mfaCodeIncorrect'));
     } finally {
       setMfaLoading(false);
     }
@@ -221,9 +255,13 @@ export default function SecurityPage() {
       setMfaDialog(false);
       setMfaEnabled(false);
       setMfaFactor(null);
-      notify('Double authentification désactivée.', 'info');
+      if (mfaMethod === 'totp') {
+        await supabase.auth.updateUser({ data: { mfa_method: 'none' } });
+        setMfaMethod('none');
+      }
+      notify(t('security.mfa2faDeactivated'), 'info');
     } catch (err) {
-      setMfaError(err.message || 'Impossible de désactiver la 2FA.');
+      setMfaError(err.message || t('security.mfaDisableError'));
     } finally {
       setMfaLoading(false);
     }
@@ -238,7 +276,7 @@ export default function SecurityPage() {
       await authService.logout();
       navigate('/');
     } catch (err) {
-      notify('Impossible de supprimer le compte. Contactez le support.', 'error');
+      notify(t('security.deleteAccountError'), 'error');
       setDeleteLoading(false);
       setDeleteDialog(false);
     }
@@ -256,10 +294,10 @@ export default function SecurityPage() {
             variant="h1"
             sx={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: { xs: '1.85rem', sm: '2rem', md: '2.6rem' }, fontWeight: 800, color: textMain, lineHeight: 1.2 }}
           >
-            Sécurité
+            {t('security.title')}
           </Typography>
           <Typography sx={{ fontSize: '0.95rem', color: textMuted, mt: 0.5 }}>
-            Gérez votre mot de passe, la double authentification et les accès à votre compte.
+            {t('security.subtitle')}
           </Typography>
         </Box>
 
@@ -272,8 +310,8 @@ export default function SecurityPage() {
           }}
         >
           {[
-            { label: '2FA', value: mfaEnabled ? 'Activee' : 'Inactive' },
-            { label: 'Compte', value: user?.email ? 'Protege' : 'Session' },
+            { label: '2FA', value: mfaMethod === 'email' ? 'Email' : mfaEnabled ? 'App' : t('security.inactive') },
+            { label: t('security.account'), value: user?.email ? t('security.protected') : 'Session' },
           ].map((item) => (
             <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -289,14 +327,14 @@ export default function SecurityPage() {
         {/* ── Mot de passe ─────────────────────────────── */}
         <SectionCard
           icon={<LockOutlinedIcon />}
-          title="Mot de passe"
-          subtitle="Modifiez votre mot de passe de connexion"
+          title={t('security.passwordSection')}
+          subtitle={t('security.passwordSectionSubtitle')}
         >
           <Box component="form" onSubmit={handleChangePassword} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             {pwdError && <Alert severity="error" onClose={() => setPwdError('')}>{pwdError}</Alert>}
 
             {['current', 'next', 'confirm'].map((field) => {
-              const labels = { current: 'Mot de passe actuel', next: 'Nouveau mot de passe', confirm: 'Confirmer le nouveau mot de passe' };
+              const labels = { current: t('profile.currentPassword'), next: t('auth.newPassword'), confirm: t('auth.confirmPassword') };
               return (
                 <Box key={field}>
                   <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: textMain, mb: 0.75 }}>{labels[field]}</Typography>
@@ -306,7 +344,7 @@ export default function SecurityPage() {
                     type={showPwd[field] ? 'text' : 'password'}
                     value={pwdForm[field]}
                     onChange={(e) => setPwdForm((p) => ({ ...p, [field]: e.target.value }))}
-                    placeholder={field === 'current' ? 'Votre mot de passe actuel' : 'Minimum 8 caractères'}
+                    placeholder={field === 'current' ? t('auth.currentPasswordPlaceholder') : t('auth.passwordMinChars')}
                     autoComplete={field === 'current' ? 'current-password' : 'new-password'}
                     InputProps={{
                       endAdornment: (
@@ -322,8 +360,8 @@ export default function SecurityPage() {
                   {field === 'next' && strength && (
                     <Box sx={{ mt: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>Force</Typography>
-                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: strength.color }}>{strength.label}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>{t('security.passwordStrength')}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: strength.color }}>{t(`security.${strength.label}`)}</Typography>
                       </Box>
                       <LinearProgress variant="determinate" value={strength.pct}
                         sx={{ height: 4, borderRadius: 2, bgcolor: surfaceVariant, '& .MuiLinearProgress-bar': { bgcolor: strength.color, borderRadius: 2 } }}
@@ -340,7 +378,7 @@ export default function SecurityPage() {
               disabled={!pwdForm.current || !pwdForm.next || !pwdForm.confirm || pwdLoading}
               sx={{ alignSelf: { xs: 'stretch', sm: 'flex-start' }, borderRadius: '10px', textTransform: 'none', fontWeight: 600, bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }}
             >
-              {pwdLoading ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : 'Mettre à jour le mot de passe'}
+              {pwdLoading ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : t('auth.updatePassword')}
             </Button>
           </Box>
         </SectionCard>
@@ -348,67 +386,133 @@ export default function SecurityPage() {
         {/* ── Double authentification ────────────────── */}
         <SectionCard
           icon={<ShieldOutlinedIcon />}
-          title="Double authentification (2FA)"
-          subtitle="Ajoutez une couche de sécurité supplémentaire avec une application d'authentification"
+          title={t('security.twoFactor')}
+          subtitle={t('security.twoFactorSubtitle')}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <PhoneAndroidOutlinedIcon sx={{ color: mfaEnabled ? '#27ae60' : textMuted, fontSize: 28 }} />
-              <Box>
-                <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: textMain }}>
-                  Application d'authentification
-                </Typography>
-                <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
-                  Google Authenticator, Authy, ou toute app TOTP
-                </Typography>
+          <Box sx={{ display: 'grid', gap: 1.5 }}>
+            <Paper elevation={0} sx={{ p: 2, borderRadius: '12px', border: `1px solid ${surfaceVariant}`, bgcolor: mfaMethod === 'email' ? `${primary}10` : '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <MailOutlineOutlinedIcon sx={{ color: mfaMethod === 'email' ? primary : textMuted, fontSize: 28 }} />
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: textMain }}>
+                      {t('security.emailCode')}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
+                      {t('security.emailCodeDesc')}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip
+                    label={mfaMethod === 'email' ? t('security.active') : t('security.recommended')}
+                    size="small"
+                    sx={{
+                      bgcolor: mfaMethod === 'email' ? '#e8f8f0' : '#fff3e0',
+                      color: mfaMethod === 'email' ? '#27ae60' : '#e67e22',
+                      fontWeight: 700,
+                    }}
+                  />
+                  <Button
+                    size="small"
+                    variant={mfaMethod === 'email' ? 'outlined' : 'contained'}
+                    disabled={mfaLoading}
+                    onClick={() => updatePreferredMfaMethod(mfaMethod === 'email' ? 'none' : 'email')}
+                    sx={{
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      ...(mfaMethod === 'email'
+                        ? { borderColor: primary, color: primary, '&:hover': { borderColor: primary, bgcolor: `${primary}10` } }
+                        : { bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }),
+                    }}
+                  >
+                    {mfaMethod === 'email' ? t('security.disable') : t('security.enable')}
+                  </Button>
+                </Box>
               </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Chip
-                icon={mfaEnabled ? <CheckCircleOutlinedIcon /> : <WarningAmberOutlinedIcon />}
-                label={mfaEnabled ? 'Activée' : 'Désactivée'}
-                size="small"
-                sx={{
-                  bgcolor: mfaEnabled ? '#e8f8f0' : '#fff3e0',
-                  color: mfaEnabled ? '#27ae60' : '#e67e22',
-                  fontWeight: 700,
-                  '& .MuiChip-icon': { color: 'inherit' },
-                }}
-              />
-              <Button
-                variant={mfaEnabled ? 'outlined' : 'contained'}
-                size="small"
-                onClick={() => mfaEnabled ? setMfaDialog('disable') : handleOpenSetup()}
-                sx={{
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  width: { xs: '100%', sm: 'auto' },
-                  ...(mfaEnabled
-                    ? { borderColor: '#c0392b', color: '#c0392b', '&:hover': { bgcolor: '#fdf0ef', borderColor: '#c0392b' } }
-                    : { bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }),
-                }}
-              >
-                {mfaEnabled ? 'Désactiver' : 'Configurer'}
-              </Button>
-            </Box>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, borderRadius: '12px', border: `1px solid ${surfaceVariant}`, bgcolor: mfaMethod === 'totp' ? `${primary}10` : '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <PhoneAndroidOutlinedIcon sx={{ color: mfaMethod === 'totp' ? primary : (mfaEnabled ? '#27ae60' : textMuted), fontSize: 28 }} />
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: textMain }}>
+                      {t('security.authenticatorApp')}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
+                      {t('security.authenticatorAppDesc')}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Chip
+                    icon={mfaEnabled ? <CheckCircleOutlinedIcon /> : <WarningAmberOutlinedIcon />}
+                    label={mfaEnabled ? (mfaMethod === 'totp' ? t('security.active') : t('security.available')) : t('security.notConfigured')}
+                    size="small"
+                    sx={{
+                      bgcolor: mfaEnabled ? '#e8f8f0' : '#fff3e0',
+                      color: mfaEnabled ? '#27ae60' : '#e67e22',
+                      fontWeight: 700,
+                      '& .MuiChip-icon': { color: 'inherit' },
+                    }}
+                  />
+                  {mfaEnabled && (
+                    <Button
+                      variant={mfaMethod === 'totp' ? 'outlined' : 'contained'}
+                      size="small"
+                      disabled={mfaLoading}
+                      onClick={() => updatePreferredMfaMethod(mfaMethod === 'totp' ? 'none' : 'totp')}
+                      sx={{
+                        borderRadius: '8px',
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        ...(mfaMethod === 'totp'
+                          ? { borderColor: primary, color: primary, '&:hover': { borderColor: primary, bgcolor: `${primary}10` } }
+                          : { bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }),
+                      }}
+                    >
+                      {mfaMethod === 'totp' ? t('security.disable') : t('security.useThisMethod')}
+                    </Button>
+                  )}
+                  <Button
+                    variant={mfaEnabled ? 'outlined' : 'contained'}
+                    size="small"
+                    onClick={() => mfaEnabled ? setMfaDialog('disable') : handleOpenSetup()}
+                    sx={{
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      width: { xs: '100%', sm: 'auto' },
+                      ...(mfaEnabled
+                        ? { borderColor: '#c0392b', color: '#c0392b', '&:hover': { bgcolor: '#fdf0ef', borderColor: '#c0392b' } }
+                        : { bgcolor: primary, '&:hover': { bgcolor: tokens.colors.primaryDark } }),
+                    }}
+                  >
+                    {mfaEnabled ? t('security.removeApp') : t('security.configureApp')}
+                  </Button>
+                </Box>
+              </Box>
+            </Paper>
           </Box>
 
-          {!mfaEnabled && (
+          {(mfaMethod === 'none' && !mfaEnabled) && (
             <Alert severity="info" icon={<ShieldOutlinedIcon />} sx={{ mt: 2.5, borderRadius: '10px', fontSize: '0.82rem' }}>
-              La double authentification protège votre compte même si votre mot de passe est compromis.
+              {t('security.enableAtLeastEmail')}
             </Alert>
           )}
+          {mfaError && <Alert severity="error" sx={{ mt: 2.5, borderRadius: '10px', fontSize: '0.82rem' }}>{mfaError}</Alert>}
         </SectionCard>
 
         {/* ── Supprimer le compte ────────────────────── */}
         <SectionCard
           icon={<DeleteForeverOutlinedIcon />}
-          title="Supprimer mon compte"
-          subtitle="Action irréversible — toutes vos données seront effacées définitivement"
+          title={t('security.deleteAccountTitle')}
+          subtitle={t('security.deleteAccountSubtitle')}
         >
           <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '10px', fontSize: '0.82rem' }}>
-            La suppression de votre compte entraîne la perte définitive de votre historique de lecture, vos favoris et votre abonnement. Cette action ne peut pas être annulée.
+            {t('security.deleteAccountWarning')}
           </Alert>
           <Button
             variant="outlined"
@@ -416,14 +520,14 @@ export default function SecurityPage() {
             onClick={() => setDeleteDialog(true)}
             sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#c0392b', color: '#c0392b', '&:hover': { bgcolor: '#fdf0ef', borderColor: '#c0392b' } }}
           >
-            Supprimer mon compte
+            {t('security.deleteMyAccount')}
           </Button>
         </SectionCard>
       </Box>
 
       {/* ════ Dialog: setup 2FA ════════════════════════════════ */}
       <Dialog open={mfaDialog === 'setup'} onClose={() => setMfaDialog(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem' }}>Configurer la double authentification</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem' }}>{t('security.setup2faTitle')}</DialogTitle>
         <DialogContent>
           {mfaLoading && mfaStep === 'qr' && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
@@ -432,13 +536,13 @@ export default function SecurityPage() {
           {!mfaLoading && mfaStep === 'qr' && mfaEnrollData && (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5, pt: 1 }}>
               <Typography sx={{ fontSize: '0.875rem', color: textMuted, textAlign: 'center' }}>
-                Scannez ce QR code avec votre application d'authentification (Google Authenticator, Authy…)
+                {t('security.scan2faDesc')}
               </Typography>
               <Box sx={{ p: 2, bgcolor: '#fff', borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
                 <QRCodeSVG value={mfaEnrollData.totp.uri} size={180} level="M" />
               </Box>
               <Box sx={{ width: '100%', bgcolor: surfaceVariant, borderRadius: '10px', p: 1.5 }}>
-                <Typography sx={{ fontSize: '0.72rem', color: textMuted, mb: 0.5 }}>Code manuel</Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: textMuted, mb: 0.5 }}>{t('security.manualCode')}</Typography>
                 <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: textMain, letterSpacing: '0.1em', wordBreak: 'break-all' }}>
                   {mfaEnrollData.totp.secret}
                 </Typography>
@@ -449,11 +553,11 @@ export default function SecurityPage() {
           {mfaStep === 'verify' && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
               <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
-                Entrez le code à 6 chiffres affiché dans votre application pour confirmer l'activation.
+                {t('security.mfaVerifyDesc')}
               </Typography>
               <TextField
                 fullWidth
-                label="Code de vérification"
+                label={t('security.mfaCodeLabel')}
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 inputProps={{ inputMode: 'numeric', maxLength: 6 }}
@@ -468,7 +572,7 @@ export default function SecurityPage() {
           {mfaError && mfaStep === 'qr' && <Alert severity="error" sx={{ mt: 2 }}>{mfaError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setMfaDialog(false)} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>Annuler</Button>
+          <Button onClick={() => setMfaDialog(false)} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>{t('common.cancel')}</Button>
           {mfaStep === 'qr' && (
             <Button
               variant="contained"
@@ -476,7 +580,7 @@ export default function SecurityPage() {
               disabled={!mfaEnrollData || mfaLoading}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: primary }}
             >
-              {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Continuer'}
+              {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('common.next')}
             </Button>
           )}
           {mfaStep === 'verify' && (
@@ -486,7 +590,7 @@ export default function SecurityPage() {
               disabled={mfaCode.length !== 6 || mfaLoading}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: primary }}
             >
-              {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Activer'}
+              {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('security.activate')}
             </Button>
           )}
         </DialogActions>
@@ -494,35 +598,35 @@ export default function SecurityPage() {
 
       {/* ════ Dialog: disable 2FA ══════════════════════════════ */}
       <Dialog open={mfaDialog === 'disable'} onClose={() => setMfaDialog(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>Désactiver la 2FA ?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>{t('security.disable2faDialogTitle')}</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
-            Votre compte sera moins sécurisé. Vous pouvez la réactiver à tout moment.
+            {t('security.disable2faDialogDesc')}
           </Typography>
           {mfaError && <Alert severity="error" sx={{ mt: 2 }}>{mfaError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setMfaDialog(false)} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>Annuler</Button>
+          <Button onClick={() => setMfaDialog(false)} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleMfaDisable}
             disabled={mfaLoading}
             sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#c0392b', '&:hover': { bgcolor: '#a93226' } }}
           >
-            {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Désactiver'}
+            {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('security.deactivate')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ════ Dialog: delete account ═══════════════════════════ */}
       <Dialog open={deleteDialog} onClose={() => { setDeleteDialog(false); setDeleteConfirm(''); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>Supprimer mon compte</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>{t('security.deleteDialogTitle')}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Alert severity="error" sx={{ borderRadius: '10px' }}>
-            Cette action est <strong>irréversible</strong>. Toutes vos données seront supprimées définitivement.
+            {t('security.deleteDialogWarning')}
           </Alert>
           <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
-            Tapez <strong>SUPPRIMER</strong> pour confirmer.
+            {t('security.deleteDialogHint')}
           </Typography>
           <TextField
             fullWidth
@@ -533,14 +637,14 @@ export default function SecurityPage() {
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => { setDeleteDialog(false); setDeleteConfirm(''); }} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>Annuler</Button>
+          <Button onClick={() => { setDeleteDialog(false); setDeleteConfirm(''); }} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleDeleteAccount}
             disabled={deleteConfirm !== 'SUPPRIMER' || deleteLoading}
             sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#c0392b', '&:hover': { bgcolor: '#a93226' } }}
           >
-            {deleteLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Supprimer définitivement'}
+            {deleteLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('security.deleteForever')}
           </Button>
         </DialogActions>
       </Dialog>

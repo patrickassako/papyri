@@ -1,13 +1,15 @@
 import React from 'react';
 import { Typography } from '@mui/material';
 import LegalLayout, { LegalSection, LegalSubSection, LegalList } from './LegalLayout';
+import { useTranslation } from 'react-i18next';
 
 const DATE = 'Mars 2026';
 
 export default function CookiesPage() {
+  const { t } = useTranslation();
   return (
     <LegalLayout
-      title="Politique de Cookies"
+      title={t('legal.cookiesTitle')}
       lastUpdated={DATE}
     >
       <LegalSection title="1. Qu'est-ce qu'un cookie ?">

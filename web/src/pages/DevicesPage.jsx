@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -33,9 +34,9 @@ import { deviceService } from '../services/device.service';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-function formatDate(dateStr) {
+function formatDate(dateStr, locale = 'fr-FR') {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleString('fr-FR', {
+  return new Date(dateStr).toLocaleString(locale, {
     day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -50,6 +51,8 @@ function DeviceIcon({ deviceType, size = 40 }) {
 
 export default function DevicesPage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   const [user, setUser] = useState(null);
   const [devices, setDevices] = useState([]);
   const [meta, setMeta] = useState({ limit: 3, count: 0 });
@@ -125,8 +128,8 @@ export default function DevicesPage() {
   };
 
   const subscriptionLabel = user?.subscription?.status === 'active'
-    ? `Actif jusqu'au ${new Date(user.subscription.current_period_end).toLocaleDateString('fr-FR')}`
-    : 'Aucun abonnement actif';
+    ? t('devices.activeUntil', { date: new Date(user.subscription.current_period_end).toLocaleDateString(locale) })
+    : t('devices.noActiveSubscription');
 
   const slotsUsed = meta.count;
   const slotsTotal = meta.limit;
@@ -139,10 +142,10 @@ export default function DevicesPage() {
         {/* Header */}
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light, mb: 0.5 }}>
-            Mes appareils
+            {t('devices.myDevices')}
           </Typography>
           <Typography variant="body2" sx={{ color: '#9c7e49' }}>
-            Appareils enregistrés sur votre compte · {slotsUsed}/{slotsTotal} emplacements utilisés
+            {t('devices.registeredDevices')} · {slotsUsed}/{slotsTotal} {t('devices.slotsUsed')}
           </Typography>
         </Box>
 
@@ -171,7 +174,7 @@ export default function DevicesPage() {
               {devices.length === 0 ? (
                 <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
                   <DevicesOutlined sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
-                  <Typography color="text.secondary">Aucun appareil enregistré</Typography>
+                  <Typography color="text.secondary">{t('devices.noDevices')}</Typography>
                 </Paper>
               ) : (
                 devices.map((device) => (
@@ -203,7 +206,7 @@ export default function DevicesPage() {
                           </Typography>
                           {device.is_current && (
                             <Chip
-                              label="Cet appareil"
+                              label={t('devices.currentDevice')}
                               size="small"
                               sx={{ bgcolor: tokens.colors.primary, color: '#fff', fontWeight: 700, fontSize: '0.7rem', height: 20 }}
                             />
@@ -211,7 +214,7 @@ export default function DevicesPage() {
                           {device.is_reading && (
                             <Chip
                               icon={<MenuBookOutlined sx={{ fontSize: '0.85rem !important' }} />}
-                              label="En cours de lecture"
+                              label={t('devices.reading')}
                               size="small"
                               sx={{ bgcolor: '#1e7d32', color: '#fff', fontWeight: 700, fontSize: '0.7rem', height: 20 }}
                             />
@@ -220,14 +223,14 @@ export default function DevicesPage() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <AccessTimeOutlined sx={{ fontSize: 14, color: '#9c7e49' }} />
                           <Typography variant="caption" sx={{ color: '#9c7e49' }}>
-                            Dernière activité : {formatDate(device.last_seen_at)}
+                            {t('devices.lastActive')} : {formatDate(device.last_seen_at, locale)}
                           </Typography>
                         </Box>
                       </Box>
 
                       {/* Remove button — disabled if currently reading on this device */}
                       {!device.is_current && (
-                        <Tooltip title={device.is_reading ? 'Lecture en cours' : 'Supprimer cet appareil'}>
+                        <Tooltip title={device.is_reading ? t('devices.reading') : t('devices.removeDevice')}>
                           <span>
                             <IconButton
                               size="small"
@@ -260,7 +263,7 @@ export default function DevicesPage() {
                 '& .MuiAlert-icon': { color: tokens.colors.accent },
               }}
             >
-              Votre compte peut être associé à <strong>{slotsTotal} appareils maximum</strong>. La lecture ne peut avoir lieu que sur <strong>un seul appareil à la fois</strong>. Si un autre appareil est en train de lire, les autres sont bloqués jusqu'à la fin de la session.
+              {t('devices.limitInfo', { total: slotsTotal })}
             </Alert>
 
             {/* Danger zone */}
@@ -269,10 +272,10 @@ export default function DevicesPage() {
               sx={{ p: 3, borderRadius: 3, border: '1px solid #f5c2c2', bgcolor: '#fff9f9' }}
             >
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#c25450', mb: 1 }}>
-                Déconnexion globale
+                {t('devices.globalLogout')}
               </Typography>
               <Typography variant="body2" sx={{ color: '#9c7e49', mb: 2.5 }}>
-                Révoque toutes les sessions actives sur tous vos appareils. Vous serez redirigé vers la page de connexion.
+                {t('devices.globalLogoutDesc')}
               </Typography>
               <Button
                 variant="outlined"
@@ -284,7 +287,7 @@ export default function DevicesPage() {
                   '&:hover': { bgcolor: '#ffeaea', borderColor: '#c25450' },
                 }}
               >
-                {revoking ? 'Révocation...' : 'Déconnecter tous les appareils'}
+                {revoking ? t('devices.revoking') : t('devices.signOutAll')}
               </Button>
             </Paper>
           </>
@@ -293,41 +296,40 @@ export default function DevicesPage() {
 
       {/* Confirm remove device */}
       <Dialog open={!!removeTarget} onClose={() => setRemoveTarget(null)} PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle sx={{ fontWeight: 700 }}>Supprimer l'appareil ?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>{t('devices.removeDeviceTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            L'appareil <strong>{removeTarget?.deviceName}</strong> sera supprimé de votre compte.
-            Il pourra être ré-enregistré lors de la prochaine connexion.
+            {t('devices.removeDeviceConfirm', { name: removeTarget?.deviceName })}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setRemoveTarget(null)} sx={{ borderRadius: 2 }}>Annuler</Button>
+          <Button onClick={() => setRemoveTarget(null)} sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleRemoveDevice}
             sx={{ bgcolor: '#c25450', borderRadius: 2, fontWeight: 700, '&:hover': { bgcolor: '#a83e3b' } }}
           >
-            Supprimer
+            {t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Confirm global logout */}
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle sx={{ fontWeight: 700 }}>Confirmer la déconnexion globale</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>{t('devices.signOutAllConfirmTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Vous allez être déconnecté de <strong>tous vos appareils</strong> immédiatement. Vous devrez vous reconnecter.
+            {t('devices.signOutAllConfirm')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setConfirmOpen(false)} sx={{ borderRadius: 2 }}>Annuler</Button>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ borderRadius: 2 }}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleRevokeAll}
             sx={{ bgcolor: '#c25450', borderRadius: 2, fontWeight: 700, '&:hover': { bgcolor: '#a83e3b' } }}
           >
-            Déconnecter partout
+            {t('devices.signOutAllConfirmButton')}
           </Button>
         </DialogActions>
       </Dialog>

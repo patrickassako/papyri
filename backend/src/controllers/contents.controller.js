@@ -9,6 +9,7 @@ const flutterwaveService = require('../services/flutterwave.service');
 const stripeService = require('../services/stripe.service');
 const contentAccessService = require('../services/content-access.service');
 const geoService = require('../services/geo.service');
+const familyProfilesService = require('../services/family-profiles.service');
 const { supabaseAdmin } = require('../config/database');
 
 async function ensurePaidContentUnlock({
@@ -16,8 +17,9 @@ async function ensurePaidContentUnlock({
   content,
   paymentRecord,
   providerMetadata = {},
+  profileId = null,
 }) {
-  const existingUnlock = await contentsService.getUserContentUnlock(userId, content.id);
+  const existingUnlock = await contentsService.getUserContentUnlock(userId, content.id, profileId);
   if (existingUnlock) return existingUnlock;
 
   const paymentMeta = paymentRecord?.metadata || {};
@@ -28,6 +30,7 @@ async function ensurePaidContentUnlock({
   try {
     return await contentsService.createContentUnlock({
       user_id: userId,
+      profile_id: profileId,
       content_id: content.id,
       source: 'paid',
       payment_id: paymentRecord.id,
@@ -39,7 +42,7 @@ async function ensurePaidContentUnlock({
     });
   } catch (error) {
     if (error?.code === '23505') {
-      const concurrentUnlock = await contentsService.getUserContentUnlock(userId, content.id);
+      const concurrentUnlock = await contentsService.getUserContentUnlock(userId, content.id, profileId);
       if (concurrentUnlock) return concurrentUnlock;
     }
     throw error;
@@ -202,6 +205,7 @@ async function getContentAccess(req, res) {
       userId,
       contentId: id,
       zone: geo,
+      profileId: req.headers['x-profile-id'] || null,
     });
 
     res.json({
@@ -233,9 +237,11 @@ async function unlockContent(req, res) {
     const userId = req.user.id;
 
     const content = await contentsService.getContentByIdForUnlock(id);
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const effectiveProfileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
 
     // Idempotent return if already unlocked
-    const existingUnlock = await contentsService.getUserContentUnlock(userId, id);
+    const existingUnlock = await contentsService.getUserContentUnlock(userId, id, effectiveProfileId);
     if (existingUnlock) {
       return res.json({
         success: true,
@@ -259,16 +265,27 @@ async function unlockContent(req, res) {
       const cycle = await subscriptionsService.ensureCurrentCycle(subscription);
 
       if (cycle) {
-        const usage = await subscriptionsService.ensureMemberCycleUsage(subscription, cycle, userId);
+        const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+        const useProfileScopedUsage = Boolean(
+          familyContext?.isFamilyContext
+          && familyContext?.subscription?.id === subscription.id
+          && familyContext?.profileId
+        );
+
+        const usage = useProfileScopedUsage
+          ? await subscriptionsService.ensureProfileCycleUsage(subscription, cycle, familyContext.profileId)
+          : await subscriptionsService.ensureMemberCycleUsage(subscription, cycle, userId);
+
         const quotaField = isTextContent ? 'text_unlocked_count' : 'audio_unlocked_count';
         const quotaLimitField = isTextContent ? 'text_quota' : 'audio_quota';
         const currentCount = Number(usage[quotaField] || 0);
         const quotaLimit = Number(usage[quotaLimitField] || 0);
+        const usageTable = useProfileScopedUsage ? 'profile_cycle_usage' : 'member_cycle_usage';
 
         if (currentCount < quotaLimit) {
           const nextCount = currentCount + 1;
           const { data: updatedUsageRow, error: usageError } = await supabaseAdmin
-            .from('member_cycle_usage')
+            .from(usageTable)
             .update({
               [quotaField]: nextCount,
               updated_at: new Date().toISOString(),
@@ -281,12 +298,14 @@ async function unlockContent(req, res) {
           if (!usageError && updatedUsageRow) {
             const unlock = await contentsService.createContentUnlock({
               user_id: userId,
+              profile_id: effectiveProfileId,
               content_id: content.id,
               source: 'quota',
               currency: content.price_currency || 'USD',
               metadata: {
                 cycle_id: cycle.id,
                 subscription_id: subscription.id,
+                ...(useProfileScopedUsage ? { profile_id: familyContext.profileId } : {}),
               },
             });
 
@@ -305,75 +324,120 @@ async function unlockContent(req, res) {
           }
         }
 
-        const nowIso = new Date().toISOString();
-        const bonusType = isTextContent ? 'text' : 'audio';
-        const { data: bonusCredits, error: bonusError } = await supabaseAdmin
-          .from('bonus_credits')
-          .select('*')
-          .eq('user_id', userId)
-          .gt('expires_at', nowIso)
-          .in('bonus_type', [bonusType, 'flex'])
-          .order('expires_at', { ascending: true })
-          .limit(10);
+        if (useProfileScopedUsage) {
+          const currentBonusUsed = Number(usage.bonus_used_count || 0);
+          const bonusQuota = Number(usage.bonus_quota || 0);
 
-        if (bonusError) throw bonusError;
-
-        const bonusCredit = (bonusCredits || []).find(
-          (item) => Number(item.quantity_used || 0) < Number(item.quantity_total || 0)
-        ) || null;
-        if (bonusCredit) {
-          const nextUsed = Number(bonusCredit.quantity_used || 0) + 1;
-          const updatePayload = {
-            quantity_used: nextUsed,
-            updated_at: new Date().toISOString(),
-          };
-
-          if (nextUsed >= Number(bonusCredit.quantity_total || 0)) {
-            updatePayload.consumed_at = new Date().toISOString();
-          }
-
-          const { data: updatedBonusRow, error: bonusUpdateError } = await supabaseAdmin
-            .from('bonus_credits')
-            .update(updatePayload)
-            .eq('id', bonusCredit.id)
-            .eq('quantity_used', bonusCredit.quantity_used)
-            .select('id, quantity_used')
-            .maybeSingle();
-
-          if (!bonusUpdateError && updatedBonusRow) {
-            const unlock = await contentsService.createContentUnlock({
-              user_id: userId,
-              content_id: content.id,
-              source: 'bonus',
-              bonus_credit_id: bonusCredit.id,
-              currency: content.price_currency || 'USD',
-              metadata: {
-                cycle_id: cycle.id,
-                subscription_id: subscription.id,
-              },
-            });
-
-            const { error: usageBonusError } = await supabaseAdmin
-              .from('member_cycle_usage')
+          if (currentBonusUsed < bonusQuota) {
+            const nextBonusUsed = currentBonusUsed + 1;
+            const { data: updatedBonusUsageRow, error: bonusUsageError } = await supabaseAdmin
+              .from('profile_cycle_usage')
               .update({
-                bonus_used_count: Number(usage.bonus_used_count || 0) + 1,
+                bonus_used_count: nextBonusUsed,
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', usage.id);
+              .eq('id', usage.id)
+              .eq('bonus_used_count', currentBonusUsed)
+              .select('id, bonus_used_count')
+              .maybeSingle();
 
-            if (usageBonusError) {
-              console.warn('Unable to increment bonus_used_count:', usageBonusError.message);
+            if (!bonusUsageError && updatedBonusUsageRow) {
+              const unlock = await contentsService.createContentUnlock({
+                user_id: userId,
+                profile_id: effectiveProfileId,
+                content_id: content.id,
+                source: 'bonus',
+                currency: content.price_currency || 'USD',
+                metadata: {
+                  cycle_id: cycle.id,
+                  subscription_id: subscription.id,
+                  profile_id: familyContext.profileId,
+                  profile_bonus: true,
+                },
+              });
+
+              return res.status(200).json({
+                success: true,
+                data: {
+                  unlocked: true,
+                  source: 'bonus',
+                  unlock,
+                  profile_bonus_remaining: Math.max(0, bonusQuota - nextBonusUsed),
+                },
+              });
+            }
+          }
+        } else {
+          const nowIso = new Date().toISOString();
+          const bonusType = isTextContent ? 'text' : 'audio';
+          const { data: bonusCredits, error: bonusError } = await supabaseAdmin
+            .from('bonus_credits')
+            .select('*')
+            .eq('user_id', userId)
+            .gt('expires_at', nowIso)
+            .in('bonus_type', [bonusType, 'flex'])
+            .order('expires_at', { ascending: true })
+            .limit(10);
+
+          if (bonusError) throw bonusError;
+
+          const bonusCredit = (bonusCredits || []).find(
+            (item) => Number(item.quantity_used || 0) < Number(item.quantity_total || 0)
+          ) || null;
+          if (bonusCredit) {
+            const nextUsed = Number(bonusCredit.quantity_used || 0) + 1;
+            const updatePayload = {
+              quantity_used: nextUsed,
+              updated_at: new Date().toISOString(),
+            };
+
+            if (nextUsed >= Number(bonusCredit.quantity_total || 0)) {
+              updatePayload.consumed_at = new Date().toISOString();
             }
 
-            return res.status(200).json({
-              success: true,
-              data: {
-                unlocked: true,
+            const { data: updatedBonusRow, error: bonusUpdateError } = await supabaseAdmin
+              .from('bonus_credits')
+              .update(updatePayload)
+              .eq('id', bonusCredit.id)
+              .eq('quantity_used', bonusCredit.quantity_used)
+              .select('id, quantity_used')
+              .maybeSingle();
+
+            if (!bonusUpdateError && updatedBonusRow) {
+              const unlock = await contentsService.createContentUnlock({
+                user_id: userId,
+                content_id: content.id,
                 source: 'bonus',
-                unlock,
                 bonus_credit_id: bonusCredit.id,
-              },
-            });
+                currency: content.price_currency || 'USD',
+                metadata: {
+                  cycle_id: cycle.id,
+                  subscription_id: subscription.id,
+                },
+              });
+
+              const { error: usageBonusError } = await supabaseAdmin
+                .from('member_cycle_usage')
+                .update({
+                  bonus_used_count: Number(usage.bonus_used_count || 0) + 1,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', usage.id);
+
+              if (usageBonusError) {
+                console.warn('Unable to increment bonus_used_count:', usageBonusError.message);
+              }
+
+              return res.status(200).json({
+                success: true,
+                data: {
+                  unlocked: true,
+                  source: 'bonus',
+                  unlock,
+                  bonus_credit_id: bonusCredit.id,
+                },
+              });
+            }
           }
         }
       }
@@ -418,6 +482,7 @@ async function unlockContent(req, res) {
     let reference = null;
     let paymentProvider = requestedProvider;
     let paymentMethod = 'card';
+    const paymentProfileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
 
     if (requestedProvider === 'stripe') {
       if (!stripeService.isConfigured()) {
@@ -444,6 +509,7 @@ async function unlockContent(req, res) {
           payment_type: 'content_unlock',
           content_id: content.id,
           access_type: content.access_type || 'paid',
+          ...(paymentProfileId ? { profile_id: paymentProfileId } : {}),
         },
       });
 
@@ -477,6 +543,7 @@ async function unlockContent(req, res) {
           payment_type: 'content_unlock',
           content_id: content.id,
           access_type: content.access_type || 'paid',
+          ...(paymentProfileId ? { profile_id: paymentProfileId } : {}),
         },
       });
 
@@ -500,6 +567,7 @@ async function unlockContent(req, res) {
         payment_type: 'content_unlock',
         content_id: content.id,
         access_type: content.access_type || 'paid',
+        ...(paymentProfileId ? { profile_id: paymentProfileId } : {}),
         base_price_cents: basePriceCents,
         discount_percent: discountPercent,
         final_price_cents: finalPriceCents,
@@ -562,7 +630,9 @@ async function verifyUnlockPayment(req, res) {
     const resolvedProvider = provider === 'stripe' ? 'stripe' : 'flutterwave';
 
     const content = await contentsService.getContentByIdForUnlock(id);
-    const existingUnlock = await contentsService.getUserContentUnlock(userId, id);
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const effectiveProfileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
+    const existingUnlock = await contentsService.getUserContentUnlock(userId, id, effectiveProfileId);
     if (existingUnlock) {
       return res.status(200).json({
         success: true,
@@ -697,6 +767,7 @@ async function verifyUnlockPayment(req, res) {
       content,
       paymentRecord,
       providerMetadata,
+      profileId: effectiveProfileId,
     });
 
     return res.status(200).json({

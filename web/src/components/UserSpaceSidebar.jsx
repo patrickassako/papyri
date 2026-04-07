@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Avatar, Button, IconButton } from '@mui/material';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
@@ -18,6 +18,7 @@ import NotificationBell from './NotificationBell';
 import LanguageToggle from './LanguageToggle';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 import { useTranslation } from 'react-i18next';
+import { getActiveProfile } from '../config/profileStorage';
 
 export default function UserSpaceSidebar({
   user,
@@ -26,6 +27,13 @@ export default function UserSpaceSidebar({
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [activeProfile, setActiveProfile] = useState(() => getActiveProfile());
+
+  useEffect(() => {
+    const handleProfileChange = (event) => setActiveProfile(event?.detail || null);
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
 
   const navItems = [
     { label: t('sidebar.overview'), icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
@@ -48,7 +56,7 @@ export default function UserSpaceSidebar({
     }
   };
 
-  const userName = user?.full_name || 'Utilisateur';
+  const userName = user?.full_name || t('sidebar.defaultUser');
   const userEmail = user?.email || '';
   const userAvatar = user?.avatar_url || '';
 
@@ -204,6 +212,29 @@ export default function UserSpaceSidebar({
           </Button>
           <LanguageToggle variant="icon" />
         </Box>
+
+        {activeProfile?.id && (
+          <Button
+            onClick={() => navigate('/profiles/select')}
+            sx={{
+              mb: 1.25,
+              width: '100%',
+              justifyContent: 'space-between',
+              borderRadius: '12px',
+              px: 2,
+              py: 1.1,
+              textTransform: 'none',
+              fontSize: '0.88rem',
+              fontWeight: 600,
+              color: tokens.colors.onBackground.light,
+              bgcolor: '#f8f4ec',
+              '&:hover': { bgcolor: '#f1eadb' },
+            }}
+          >
+            <span>{t('sidebar.profile', { name: activeProfile.name })}</span>
+            <span>{t('sidebar.changeProfile')}</span>
+          </Button>
+        )}
 
         <Button
           onClick={handleLogout}

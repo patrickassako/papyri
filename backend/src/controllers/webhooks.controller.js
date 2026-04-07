@@ -14,6 +14,7 @@ const { supabaseAdmin } = require('../config/database');
 async function ensureStripeContentUnlockFromPayment(session, payment) {
   const userId = session.metadata?.user_id || payment.user_id;
   const contentId = session.metadata?.content_id || payment.metadata?.content_id;
+  const profileId = session.metadata?.profile_id || payment.metadata?.profile_id || null;
 
   if (!userId || !contentId) {
     console.warn('⚠️  Missing user_id/content_id for Stripe content unlock', {
@@ -23,12 +24,13 @@ async function ensureStripeContentUnlockFromPayment(session, payment) {
     return null;
   }
 
-  const { data: existingUnlock, error: existingUnlockError } = await supabaseAdmin
+  let existingQuery = supabaseAdmin
     .from('content_unlocks')
     .select('*')
     .eq('user_id', userId)
-    .eq('content_id', contentId)
-    .maybeSingle();
+    .eq('content_id', contentId);
+  existingQuery = profileId ? existingQuery.eq('profile_id', profileId) : existingQuery.is('profile_id', null);
+  const { data: existingUnlock, error: existingUnlockError } = await existingQuery.maybeSingle();
 
   if (existingUnlockError) throw existingUnlockError;
   if (existingUnlock) return existingUnlock;
@@ -40,6 +42,7 @@ async function ensureStripeContentUnlockFromPayment(session, payment) {
       .from('content_unlocks')
       .insert({
         user_id: userId,
+        profile_id: profileId,
         content_id: contentId,
         source: 'paid',
         payment_id: payment.id,
@@ -59,12 +62,13 @@ async function ensureStripeContentUnlockFromPayment(session, payment) {
     return unlock;
   } catch (error) {
     if (error?.code === '23505') {
-      const { data: concurrentUnlock, error: concurrentError } = await supabaseAdmin
+      let concurrentQuery = supabaseAdmin
         .from('content_unlocks')
         .select('*')
         .eq('user_id', userId)
-        .eq('content_id', contentId)
-        .maybeSingle();
+        .eq('content_id', contentId);
+      concurrentQuery = profileId ? concurrentQuery.eq('profile_id', profileId) : concurrentQuery.is('profile_id', null);
+      const { data: concurrentUnlock, error: concurrentError } = await concurrentQuery.maybeSingle();
       if (concurrentError) throw concurrentError;
       return concurrentUnlock || null;
     }

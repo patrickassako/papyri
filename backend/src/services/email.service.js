@@ -146,6 +146,43 @@ async function sendPasswordResetEmail(email, full_name, resetToken) {
   }
 }
 
+async function sendEmailVerificationCodeEmail(email, fullName, code) {
+  try {
+    await _sendEmail({
+      to: email,
+      toName: fullName || email,
+      subject: 'Votre code de verification Papyri',
+      html: getEmailLayout('Verification de connexion', `
+        <h2 style="margin: 0 0 24px 0; color: #2E4057; font-size: 24px; font-weight: 600;">
+          Verification de connexion
+        </h2>
+        <p style="margin: 0 0 16px 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
+          Bonjour ${fullName || email},
+        </p>
+        <p style="margin: 0 0 16px 0; color: #4A4A4A; font-size: 16px; line-height: 1.6;">
+          Voici votre code de verification a 6 chiffres pour finaliser votre connexion a Papyri :
+        </p>
+        <div style="margin: 24px 0; padding: 20px; border-radius: 12px; background: #f9f6f2; text-align: center; border: 1px solid #eadfce;">
+          <div style="font-size: 32px; letter-spacing: 8px; font-weight: 800; color: #B5651D;">
+            ${code}
+          </div>
+        </div>
+        <p style="margin: 0 0 12px 0; color: #4A4A4A; font-size: 14px; line-height: 1.6;">
+          Ce code expire dans 10 minutes.
+        </p>
+        <p style="margin: 0; color: #9E9E9E; font-size: 13px; line-height: 1.5;">
+          Si vous n'etes pas a l'origine de cette tentative, ignorez cet email.
+        </p>
+      `),
+      text: `Bonjour ${fullName || email},\n\nVoici votre code de verification Papyri : ${code}\n\nCe code expire dans 10 minutes.\nSi vous n'etes pas a l'origine de cette tentative, ignorez cet email.`,
+    });
+    console.log(`[email] Verification code sent to ${email}`);
+  } catch (error) {
+    console.error('Error sending email verification code:', error);
+    throw error;
+  }
+}
+
 async function sendExpirationReminderEmail(email, fullName, daysLeft, renewUrl) {
   try {
     await _sendEmail({
@@ -753,6 +790,7 @@ async function sendAdminBroadcastEmail(email, fullName, { title, body, ctaLabel,
 module.exports = {
   sendWelcomeEmail,
   sendPasswordResetEmail,
+  sendEmailVerificationCodeEmail,
   sendExpirationReminderEmail,
   sendSubscriptionExpiredEmail,
   sendPaymentConfirmationEmail,

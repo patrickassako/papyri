@@ -10,11 +10,13 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
@@ -33,21 +35,21 @@ const ResetPassword = () => {
   // Check if token exists
   useEffect(() => {
     if (!token) {
-      setError('Lien invalide. Veuillez demander un nouveau lien de réinitialisation.');
+      setError(t('auth.invalidResetLink'));
     }
-  }, [token]);
+  }, [token, t]);
 
   // Password validation
   const validatePassword = (password) => {
-    if (!password) return 'Le mot de passe est obligatoire.';
-    if (password.length < 8) return 'Le mot de passe doit contenir au moins 8 caractères.';
+    if (!password) return t('auth.passwordRequired');
+    if (password.length < 8) return t('auth.passwordTooShort');
     return null;
   };
 
   // Confirm password validation
   const validateConfirmPassword = (confirmPassword) => {
-    if (!confirmPassword) return 'Veuillez confirmer le mot de passe.';
-    if (confirmPassword !== formData.password) return 'Les mots de passe ne correspondent pas.';
+    if (!confirmPassword) return t('auth.confirmPasswordRequired');
+    if (confirmPassword !== formData.password) return t('auth.passwordsMismatch');
     return null;
   };
 
@@ -104,7 +106,7 @@ const ResetPassword = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error?.message || 'Une erreur est survenue.');
+        setError(data.error?.message || t('common.error'));
         setLoading(false);
         return;
       }
@@ -119,7 +121,7 @@ const ResetPassword = () => {
       }, 2000);
     } catch (err) {
       console.error('Reset password error:', err);
-      setError('Erreur de connexion. Veuillez réessayer.');
+      setError(t('errors.networkError'));
       setLoading(false);
     }
   };
@@ -154,7 +156,7 @@ const ResetPassword = () => {
             textAlign: 'center'
           }}
         >
-          Créer un nouveau mot de passe
+          {t('auth.newPasswordTitle')}
         </Typography>
 
         {/* Success Alert */}
@@ -163,7 +165,7 @@ const ResetPassword = () => {
             severity="success"
             sx={{ marginBottom: '24px' }}
           >
-            Mot de passe modifié avec succès ! Redirection vers la connexion...
+            {t('auth.passwordResetSuccess')}
           </Alert>
         )}
 
@@ -193,7 +195,7 @@ const ResetPassword = () => {
                   marginBottom: '8px'
                 }}
               >
-                Nouveau mot de passe
+                {t('auth.newPassword')}
               </Typography>
               <TextField
                 id="password"
@@ -203,15 +205,15 @@ const ResetPassword = () => {
                 onChange={handleChange('password')}
                 onBlur={handleBlur('password')}
                 error={!!errors.password}
-                helperText={errors.password || 'Minimum 8 caractères'}
-                placeholder="Votre nouveau mot de passe"
+                helperText={errors.password || t('auth.passwordMinChars')}
+                placeholder={t('auth.newPasswordPlaceholder')}
                 autoComplete="new-password"
                 autoFocus
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
                       >
@@ -253,7 +255,7 @@ const ResetPassword = () => {
                   marginBottom: '8px'
                 }}
               >
-                Confirmer le mot de passe
+                {t('auth.confirmPassword')}
               </Typography>
               <TextField
                 id="confirmPassword"
@@ -264,13 +266,13 @@ const ResetPassword = () => {
                 onBlur={handleBlur('confirmPassword')}
                 error={!!errors.confirmPassword}
                 helperText={errors.confirmPassword}
-                placeholder="Confirmez votre mot de passe"
+                placeholder={t('auth.confirmPasswordPlaceholder')}
                 autoComplete="new-password"
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        aria-label={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         edge="end"
                       >
@@ -323,7 +325,7 @@ const ResetPassword = () => {
                 }
               }}
             >
-              {loading ? 'Réinitialisation en cours...' : 'Réinitialiser le mot de passe'}
+              {loading ? t('auth.resetting') : t('auth.resetPassword')}
             </Button>
           </>
         )}

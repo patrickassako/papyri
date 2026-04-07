@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Box,
@@ -72,6 +73,7 @@ const highlightColors = {
 export default function EReaderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t: tl } = useTranslation();
 
   // Exclusive reading lock — one device at a time
   const { lockState, reacquire } = useReadingLock(id);
@@ -1909,7 +1911,7 @@ export default function EReaderPage() {
           <Button onClick={() => { setError(''); setLoading(true); setRetryKey((k) => k + 1); }} variant="contained" sx={{ bgcolor: primary }}>
             Réessayer
           </Button>
-          <Button onClick={() => navigate('/catalogue')} variant="outlined">Retour</Button>
+          <Button onClick={() => navigate('/catalogue')} variant="outlined">{tl('reader_ui.back')}</Button>
         </Box>
       </Container>
     );
@@ -1934,12 +1936,12 @@ export default function EReaderPage() {
     return (
       <Container sx={{ py: 8, textAlign: 'center' }}>
         <Box sx={{ fontSize: 64, mb: 2 }}>🔒</Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Limite d'appareils atteinte</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{tl('reader_ui.deviceLimit')}</Typography>
         <Typography sx={{ color: '#9c7e49', mb: 3 }}>
           Votre compte est associé à 3 appareils. Supprimez un appareil depuis votre espace personnel pour continuer.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1 }}>Gérer mes appareils</Button>
-        <Button variant="outlined" onClick={() => navigate(-1)}>Retour</Button>
+        <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1 }}>{tl('reader_ui.manageDevices')}</Button>
+        <Button variant="outlined" onClick={() => navigate(-1)}>{tl('reader_ui.back')}</Button>
       </Container>
     );
   }
@@ -2031,10 +2033,10 @@ export default function EReaderPage() {
             {/* TTS */}
             {ttsSupported && (
               <>
-                <IconButton size="small" onClick={pauseResumeTts} title={ttsSpeaking && !ttsPaused ? 'Pause vocale' : 'Lire à voix haute'} sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText }}>
+                <IconButton size="small" onClick={pauseResumeTts} title={ttsSpeaking && !ttsPaused ? tl('reader_ui.pauseVoice') : tl('reader_ui.readAloud')} sx={{ color: (ttsSpeaking || ttsPaused) ? primary : t.subtleText }}>
                   {ttsSpeaking && !ttsPaused ? <Pause size={16} /> : <Play size={16} />}
                 </IconButton>
-                <IconButton size="small" onClick={stopTts} disabled={!ttsSpeaking && !ttsPaused} title="Arrêter la lecture vocale" sx={{ color: t.subtleText }}>
+                <IconButton size="small" onClick={stopTts} disabled={!ttsSpeaking && !ttsPaused} title={tl('reader_ui.stopVoice')} sx={{ color: t.subtleText }}>
                   <Square size={14} />
                 </IconButton>
                 {/* Vitesse TTS — compact */}
@@ -2061,7 +2063,7 @@ export default function EReaderPage() {
             )}
 
             {/* Mode jour/nuit */}
-            <IconButton size="small" onClick={() => setNightMode((v) => !v)} title={nightMode ? 'Mode jour' : 'Mode nuit'} sx={{ color: t.text }}>
+            <IconButton size="small" onClick={() => setNightMode((v) => !v)} title={nightMode ? tl('reader_ui.day') : tl('reader_ui.night')} sx={{ color: t.text }}>
               {nightMode ? <Sun size={16} /> : <Moon size={16} />}
             </IconButton>
 
@@ -2074,23 +2076,23 @@ export default function EReaderPage() {
 
             {/* Recherche */}
             {isEpub && (
-              <IconButton size="small" onClick={() => { setShowSearch((v) => !v); setSearchResults([]); setSearchQuery(''); }} title="Recherche" sx={{ color: showSearch ? primary : t.subtleText }}>
+              <IconButton size="small" onClick={() => { setShowSearch((v) => !v); setSearchResults([]); setSearchQuery(''); }} title={tl('reader_ui.search')} sx={{ color: showSearch ? primary : t.subtleText }}>
                 <Search size={16} />
               </IconButton>
             )}
 
             {/* Annotations */}
-            <IconButton size="small" onClick={() => setShowAnnotations((v) => !v)} title="Annotations" sx={{ color: showAnnotations ? primary : t.subtleText }}>
+            <IconButton size="small" onClick={() => setShowAnnotations((v) => !v)} title={tl('reader_ui.annotations')} sx={{ color: showAnnotations ? primary : t.subtleText }}>
               <Highlighter size={16} />
             </IconButton>
 
             {/* Sommaire */}
-            <IconButton size="small" onClick={() => setShowToc((v) => !v)} title={showToc ? 'Masquer le sommaire' : 'Sommaire'} sx={{ color: (showToc || showSearch) ? primary : t.text }}>
+            <IconButton size="small" onClick={() => setShowToc((v) => !v)} title={showToc ? tl('reader_ui.hideToc') : tl('reader_ui.toc')} sx={{ color: (showToc || showSearch) ? primary : t.text }}>
               <Menu size={16} />
             </IconButton>
 
             {/* Plein écran */}
-            <IconButton size="small" onClick={toggleFullscreen} title="Plein écran" sx={{ color: t.text }}>
+            <IconButton size="small" onClick={toggleFullscreen} title={tl('reader_ui.fullscreen')} sx={{ color: t.text }}>
               {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
             </IconButton>
           </Box>
@@ -2107,7 +2109,7 @@ export default function EReaderPage() {
               <TextField
                 size="small"
                 fullWidth
-                placeholder="Rechercher dans le livre…"
+                placeholder={tl('reader_ui.searchInBook')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
@@ -2129,7 +2131,7 @@ export default function EReaderPage() {
             </Box>
             <List dense disablePadding sx={{ overflowY: 'auto', minHeight: 0, flex: 1 }}>
               {searchResults.length === 0 && !searchLoading && searchQuery && (
-                <Typography sx={{ p: 2, fontSize: '0.82rem', color: t.subtleText }}>Aucun résultat.</Typography>
+                <Typography sx={{ p: 2, fontSize: '0.82rem', color: t.subtleText }}>{tl('reader_ui.noResults')}</Typography>
               )}
               {searchResults.map((r, idx) => (
                 <ListItemButton
@@ -2156,7 +2158,7 @@ export default function EReaderPage() {
         ) : showToc ? (
           <Box sx={{ width: 280, flexShrink: 0, borderRight: `1px solid ${t.border}`, bgcolor: t.sidebarBg, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Sommaire</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>{tl('reader_ui.toc')}</Typography>
               <Typography sx={{ fontSize: '0.72rem', opacity: 0.5 }}>{tocItems.length} chapitres</Typography>
             </Box>
             <Box sx={{ py: 0.5, px: 0.8, overflowY: 'auto', minHeight: 0 }}>
@@ -2310,7 +2312,7 @@ export default function EReaderPage() {
                     />
                   ))}
                   <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                  <IconButton size="small" onClick={() => setShowNoteInput((v) => !v)} title="Ajouter une note" sx={{ color: t.text }}>
+                  <IconButton size="small" onClick={() => setShowNoteInput((v) => !v)} title={tl('reader_ui.addNote')} sx={{ color: t.text }}>
                     <MessageSquare size={16} />
                   </IconButton>
                   <IconButton size="small" onClick={closeSelectionPopup} title="Fermer" sx={{ color: t.subtleText }}>
@@ -2323,7 +2325,7 @@ export default function EReaderPage() {
                       type="text"
                       value={noteInput}
                       onChange={(e) => setNoteInput(e.target.value)}
-                      placeholder="Ajouter une note..."
+                      placeholder={tl('reader_ui.addNotePlaceholder')}
                       onKeyDown={(e) => { if (e.key === 'Enter' && noteInput.trim()) addHighlight('yellow', noteInput.trim()); }}
                       style={{
                         flex: 1,
@@ -2364,7 +2366,7 @@ export default function EReaderPage() {
         {showAnnotations && (
           <Box sx={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${t.border}`, bgcolor: t.sidebarBg, display: { xs: 'none', lg: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>Annotations</Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.7 }}>{tl('reader_ui.annotations')}</Typography>
               <IconButton size="small" onClick={() => setShowAnnotations(false)} sx={{ color: t.subtleText }}>
                 <X size={16} />
               </IconButton>
@@ -2374,7 +2376,7 @@ export default function EReaderPage() {
               {bookmarks.length > 0 && (
                 <Box sx={{ px: 1.5, py: 1 }}>
                   <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.5, mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Bookmark size={12} /> Marque-pages ({bookmarks.length})
+                    <Bookmark size={12} /> {tl('reader_ui.bookmarksCount', { n: bookmarks.length })}
                   </Typography>
                   {bookmarks.map((bm) => (
                     <Box
@@ -2409,7 +2411,7 @@ export default function EReaderPage() {
               {highlights.length > 0 && (
                 <Box sx={{ px: 1.5, py: 1 }}>
                   <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.5, mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Highlighter size={12} /> Surlignages ({highlights.length})
+                    <Highlighter size={12} /> {tl('reader_ui.highlightsCount', { n: highlights.length })}
                   </Typography>
                   {highlights.map((hl) => (
                     <Box
@@ -2450,9 +2452,9 @@ export default function EReaderPage() {
 
               {highlights.length === 0 && bookmarks.length === 0 && (
                 <Box sx={{ p: 3, textAlign: 'center' }}>
-                  <Typography sx={{ fontSize: '0.82rem', opacity: 0.5, mb: 1 }}>Aucune annotation</Typography>
+                  <Typography sx={{ fontSize: '0.82rem', opacity: 0.5, mb: 1 }}>{tl('reader_ui.noAnnotations')}</Typography>
                   <Typography sx={{ fontSize: '0.72rem', opacity: 0.35 }}>
-                    Sélectionnez du texte pour surligner ou utilisez le bouton marque-page.
+                    {tl('reader_ui.noAnnotationsHint')}
                   </Typography>
                 </Box>
               )}

@@ -64,12 +64,17 @@ export default function PublicHeader({
           <LanguageToggle variant="icon" />
         </Stack>
 
-        <Button
-          sx={{ bgcolor: primary, color: '#111', borderRadius: '9px', fontWeight: 800, '&:hover': { bgcolor: '#e29d22' } }}
-          onClick={() => navigate(isAuthenticated ? authenticatedCtaPath : '/register')}
-        >
-          {isAuthenticated ? t('publicNav.mySpace') : t('publicNav.register')}
-        </Button>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+            <LanguageToggle variant="icon" />
+          </Box>
+          <Button
+            sx={{ bgcolor: primary, color: '#111', borderRadius: '9px', fontWeight: 800, '&:hover': { bgcolor: '#e29d22' } }}
+            onClick={() => navigate(isAuthenticated ? authenticatedCtaPath : '/register')}
+          >
+            {isAuthenticated ? t('publicNav.mySpace') : t('publicNav.register')}
+          </Button>
+        </Stack>
       </Container>
     </Box>
   );

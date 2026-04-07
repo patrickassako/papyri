@@ -8,6 +8,7 @@ import theme from './theme/theme';
 import { AudioProvider } from './context/AudioContext';
 import MiniPlayer from './components/MiniPlayer';
 import * as authService from './services/auth.service';
+import * as familyService from './services/family.service';
 import CookieConsent from './components/CookieConsent';
 
 const Register = lazy(() => import('./pages/Register'));
@@ -31,6 +32,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const DevicesPage = lazy(() => import('./pages/DevicesPage'));
 const SecurityPage = lazy(() => import('./pages/SecurityPage'));
 const MfaVerifyPage = lazy(() => import('./pages/MfaVerifyPage'));
+const FamilyProfilePickerPage = lazy(() => import('./pages/FamilyProfilePickerPage'));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'));
 const PublisherLayout = lazy(() => import('./components/PublisherLayout'));
 const PublisherActivatePage = lazy(() => import('./pages/publisher/PublisherActivatePage'));
@@ -123,8 +125,31 @@ function useAuth() {
 
 function ProtectedRoute({ children }) {
   const { loading, user } = useAuth();
+  const location = useLocation();
+  const [profileCheck, setProfileCheck] = useState({ loading: true, redirect: false });
 
-  if (loading) {
+  useEffect(() => {
+    let active = true;
+
+    if (!user || user?.role === 'admin' || user?.role === 'publisher') {
+      setProfileCheck({ loading: false, redirect: false });
+      return undefined;
+    }
+
+    familyService.resolveProfileRequirement()
+      .then((result) => {
+        if (!active) return;
+        setProfileCheck({ loading: false, redirect: Boolean(result?.needsSelection) });
+      })
+      .catch(() => {
+        if (!active) return;
+        setProfileCheck({ loading: false, redirect: false });
+      });
+
+    return () => { active = false; };
+  }, [user, location.pathname]);
+
+  if (loading || profileCheck.loading) {
     return (
       <Box sx={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
         <CircularProgress />
@@ -134,6 +159,10 @@ function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (profileCheck.redirect && location.pathname !== '/profiles/select') {
+    return <Navigate to="/profiles/select" replace state={{ from: `${location.pathname}${location.search || ''}` }} />;
   }
 
   return children;
@@ -191,6 +220,14 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/mfa-verify" element={<MfaVerifyPage />} />
+            <Route
+              path="/profiles/select"
+              element={
+                <ProtectedRoute>
+                  <FamilyProfilePickerPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 

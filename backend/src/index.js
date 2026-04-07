@@ -34,6 +34,7 @@ const contentsRoutes = require('./routes/contents.routes');
 const searchRoutes = require('./routes/search.routes');
 const homeRoutes = require('./routes/home.routes');
 const subscriptionsRoutes = require('./routes/subscriptions.routes');
+const familyRoutes = require('./routes/family.routes');
 const webhooksRoutes = require('./routes/webhooks.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
 const adminNotificationsRoutes = require('./routes/admin.notifications.routes');
@@ -141,6 +142,7 @@ async function startServer() {
   app.use('/api', contentsRoutes);
   app.use('/api', searchRoutes);
   app.use('/api/subscriptions', subscriptionsRoutes);
+  app.use('/api/family', familyRoutes);
   app.use('/api/notifications', notificationsRoutes);
   app.use('/devices', devicesRoutes);
   app.use('/api/admin/notifications', adminNotificationsRoutes);

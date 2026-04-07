@@ -103,6 +103,7 @@ export default function ContentDetailPage() {
   const [callbackNotice, setCallbackNotice] = useState('');
   const [paymentDialog, setPaymentDialog] = useState({ open: false, providerBusy: '' });
   const [lockLostNoticeOpen, setLockLostNoticeOpen] = useState(false);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
 
   // ─── Avis lecteurs ───
   const [reviews, setReviews] = useState([]);
@@ -236,21 +237,18 @@ export default function ContentDetailPage() {
     };
   }, [authContextLoading, id, isAuthenticated, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    let active = true;
-
-    const loadViewerContext = async () => {
+  const loadViewerContext = useCallback(async (activeRef) => {
       setAuthContextLoading(true);
       setAccessActionError('');
 
       try {
         const authenticated = await authService.isAuthenticated();
-        if (!active) return;
+        if (!activeRef.current) return;
 
         setIsAuthenticated(authenticated);
 
         if (authenticated) {
-          authService.getUser().then((u) => { if (active) setUser(u); }).catch(() => {});
+          authService.getUser().then((u) => { if (activeRef.current) setUser(u); }).catch(() => {});
         }
 
         if (!authenticated) {
@@ -267,7 +265,7 @@ export default function ContentDetailPage() {
           subscriptionsService.getMyUsage(),
         ]);
 
-        if (!active) return;
+        if (!activeRef.current) return;
 
         if (subscriptionResult.status === 'fulfilled') {
           setHasAnySubscription(Boolean(subscriptionResult.value?.hasSubscription));
@@ -293,23 +291,35 @@ export default function ContentDetailPage() {
         }
       } catch (ctxError) {
         console.error('Erreur contexte utilisateur:', ctxError);
-        if (!active) return;
+        if (!activeRef.current) return;
         setIsAuthenticated(false);
         setHasAnySubscription(false);
         setHasActiveSubscription(false);
         setAccessInfo(null);
         setUsageInfo(null);
       } finally {
-        if (active) setAuthContextLoading(false);
+        if (activeRef.current) setAuthContextLoading(false);
       }
-    };
+  }, [id]);
 
-    loadViewerContext();
+  useEffect(() => {
+    const activeRef = { current: true };
+    loadViewerContext(activeRef);
 
     return () => {
-      active = false;
+      activeRef.current = false;
     };
-  }, [id]);
+  }, [id, profileReloadKey, loadViewerContext]);
+
+  useEffect(() => {
+    const handleProfileChange = () => {
+      setProfileReloadKey((v) => v + 1);
+      setAccessActionError('');
+      setCallbackNotice('');
+    };
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
 
   const handleRead = () => {
     const format = String(content?.format || '').toLowerCase();
@@ -364,17 +374,17 @@ export default function ContentDetailPage() {
 
   const primaryActionLabel = useMemo(() => {
     if (scenario === 'guest') {
-      return isPaidBook ? t('content.readNow') : t('content.startReading');
+      return isPaidBook ? t('content.buyContent') : t('pricing.subscribeNow');
     }
     if (scenario === 'active_subscriber') {
       if (canOpenContent) return isAudiobook ? t('content.listenNow') : t('content.readNow');
-      if (isPaidBook) return t('content.subscribeNow');
-      return t('content.subscribeNow');
+      if (accessType === 'paid') return t('content.buyContent');
+      return t('content.unlockContent');
     }
-    if (isPaidBook) return t('content.subscribeNow');
+    if (isPaidBook) return t('content.buyContent');
     return t('pricing.subscribeNow');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenario, isPaidBook, canOpenContent, isAudiobook, t]);
+  }, [scenario, isPaidBook, canOpenContent, isAudiobook, accessType, t]);
 
   const secondaryActionLabel = useMemo(() => {
     if (scenario === 'guest') return t('pricing.subscribeNow');
@@ -771,7 +781,7 @@ export default function ContentDetailPage() {
             >
               {authContextLoading ? (
                 <Typography sx={{ color: '#7a6a4e', fontSize: '0.95rem' }}>
-                  Vérification de l’accès en cours...
+                  Vérification de l'accès en cours...
                 </Typography>
               ) : scenario === 'guest' ? (
                 <Box>
@@ -817,7 +827,7 @@ export default function ContentDetailPage() {
                       <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                           <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
-                          {isSubscriptionBook ? 'Ou achetez-le' : 'Prix abonné'}:{' '}
+                          {isSubscriptionBook ? t('content.orBuyIt') : t('content.subscriberPrice')}:{' '}
                           <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
                           {'  '}
                           <strong style={{ color: '#b5651d' }}>{pReduced.local}</strong>
@@ -854,7 +864,7 @@ export default function ContentDetailPage() {
                   })() : null}
                   {hasAnySubscription ? (
                     <Typography sx={{ mt: 0.8, color: '#9c7e49', fontSize: '0.86rem' }}>
-                      Votre abonnement précédent n’est plus actif.
+                      Votre abonnement précédent n'est plus actif.
                     </Typography>
                   ) : null}
                 </Box>
@@ -1012,7 +1022,7 @@ export default function ContentDetailPage() {
                       }}
                       sx={{ bgcolor: tokens.colors.primary, borderRadius: '9px', textTransform: 'none', fontWeight: 700, fontSize: '0.82rem', '&:hover': { bgcolor: '#9e5519' } }}
                     >
-                      {myReview ? 'Mettre à jour' : 'Publier mon avis'}
+                      {myReview ? t('content.updateReview') : t('content.publishReview')}
                     </Button>
                     {myReview && (
                       <Button
@@ -1078,7 +1088,7 @@ export default function ContentDetailPage() {
             {/* ── Dans le même genre ── */}
             {(relatedLoading || recommendations.sameGenre.length > 0) && (
               <Box sx={{ mt: 6.2 }}>
-                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>Dans le même genre</Typography>
+                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>{t('content.sameGenre')}</Typography>
                 {relatedLoading ? (
                   <Box sx={{ mt: 1.8, display: 'flex', gap: 2, overflowX: 'auto', pb: 1 }}>
                     {[1, 2, 3, 4].map((k) => (
@@ -1196,7 +1206,7 @@ export default function ContentDetailPage() {
                 <Box component="span" sx={{ fontSize: '1.1rem' }}>💳</Box>
                 <Box sx={{ textAlign: 'left' }}>
                   <Typography sx={{ fontWeight: 700, color: '#5469d4' }}>Carte bancaire</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#8a8a8a' }}>Paiement sécurisé via Stripe</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#8a8a8a' }}>{t('content.stripeSecure')}</Typography>
                 </Box>
               </Box>
               {paymentDialog.providerBusy === 'stripe' ? <CircularProgress size={18} sx={{ color: '#5469d4' }} /> : null}

@@ -14,12 +14,14 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import * as authService from '../services/auth.service';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -36,22 +38,22 @@ const Register = () => {
   // Email validation
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) return 'L\'email est obligatoire.';
-    if (!emailRegex.test(email)) return 'Format d\'email invalide.';
+    if (!email) return t('auth.emailRequired');
+    if (!emailRegex.test(email)) return t('auth.emailInvalid');
     return null;
   };
 
   // Password validation
   const validatePassword = (password) => {
-    if (!password) return 'Le mot de passe est obligatoire.';
-    if (password.length < 8) return 'Le mot de passe doit contenir au minimum 8 caractères.';
+    if (!password) return t('auth.passwordRequired');
+    if (password.length < 8) return t('auth.passwordTooShort');
     return null;
   };
 
   // Full name validation
   const validateFullName = (name) => {
-    if (!name) return 'Le nom complet est obligatoire.';
-    if (name.length < 2) return 'Le nom doit contenir au minimum 2 caractères.';
+    if (!name) return t('auth.nameRequired');
+    if (name.length < 2) return t('auth.nameTooShort');
     return null;
   };
 
@@ -66,9 +68,9 @@ const Register = () => {
     if (/\d/.test(password)) score++;
     if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
 
-    if (score <= 2) return { score: 33, label: 'Faible', color: '#C25450' };
-    if (score <= 3) return { score: 66, label: 'Moyen', color: tokens.colors.secondary };
-    return { score: 100, label: 'Fort', color: '#4A7C59' };
+    if (score <= 2) return { score: 33, label: t('security.weak'), color: '#C25450' };
+    if (score <= 3) return { score: 66, label: t('security.fair'), color: tokens.colors.secondary };
+    return { score: 100, label: t('security.strong'), color: '#4A7C59' };
   };
 
   const passwordStrength = getPasswordStrength(formData.password);
@@ -133,7 +135,7 @@ const Register = () => {
       navigate('/onboarding');
     } catch (error) {
       console.error('Registration error:', error);
-      setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');
+      setApiError(error.message || t('auth.registerError'));
       setLoading(false);
     }
   };
@@ -179,7 +181,7 @@ const Register = () => {
             textAlign: 'center'
           }}
         >
-          Créer mon compte
+          {t('auth.registerTitle')}
         </Typography>
 
         {/* API Error Alert */}
@@ -206,7 +208,7 @@ const Register = () => {
               marginBottom: '8px'
             }}
           >
-            Nom complet
+            {t('auth.fullName')}
           </Typography>
           <TextField
             id="full_name"
@@ -216,7 +218,7 @@ const Register = () => {
             onBlur={handleBlur('full_name')}
             error={touched.full_name && !!errors.full_name}
             helperText={touched.full_name && errors.full_name}
-            placeholder="Votre nom complet"
+            placeholder={t('auth.fullNamePlaceholder')}
             autoComplete="name"
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -252,7 +254,7 @@ const Register = () => {
               marginBottom: '8px'
             }}
           >
-            Email
+            {t('auth.email')}
           </Typography>
           <TextField
             id="email"
@@ -263,7 +265,7 @@ const Register = () => {
             onBlur={handleBlur('email')}
             error={touched.email && !!errors.email}
             helperText={touched.email && errors.email}
-            placeholder="votre.email@exemple.com"
+            placeholder={t('auth.emailPlaceholder')}
             autoComplete="email"
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -299,7 +301,7 @@ const Register = () => {
               marginBottom: '8px'
             }}
           >
-            Mot de passe
+            {t('auth.password')}
           </Typography>
           <TextField
             id="password"
@@ -310,13 +312,13 @@ const Register = () => {
             onBlur={handleBlur('password')}
             error={touched.password && !!errors.password}
             helperText={touched.password && errors.password}
-            placeholder="Minimum 8 caractères"
+            placeholder={t('auth.passwordMinChars')}
             autoComplete="new-password"
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     onClick={() => setShowPassword(!showPassword)}
                     edge="end"
                   >
@@ -356,7 +358,7 @@ const Register = () => {
                   color: 'text.secondary'
                 }}
               >
-                Force du mot de passe :
+                {t('security.passwordStrength')} :
               </Typography>
               <Typography
                 sx={{
@@ -398,13 +400,13 @@ const Register = () => {
           }
           label={
             <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary', lineHeight: 1.5 }}>
-              J'ai lu et j'accepte les{' '}
+              {t('auth.acceptTermsPre')}{' '}
               <Link href="/cgu" target="_blank" sx={{ color: 'primary.main', fontWeight: 600 }}>
-                Conditions Générales d'Utilisation
+                {t('auth.termsLink')}
               </Link>
-              {' '}et la{' '}
+              {' '}{t('auth.acceptTermsMid')}{' '}
               <Link href="/privacy" target="_blank" sx={{ color: 'primary.main', fontWeight: 600 }}>
-                Politique de confidentialité
+                {t('auth.privacyLink')}
               </Link>
             </Typography>
           }
@@ -434,12 +436,12 @@ const Register = () => {
             }
           }}
         >
-          {loading ? 'Création en cours...' : 'Créer mon compte'}
+          {loading ? t('auth.registering') : t('auth.registerTitle')}
         </Button>
 
         {/* Login Link */}
         <Typography sx={{ fontSize: '14px', color: 'text.secondary', textAlign: 'center' }}>
-          Vous avez déjà un compte ?{' '}
+          {t('auth.hasAccount')}{' '}
           <Link
             component="button"
             onClick={() => navigate('/login')}
@@ -453,7 +455,7 @@ const Register = () => {
               '&:hover': { textDecoration: 'underline' }
             }}
           >
-            Se connecter
+            {t('auth.loginButton')}
           </Link>
         </Typography>
 
@@ -471,7 +473,7 @@ const Register = () => {
               '&:hover': { color: 'primary.main', textDecoration: 'underline' }
             }}
           >
-            ← Retour à l'accueil
+            {t('auth.backToHome')}
           </Link>
         </Typography>
       </Box>

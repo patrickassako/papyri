@@ -267,6 +267,12 @@ export default function TopNavBar({
 
         <Divider sx={{ borderColor: '#f0e8dc' }} />
 
+        <Box sx={{ px: 2.2, py: 1.5 }}>
+          <LanguageToggle variant="icon" sx={{ width: '100%', justifyContent: 'flex-start' }} />
+        </Box>
+
+        <Divider sx={{ borderColor: '#f0e8dc' }} />
+
         <Box sx={{ px: 1.2, py: 1.2 }}>
           {[
             { label: t('common.dashboard'), path: '/dashboard', icon: DashboardOutlinedIcon },

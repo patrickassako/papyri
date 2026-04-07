@@ -47,6 +47,7 @@ import { useReadingLock } from '../hooks/useReadingLock';
 import { SLEEP_OPTIONS } from '../context/AudioContext';
 import { readingService } from '../services/reading.service';
 import tokens from '../config/tokens';
+import { useTranslation } from 'react-i18next';
 
 const primary = '#f2960d';
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
@@ -54,6 +55,7 @@ const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 export default function AudiobookPlayerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const containerRef = useRef(null);
   const [chaptersOpen, setChaptersOpen] = useState(false);
   const [sleepDialogOpen, setSleepDialogOpen] = useState(false);
@@ -134,7 +136,7 @@ export default function AudiobookPlayerPage() {
       return chapters.map((item, idx) => ({
         key: item.id || `${idx}`,
         index: idx,
-        title: item.title || `Chapitre ${idx + 1}`,
+        title: item.title || t('reader_ui.chapterN', { n: idx + 1 }),
         durationLabel: chapterDuration(item),
         active: idx === currentChapterIndex,
         kind: 'chapter',
@@ -147,7 +149,7 @@ export default function AudiobookPlayerPage() {
       return playlist.map((item, idx) => ({
         key: item.id || item.content_id,
         index: idx,
-        title: item?.content?.title || `Partie ${idx + 1}`,
+        title: item?.content?.title || t('reader_ui.partN', { n: idx + 1 }),
         durationLabel: item?.content?.duration_seconds ? formatDuration(item.content.duration_seconds) : '-',
         active: item.content_id === id,
         kind: 'playlist',
@@ -159,13 +161,13 @@ export default function AudiobookPlayerPage() {
     return [{
       key: 'intro',
       index: 0,
-      title: 'Introduction',
+      title: t('reader_ui.introduction'),
       durationLabel: formatDuration(duration || content?.duration_seconds || 0),
       active: true,
       kind: 'chapter',
       chapterId: null,
     }];
-  }, [chapters, playlist, currentChapterIndex, id, duration, content?.duration_seconds]);
+  }, [chapters, playlist, currentChapterIndex, id, duration, content?.duration_seconds, t]);
 
   const currentBookmark = useMemo(() => {
     if (!chapterItems.length) return null;
@@ -182,7 +184,7 @@ export default function AudiobookPlayerPage() {
         setBookmarks((prev) => prev.filter((b) => b.id !== currentBookmark.id));
       } else {
         const activeChapter = chapterItems.find((c) => c.active);
-        const label = activeChapter?.title || `Chapitre ${currentChapterIndex + 1}`;
+        const label = activeChapter?.title || t('reader_ui.chapterN', { n: currentChapterIndex + 1 });
         const saved = await readingService.createBookmark(id, {
           position: { chapter_number: currentChapterIndex + 1, position_seconds: Math.floor(currentTime || 0) },
           label,
@@ -236,8 +238,8 @@ export default function AudiobookPlayerPage() {
   if (!content || error) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>{error || 'Livre introuvable.'}</Alert>
-        <Button onClick={() => navigate('/catalogue')} variant="outlined">Retour</Button>
+        <Alert severity="error" sx={{ mb: 2 }}>{error || t('reader_ui.bookNotFound')}</Alert>
+        <Button onClick={() => navigate('/catalogue')} variant="outlined">{t('reader_ui.back')}</Button>
       </Box>
     );
   }
@@ -245,8 +247,8 @@ export default function AudiobookPlayerPage() {
   if (!canRead) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="warning" sx={{ mb: 2 }}>{accessHint || 'Accès non autorisé.'}</Alert>
-        <Button onClick={() => navigate(`/catalogue/${id}`)} variant="outlined">Retour au détail</Button>
+        <Alert severity="warning" sx={{ mb: 2 }}>{accessHint || t('reader_ui.accessDenied')}</Alert>
+        <Button onClick={() => navigate(`/catalogue/${id}`)} variant="outlined">{t('reader_ui.backToDetail')}</Button>
       </Box>
     );
   }
@@ -258,12 +260,12 @@ export default function AudiobookPlayerPage() {
       <Box sx={{ minHeight: '100vh', background: 'linear-gradient(140deg,#111827,#1f2937)', display: 'grid', placeItems: 'center', p: 4 }}>
         <Box sx={{ textAlign: 'center', color: '#fff' }}>
           <Box sx={{ fontSize: 64, mb: 2 }}>🔒</Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Limite d'appareils atteinte</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{t('reader_ui.deviceLimit')}</Typography>
           <Typography sx={{ color: '#9ca3af', mb: 3 }}>
-            Votre compte est limité à 3 appareils. Supprimez un appareil depuis votre espace personnel.
+            {t('reader_ui.deviceLimitDesc')}
           </Typography>
-          <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1, bgcolor: primary }}>Gérer mes appareils</Button>
-          <Button variant="outlined" sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }} onClick={() => navigate(-1)}>Retour</Button>
+          <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1, bgcolor: primary }}>{t('reader_ui.manageDevices')}</Button>
+          <Button variant="outlined" sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }} onClick={() => navigate(-1)}>{t('reader_ui.back')}</Button>
         </Box>
       </Box>
     );
@@ -275,7 +277,7 @@ export default function AudiobookPlayerPage() {
       {lockState === 'displaced' && (
         <Box sx={{ bgcolor: tokens.colors.accent, px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography sx={{ color: '#fff', fontSize: '0.85rem', flex: 1 }}>
-            📱 Un autre appareil a repris la lecture.
+            📱 {t('reader_ui.displacedBanner')}
           </Typography>
           <Button
             size="small"
@@ -283,7 +285,7 @@ export default function AudiobookPlayerPage() {
             onClick={reacquire}
             sx={{ bgcolor: tokens.colors.primary, '&:hover': { bgcolor: '#a0571a' }, textTransform: 'none', fontWeight: 700 }}
           >
-            Reprendre ici
+            {t('reader_ui.reacquireHere')}
           </Button>
         </Box>
       )}
@@ -291,10 +293,10 @@ export default function AudiobookPlayerPage() {
       <Box sx={{ position: 'sticky', top: 0, zIndex: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', bgcolor: 'rgba(17,24,39,0.85)', backdropFilter: 'blur(10px)', px: { xs: 2, md: 4 }, py: 1.6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack direction="row" spacing={2.5} alignItems="center">
           <Button startIcon={<ArrowLeft size={16} />} sx={{ color: '#c7ced8' }} onClick={() => navigate(-1)}>
-            Retour
+            {t('reader_ui.back')}
           </Button>
           <Box sx={{ display: { xs: 'none', md: 'block' }, borderLeft: '1px solid rgba(255,255,255,0.1)', pl: 2.5 }}>
-            <Typography sx={{ fontSize: '0.68rem', letterSpacing: '0.1em', color: '#9ca3af', textTransform: 'uppercase' }}>Lecture audio</Typography>
+            <Typography sx={{ fontSize: '0.68rem', letterSpacing: '0.1em', color: '#9ca3af', textTransform: 'uppercase' }}>{t('reader_ui.audioPlayback')}</Typography>
             <Typography sx={{ fontSize: '0.9rem', fontWeight: 700 }}>{content.title}</Typography>
           </Box>
         </Stack>
@@ -302,16 +304,16 @@ export default function AudiobookPlayerPage() {
           <Chip
             size="small"
             icon={isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
-            label={isBuffering ? 'Buffering' : isOnline ? 'En ligne' : 'Hors ligne'}
+            label={isBuffering ? t('reader_ui.buffering') : isOnline ? t('reader_ui.online') : t('reader_ui.offline')}
             sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
           />
           <IconButton sx={{ color: '#fff' }} onClick={openFullscreen}><Expand size={17} /></IconButton>
-          <IconButton sx={{ color: '#fff' }} onClick={handleShare} title="Partager"><Share2 size={17} /></IconButton>
+          <IconButton sx={{ color: '#fff' }} onClick={handleShare} title={t('reader_ui.share')}><Share2 size={17} /></IconButton>
           <IconButton
             sx={{ color: currentBookmark ? tokens.colors.secondary : '#fff' }}
             onClick={toggleBookmark}
             disabled={bookmarkLoading}
-            title={currentBookmark ? 'Retirer le marque-page' : 'Ajouter un marque-page'}
+            title={currentBookmark ? t('reader_ui.removeBookmark') : t('reader_ui.addBookmark')}
           >
             <Bookmark size={17} fill={currentBookmark ? tokens.colors.secondary : 'none'} />
           </IconButton>
@@ -330,10 +332,10 @@ export default function AudiobookPlayerPage() {
                 {content.title}
               </Typography>
               <Typography sx={{ mt: 1, color: '#c0c8d3' }}>
-                by {content.author} {content.narrator ? `· Narré par ${content.narrator}` : ''}
+                {content.author} {content.narrator ? `· ${t('reader_ui.narratedBy', { narrator: content.narrator })}` : ''}
               </Typography>
               <Typography sx={{ mt: 1, color: '#d1d5db', fontSize: '0.9rem' }}>
-                {chapterItems.find((c) => c.active)?.title || `Chapitre ${currentChapterIndex + 1}`}
+                {chapterItems.find((c) => c.active)?.title || t('reader_ui.chapterN', { n: currentChapterIndex + 1 })}
               </Typography>
             </Box>
 
@@ -368,7 +370,7 @@ export default function AudiobookPlayerPage() {
                   '&:hover': { borderColor: primary, bgcolor: 'rgba(242,150,13,0.08)' },
                 }}
               >
-                Chapitres
+                {t('reader_ui.chapters')}
               </Button>
               <Button
                 variant="outlined"
@@ -383,9 +385,9 @@ export default function AudiobookPlayerPage() {
                 }}
               >
                 {sleepRemaining === null
-                  ? 'Sleep timer'
+                  ? t('reader_ui.sleepTimer')
                   : sleepRemaining === -1
-                    ? 'Fin chapitre ✕'
+                    ? `${t('reader_ui.sleepEndChapter')} ✕`
                     : `${Math.floor(sleepRemaining / 60)}:${String(sleepRemaining % 60).padStart(2, '0')} ✕`}
               </Button>
             </Stack>
@@ -416,7 +418,7 @@ export default function AudiobookPlayerPage() {
             </Box>
             {signedUrl ? (
               <Typography sx={{ mt: 1.2, color: '#9ca3af', fontSize: '0.74rem' }}>
-                Streaming sécurisé actif.
+                {t('reader_ui.secureStreaming')}
               </Typography>
             ) : null}
           </Box>
@@ -424,8 +426,8 @@ export default function AudiobookPlayerPage() {
 
         <Box sx={{ borderLeft: { xl: '1px solid rgba(255,255,255,0.1)' }, bgcolor: 'rgba(255,255,255,0.04)', p: 2.2, display: 'grid', gridTemplateRows: '1fr 1fr', gap: 2, maxHeight: { xl: 'calc(100vh - 73px)' } }}>
           <Box sx={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800 }}>Chapitres</Typography>
-            <Typography sx={{ color: '#9ca3af', fontSize: '0.76rem', mt: 0.4 }}>{chapterItems.length || 1} sections</Typography>
+            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800 }}>{t('reader_ui.chapters')}</Typography>
+            <Typography sx={{ color: '#9ca3af', fontSize: '0.76rem', mt: 0.4 }}>{chapterItems.length || 1} {t('reader_ui.sections')}</Typography>
             <Stack spacing={1.1} sx={{ mt: 1.8, overflowY: 'auto', pr: 0.6 }}>
               {chapterItems.map((ch) => (
                 <Box
@@ -452,7 +454,7 @@ export default function AudiobookPlayerPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Stack direction="row" spacing={1} alignItems="center">
                 <ListMusic size={18} />
-                <Typography sx={{ fontSize: '1rem', fontWeight: 800 }}>Playlist</Typography>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 800 }}>{t('reader_ui.playlist')}</Typography>
               </Stack>
               <Button
                 size="small"
@@ -461,7 +463,7 @@ export default function AudiobookPlayerPage() {
                 startIcon={isInPlaylist ? <X size={14} /> : <Plus size={14} />}
                 sx={{ color: '#fff' }}
               >
-                {isInPlaylist ? 'Retirer' : 'Ajouter'}
+                {isInPlaylist ? t('reader_ui.removeFromPlaylist') : t('reader_ui.addToPlaylist')}
               </Button>
             </Stack>
 
@@ -471,7 +473,7 @@ export default function AudiobookPlayerPage() {
             ) : (
               <Stack spacing={1} sx={{ mt: 1.2, overflowY: 'auto', pr: 0.6 }}>
                 {playlist.length === 0 ? (
-                  <Typography sx={{ color: '#9ca3af', fontSize: '0.85rem' }}>Votre playlist est vide.</Typography>
+                  <Typography sx={{ color: '#9ca3af', fontSize: '0.85rem' }}>{t('reader_ui.playlistEmpty')}</Typography>
                 ) : (
                   playlist.map((item, idx) => {
                     const active = item.content_id === id;
@@ -516,12 +518,12 @@ export default function AudiobookPlayerPage() {
         <DialogTitle sx={{ fontWeight: 800, pb: 0.5 }}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Moon size={20} color={primary} />
-            <span>Sleep timer</span>
+            <span>{t('reader_ui.sleepTimer')}</span>
           </Stack>
         </DialogTitle>
         <DialogContent sx={{ pt: '8px !important', pb: 1 }}>
           <Typography sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', mb: 1.5 }}>
-            La lecture s'arrête automatiquement après :
+            {t('reader_ui.sleepTimerDesc')}
           </Typography>
           <List disablePadding>
             {SLEEP_OPTIONS.map((opt) => (
@@ -556,7 +558,7 @@ export default function AudiobookPlayerPage() {
       >
         <Box sx={{ p: 2.2 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.4 }}>
-            <Typography sx={{ fontSize: '1.02rem', fontWeight: 800 }}>Chapitres</Typography>
+            <Typography sx={{ fontSize: '1.02rem', fontWeight: 800 }}>{t('reader_ui.chapters')}</Typography>
             <IconButton sx={{ color: '#cbd5e1' }} onClick={() => setChaptersOpen(false)}>
               <X size={18} />
             </IconButton>

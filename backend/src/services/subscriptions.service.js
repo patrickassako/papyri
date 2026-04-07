@@ -774,6 +774,24 @@ async function ensureCurrentCycle(subscription) {
   return await getCurrentCycle(subscription.id);
 }
 
+async function resolveUsageQuotas(subscription) {
+  const snapshot = normalizeSnapshotPlan(subscription.plan_snapshot);
+  let textQuota = Number(snapshot?.textQuotaPerUser || 0);
+  let audioQuota = Number(snapshot?.audioQuotaPerUser || 0);
+  let bonusQuota = Number(snapshot?.bonusQuantityPerUser || 0);
+
+  if (textQuota === 0 && audioQuota === 0 && bonusQuota === 0 && subscription.plan_id) {
+    const livePlan = await getPlan(subscription.plan_id);
+    if (livePlan) {
+      textQuota = Number(livePlan.textQuotaPerUser || 0);
+      audioQuota = Number(livePlan.audioQuotaPerUser || 0);
+      bonusQuota = Number(livePlan.bonusQuantityPerUser || 0);
+    }
+  }
+
+  return { textQuota, audioQuota, bonusQuota };
+}
+
 async function ensureMemberCycleUsage(subscription, cycle, userId) {
   const { data: existing, error: existingError } = await supabaseAdmin
     .from('member_cycle_usage')
@@ -784,21 +802,7 @@ async function ensureMemberCycleUsage(subscription, cycle, userId) {
 
   if (existingError) throw existingError;
 
-  const snapshot = subscription.plan_snapshot || {};
-  let textQuota = Number(snapshot.textQuotaPerUser || 0);
-  let audioQuota = Number(snapshot.audioQuotaPerUser || 0);
-  let bonusQuota = Number(snapshot.bonusQuantityPerUser || 0);
-
-  // Fallback: if snapshot has all-zero quotas, load from the live plan so that
-  // subscriptions created before quotas were configured still work correctly.
-  if (textQuota === 0 && audioQuota === 0 && subscription.plan_id) {
-    const livePlan = await getPlan(subscription.plan_id);
-    if (livePlan) {
-      textQuota = Number(livePlan.textQuotaPerUser || 0);
-      audioQuota = Number(livePlan.audioQuotaPerUser || 0);
-      bonusQuota = bonusQuota || Number(livePlan.bonusQuantityPerUser || 0);
-    }
-  }
+  const { textQuota, audioQuota, bonusQuota } = await resolveUsageQuotas(subscription);
 
   // If row exists but quotas are 0 (created before plan had quotas configured), patch it.
   if (existing) {
@@ -837,6 +841,68 @@ async function ensureMemberCycleUsage(subscription, cycle, userId) {
     .select('*')
     .eq('cycle_id', cycle.id)
     .eq('user_id', userId)
+    .single();
+
+  if (fallbackError) throw fallbackError;
+  return fallback;
+}
+
+async function ensureProfileCycleUsage(subscription, cycle, profileId) {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from('profile_cycle_usage')
+    .select('*')
+    .eq('cycle_id', cycle.id)
+    .eq('profile_id', profileId)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  const { textQuota, audioQuota, bonusQuota } = await resolveUsageQuotas(subscription);
+
+  if (existing) {
+    const needsPatch = Number(existing.text_quota || 0) === 0
+      && Number(existing.audio_quota || 0) === 0
+      && Number(existing.bonus_quota || 0) === 0
+      && (textQuota > 0 || audioQuota > 0 || bonusQuota > 0);
+
+    if (needsPatch) {
+      const { data: patched } = await supabaseAdmin
+        .from('profile_cycle_usage')
+        .update({
+          text_quota: textQuota,
+          audio_quota: audioQuota,
+          bonus_quota: bonusQuota,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      return patched || existing;
+    }
+    return existing;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('profile_cycle_usage')
+    .insert({
+      cycle_id: cycle.id,
+      subscription_id: subscription.id,
+      profile_id: profileId,
+      text_quota: textQuota,
+      audio_quota: audioQuota,
+      bonus_quota: bonusQuota,
+    })
+    .select()
+    .single();
+
+  if (error && error.code !== '23505') throw error;
+  if (data) return data;
+
+  const { data: fallback, error: fallbackError } = await supabaseAdmin
+    .from('profile_cycle_usage')
+    .select('*')
+    .eq('cycle_id', cycle.id)
+    .eq('profile_id', profileId)
     .single();
 
   if (fallbackError) throw fallbackError;
@@ -885,5 +951,6 @@ module.exports = {
   getCurrentCycle,
   ensureCurrentCycle,
   ensureMemberCycleUsage,
+  ensureProfileCycleUsage,
   getBonusCredits,
 };

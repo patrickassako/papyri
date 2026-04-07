@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -17,37 +18,19 @@ import { useCurrency } from '../hooks/useCurrency';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
-const AVANTAGES = [
-  {
-    icon: AutoStoriesOutlinedIcon,
-    title: 'Ebooks illimités',
-    description: 'Accédez à des milliers de livres en français et en anglais.',
-    color: tokens.colors.primary,
-  },
-  {
-    icon: HeadphonesOutlinedIcon,
-    title: 'Livres audio',
-    description: 'Écoutez où que vous soyez — en voiture, en cuisine, en sport.',
-    color: tokens.colors.accent,
-  },
-  {
-    icon: PhoneAndroidOutlinedIcon,
-    title: 'Web & mobile',
-    description: 'Lisez depuis votre navigateur ou l\'application mobile.',
-    color: tokens.colors.secondary,
-  },
-  {
-    icon: WifiOffOutlinedIcon,
-    title: 'Mode hors-ligne',
-    description: 'Téléchargez vos livres et lisez sans connexion.',
-    color: '#2E7D32',
-  },
+const AVANTAGES_CONFIG = [
+  { icon: AutoStoriesOutlinedIcon, titleKey: 'onboarding_page.feat1Title', descKey: 'onboarding_page.feat1Desc', color: tokens.colors.primary },
+  { icon: HeadphonesOutlinedIcon, titleKey: 'onboarding_page.feat2Title', descKey: 'onboarding_page.feat2Desc', color: tokens.colors.accent },
+  { icon: PhoneAndroidOutlinedIcon, titleKey: 'onboarding_page.feat3Title', descKey: 'onboarding_page.feat3Desc', color: tokens.colors.secondary },
+  { icon: WifiOffOutlinedIcon, titleKey: 'onboarding_page.feat4Title', descKey: 'onboarding_page.feat4Desc', color: '#2E7D32' },
 ];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { formatPrice } = useCurrency();
   const [firstName, setFirstName] = useState('');
+  const AVANTAGES = AVANTAGES_CONFIG.map((a) => ({ ...a, title: t(a.titleKey), description: t(a.descKey) }));
 
   useEffect(() => {
     authService.getUser()
@@ -78,10 +61,10 @@ export default function OnboardingPage() {
             variant="h3"
             sx={{ fontFamily: 'Playfair Display, serif', color: tokens.colors.accent, fontWeight: 700, mb: 1.5 }}
           >
-            {firstName ? `Bienvenue, ${firstName} !` : 'Bienvenue sur Papyri !'}
+            {firstName ? t('onboarding_page.welcomeNamed', { name: firstName }) : t('onboarding_page.welcome')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem', maxWidth: 520, mx: 'auto' }}>
-            Votre compte est créé. Choisissez un abonnement pour accéder à toute la bibliothèque.
+            {t('onboarding_page.welcomeDesc')}
           </Typography>
         </Box>
 
@@ -153,17 +136,17 @@ export default function OnboardingPage() {
           }}
         >
           <Typography variant="overline" sx={{ color: tokens.colors.primary, fontWeight: 700, letterSpacing: 1.5 }}>
-            Abonnement individuel
+            {t('onboarding_page.individualPlan')}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.5, my: 1, flexWrap: 'wrap' }}>
             <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent, fontSize: { xs: '2rem', sm: '3rem' }, overflowWrap: 'anywhere' }}>{formatPrice(500)}</Typography>
-            <Typography variant="body1" color="text.secondary">/mois</Typography>
+            <Typography variant="body1" color="text.secondary">{t('onboarding_page.perMonth')}</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, overflowWrap: 'anywhere' }}>
-            ou <strong>{formatPrice(5000)}/an</strong> — 2 mois offerts
+            {t('onboarding_page.orAnnual', { price: formatPrice(5000) })}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Accès illimité · Ebooks + Audio · Web & Mobile · Mode hors-ligne
+            {t('onboarding_page.fullAccess')}
           </Typography>
         </Paper>
 
@@ -186,7 +169,7 @@ export default function OnboardingPage() {
             '&:hover': { bgcolor: tokens.colors.primaryDark },
           }}
         >
-          Choisir mon abonnement
+          {t('onboarding_page.choosePlan')}
         </Button>
 
         {/* CTA secondaire */}
@@ -195,7 +178,7 @@ export default function OnboardingPage() {
           onClick={() => navigate('/catalogue')}
           sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.9rem', fontWeight: 500 }}
         >
-          Explorer le catalogue d&apos;abord
+          {t('onboarding_page.exploreCatalog')}
         </Button>
       </Container>
     </Box>

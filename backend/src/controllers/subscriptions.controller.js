@@ -7,11 +7,13 @@ const subscriptionsService = require('../services/subscriptions.service');
 const flutterwaveService = require('../services/flutterwave.service');
 const stripeService = require('../services/stripe.service');
 const promoService = require('../services/promo.service');
+const familyProfilesService = require('../services/family-profiles.service');
 const { generateInvoicePDF, generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/invoice.service');
 const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
 const config = require('../config/env');
 const { sendSubscriptionConfirmationEmail, sendInvoiceEmail } = require('../services/email.service');
+const MAX_FAMILY_SEATS = 10;
 
 /**
  * GET /api/subscriptions/plans
@@ -929,6 +931,13 @@ async function schedulePlanChange(req, res) {
         message: `usersLimit must be an integer >= includedUsers (${targetPlan.includedUsers})`,
       });
     }
+    if (nextUsersLimit > MAX_FAMILY_SEATS) {
+      return res.status(400).json({
+        success: false,
+        error: 'USERS_LIMIT_TOO_HIGH',
+        message: `usersLimit cannot exceed ${MAX_FAMILY_SEATS} for the family subscription.`,
+      });
+    }
 
     const existingMetadata = subscription.metadata || {};
     const metadata = {
@@ -995,11 +1004,18 @@ async function getCurrentCycle(req, res) {
       });
     }
 
-    const usage = await subscriptionsService.ensureMemberCycleUsage(
-      membership.subscription,
-      cycle,
-      userId
-    );
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const usage = familyContext?.isFamilyContext && familyContext?.profileId
+      ? await subscriptionsService.ensureProfileCycleUsage(
+        membership.subscription,
+        cycle,
+        familyContext.profileId
+      )
+      : await subscriptionsService.ensureMemberCycleUsage(
+        membership.subscription,
+        cycle,
+        userId
+      );
 
     return res.status(200).json({
       success: true,
@@ -1008,6 +1024,7 @@ async function getCurrentCycle(req, res) {
         member_role: membership.memberRole,
         cycle,
         usage,
+        active_profile: familyContext?.profile || null,
       },
     });
   } catch (error) {
@@ -1040,16 +1057,27 @@ async function getMyUsage(req, res) {
     }
 
     const cycle = await subscriptionsService.ensureCurrentCycle(membership.subscription);
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const isFamilyProfileContext = Boolean(familyContext?.isFamilyContext && familyContext?.profileId);
     const usage = cycle
-      ? await subscriptionsService.ensureMemberCycleUsage(membership.subscription, cycle, userId)
+      ? (isFamilyProfileContext
+        ? await subscriptionsService.ensureProfileCycleUsage(membership.subscription, cycle, familyContext.profileId)
+        : await subscriptionsService.ensureMemberCycleUsage(membership.subscription, cycle, userId))
       : null;
 
-    const bonuses = await subscriptionsService.getBonusCredits(userId);
-    const bonusSummary = bonuses.reduce((acc, item) => {
-      const available = Math.max(0, Number(item.quantity_total) - Number(item.quantity_used));
-      acc[item.bonus_type] = (acc[item.bonus_type] || 0) + available;
-      return acc;
-    }, {});
+    let bonusSummary = {};
+    if (isFamilyProfileContext && usage) {
+      bonusSummary = {
+        flex: Math.max(0, Number(usage.bonus_quota || 0) - Number(usage.bonus_used_count || 0)),
+      };
+    } else {
+      const bonuses = await subscriptionsService.getBonusCredits(userId);
+      bonusSummary = bonuses.reduce((acc, item) => {
+        const available = Math.max(0, Number(item.quantity_total) - Number(item.quantity_used));
+        acc[item.bonus_type] = (acc[item.bonus_type] || 0) + available;
+        return acc;
+      }, {});
+    }
 
     return res.status(200).json({
       success: true,
@@ -1060,6 +1088,7 @@ async function getMyUsage(req, res) {
         cycle,
         usage,
         bonuses: bonusSummary,
+        active_profile: familyContext?.profile || null,
       },
     });
   } catch (error) {
@@ -1080,12 +1109,36 @@ async function getMyBonuses(req, res) {
   try {
     const userId = req.user.id;
     const includeExpired = String(req.query.includeExpired || 'false') === 'true';
-    const bonuses = await subscriptionsService.getBonusCredits(userId, { includeExpired });
+    const membership = await subscriptionsService.getActiveSubscriptionForMember(userId);
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
 
-    const normalized = bonuses.map((item) => ({
-      ...item,
-      available: Math.max(0, Number(item.quantity_total) - Number(item.quantity_used)),
-    }));
+    let normalized = [];
+
+    if (membership && familyContext?.isFamilyContext && familyContext?.profileId) {
+      const cycle = await subscriptionsService.ensureCurrentCycle(membership.subscription);
+      const usage = cycle
+        ? await subscriptionsService.ensureProfileCycleUsage(membership.subscription, cycle, familyContext.profileId)
+        : null;
+
+      if (usage && (includeExpired || new Date(cycle.period_end) > new Date())) {
+        normalized = [{
+          id: `profile-flex-${usage.id}`,
+          bonus_type: 'flex',
+          quantity_total: Number(usage.bonus_quota || 0),
+          quantity_used: Number(usage.bonus_used_count || 0),
+          available: Math.max(0, Number(usage.bonus_quota || 0) - Number(usage.bonus_used_count || 0)),
+          expires_at: cycle.period_end,
+          profile_id: familyContext.profileId,
+          scope: 'profile',
+        }];
+      }
+    } else {
+      const bonuses = await subscriptionsService.getBonusCredits(userId, { includeExpired });
+      normalized = bonuses.map((item) => ({
+        ...item,
+        available: Math.max(0, Number(item.quantity_total) - Number(item.quantity_used)),
+      }));
+    }
 
     return res.status(200).json({
       success: true,
@@ -1455,6 +1508,13 @@ async function buyExtraSeat(req, res) {
     }
 
     const targetUsersLimit = Number(subscription.users_limit || 1) + 1;
+    if (targetUsersLimit > MAX_FAMILY_SEATS) {
+      return res.status(400).json({
+        success: false,
+        error: 'USERS_LIMIT_TOO_HIGH',
+        message: `You cannot exceed ${MAX_FAMILY_SEATS} seats on the family subscription.`,
+      });
+    }
 
     // Resolve payer identity
     const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);

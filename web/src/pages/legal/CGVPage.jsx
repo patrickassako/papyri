@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography } from '@mui/material';
 import LegalLayout, { LegalSection, LegalList, LegalSubSection } from './LegalLayout';
+import { useTranslation } from 'react-i18next';
 
 const PLATFORM = 'Papyri';
 const COMPANY = 'Papyri Inc.';
@@ -8,9 +9,10 @@ const EMAIL = 'support@papyri.app';
 const DATE = 'Mars 2026';
 
 export default function CGVPage() {
+  const { t } = useTranslation();
   return (
     <LegalLayout
-      title="Conditions Générales de Vente"
+      title={t('legal.cgvTitle')}
       subtitle={`${PLATFORM} – Abonnements et achats de contenus numériques`}
       lastUpdated={DATE}
     >

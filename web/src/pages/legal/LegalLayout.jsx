@@ -4,6 +4,7 @@
 import React from 'react';
 import { Box, Container, Typography, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import tokens from '../../config/tokens';
 import papyriMark from '../../assets/papyri-logo-gold.png';
 
@@ -45,6 +46,7 @@ export function LegalSubSection({ title, children }) {
 
 export default function LegalLayout({ title, subtitle, lastUpdated, children }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   return (
     <Box sx={{ bgcolor: '#f5f4f1', minHeight: '100vh' }}>
       {/* Header */}
@@ -68,7 +70,7 @@ export default function LegalLayout({ title, subtitle, lastUpdated, children }) 
             sx={{ color: tokens.colors.secondary, cursor: 'pointer', fontSize: '0.82rem', mb: 1.5 }}
             onClick={() => navigate(-1)}
           >
-            ← Retour
+            {t('legal.back')}
           </Typography>
           <Typography sx={{ fontFamily: 'Playfair Display, serif', fontSize: '1.7rem', fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
             {title}
@@ -78,7 +80,7 @@ export default function LegalLayout({ title, subtitle, lastUpdated, children }) 
           )}
           {lastUpdated && (
             <Typography sx={{ color: 'rgba(255,255,255,0.4)', mt: 0.5, fontSize: '0.78rem' }}>
-              Dernière mise à jour : {lastUpdated}
+              {t('legal.lastUpdated')} {lastUpdated}
             </Typography>
           )}
         </Container>
@@ -93,12 +95,12 @@ export default function LegalLayout({ title, subtitle, lastUpdated, children }) 
         {/* Footer navigation */}
         <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid #e5e0d8', display: 'flex', flexWrap: 'wrap', gap: 2 }}>
           {[
-            { label: 'CGU', path: '/cgu' },
-            { label: 'CGV', path: '/cgv' },
-            { label: 'Confidentialité', path: '/privacy' },
-            { label: 'Cookies', path: '/cookies' },
-            { label: 'Mentions légales', path: '/mentions-legales' },
-            { label: 'Copyright', path: '/copyright' },
+            { label: t('legal.cgu'), path: '/cgu' },
+            { label: t('legal.cgv'), path: '/cgv' },
+            { label: t('legal.privacy'), path: '/privacy' },
+            { label: t('legal.cookies'), path: '/cookies' },
+            { label: t('legal.legalNotice'), path: '/mentions-legales' },
+            { label: t('legal.copyright'), path: '/copyright' },
           ].map(link => (
             <Typography
               key={link.path}

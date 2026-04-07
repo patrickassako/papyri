@@ -198,6 +198,134 @@ router.post('/refresh', async (req, res, next) => {
   }
 });
 
+router.post('/mfa/email/verify', authLimiter, async (req, res, next) => {
+  try {
+    const { challenge_id, code } = req.body;
+
+    if (!challenge_id || !code) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_FIELDS',
+          message: 'Challenge et code requis.',
+        },
+      });
+    }
+
+    const result = await authService.verifyEmailMfa(challenge_id, String(code).trim());
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    if (['MFA_CHALLENGE_INVALID', 'MFA_CHALLENGE_EXPIRED', 'MFA_TOO_MANY_ATTEMPTS', 'INVALID_MFA_CODE'].includes(error.code)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: error.code,
+          message:
+            error.code === 'MFA_CHALLENGE_EXPIRED'
+              ? 'Le code a expire. Demandez-en un nouveau.'
+              : error.code === 'MFA_TOO_MANY_ATTEMPTS'
+                ? 'Trop de tentatives. Recommencez la connexion.'
+                : error.code === 'INVALID_MFA_CODE'
+                  ? 'Code incorrect.'
+                  : 'Challenge invalide.',
+        },
+      });
+    }
+    next(error);
+  }
+});
+
+router.post('/mfa/email/resend', authLimiter, async (req, res, next) => {
+  try {
+    const { challenge_id } = req.body;
+    if (!challenge_id) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_FIELDS',
+          message: 'Challenge requis.',
+        },
+      });
+    }
+
+    const result = await authService.resendEmailMfa(challenge_id);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    if (['MFA_CHALLENGE_INVALID', 'MFA_CHALLENGE_EXPIRED'].includes(error.code)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: error.code,
+          message: error.code === 'MFA_CHALLENGE_EXPIRED' ? 'Le challenge a expire. Reconnectez-vous.' : 'Challenge invalide.',
+        },
+      });
+    }
+    next(error);
+  }
+});
+
+router.post('/mfa/email/profile-pin/start', verifyJWT, authLimiter, async (req, res, next) => {
+  try {
+    const result = await authService.createEmailActionChallenge({
+      userId: req.user.id,
+      purpose: 'profile_pin_owner',
+    });
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    if (error.code === 'USER_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: error.code,
+          message: 'Utilisateur introuvable.',
+        },
+      });
+    }
+    next(error);
+  }
+});
+
+router.post('/mfa/email/profile-pin/verify', verifyJWT, authLimiter, async (req, res, next) => {
+  try {
+    const { challenge_id, code } = req.body;
+    if (!challenge_id || !code) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_FIELDS',
+          message: 'Challenge et code requis.',
+        },
+      });
+    }
+
+    const result = await authService.verifyEmailActionChallenge(
+      req.user.id,
+      challenge_id,
+      String(code).trim(),
+      'profile_pin_owner'
+    );
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    if (['MFA_CHALLENGE_INVALID', 'MFA_CHALLENGE_EXPIRED', 'MFA_TOO_MANY_ATTEMPTS', 'INVALID_MFA_CODE'].includes(error.code)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: error.code,
+          message:
+            error.code === 'MFA_CHALLENGE_EXPIRED'
+              ? 'Le code a expire. Demandez-en un nouveau.'
+              : error.code === 'MFA_TOO_MANY_ATTEMPTS'
+                ? 'Trop de tentatives. Recommencez.'
+                : error.code === 'INVALID_MFA_CODE'
+                  ? 'Code incorrect.'
+                  : 'Challenge invalide.',
+        },
+      });
+    }
+    next(error);
+  }
+});
+
 /**
  * POST /auth/logout
  * Protected endpoint - User logout

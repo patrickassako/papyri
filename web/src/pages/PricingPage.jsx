@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Accordion,
   AccordionDetails,
@@ -43,35 +44,35 @@ import { formatMinorUnits } from '../services/currency.service';
 const primary = '#f4a825';
 const background = '#f8f7f5';
 
-function planBadge(slug) {
+function planBadge(slug, t) {
   const key = getPlanFamilyKey({ slug });
-  if (key === 'family') return 'Groupe';
-  if (key === 'personal') return 'Individuel';
-  return 'Basique';
+  if (key === 'family') return t('pricing.group');
+  if (key === 'personal') return t('pricing.individual');
+  return t('pricing.basic');
 }
 
-function planCta(slug) {
+function planCta(slug, t) {
   const key = getPlanFamilyKey({ slug });
-  if (key === 'family') return 'Choisir Famille';
-  if (key === 'personal') return 'Commencer Premium';
-  return 'Commencer Slow';
+  if (key === 'family') return t('pricing.chooseFamily');
+  if (key === 'personal') return t('pricing.choosePremium');
+  return t('pricing.chooseBasic');
 }
 
-function planFeatures(plan, formatDirectMoney) {
+function planFeatures(plan, formatDirectMoney, t) {
   const features = [
-    `${plan.textQuotaPerUser || 0} livres texte par utilisateur`,
-    `${plan.audioQuotaPerUser || 0} livres audio par utilisateur`,
-    `${plan.discountPercentPaidBooks || 0}% de réduction sur livres payants`,
-    `Validité ${plan.durationDays || 30} jours`,
+    t('pricing.textBooksQuota', { n: plan.textQuotaPerUser || 0 }),
+    t('pricing.audioBooksQuota', { n: plan.audioQuotaPerUser || 0 }),
+    t('pricing.discountPaid', { n: plan.discountPercentPaidBooks || 0 }),
+    t('pricing.validity', { n: plan.durationDays || 30 }),
   ];
 
   if ((plan.includedUsers || 1) > 1) {
-    features.unshift(`${plan.includedUsers} utilisateurs inclus`);
-    features.push(`+ ${formatDirectMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency)} par utilisateur supplémentaire`);
+    features.unshift(t('pricing.includedUsers', { n: plan.includedUsers }));
+    features.push(t('pricing.extraUser', { price: formatDirectMoney(plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0, plan.localizedCurrency ?? plan.currency) }));
   }
 
   if (plan.bonusQuantityPerUser > 0) {
-    const trigger = plan.bonusTrigger === 'immediate' ? 'bonus immédiat' : 'bonus au quota atteint';
+    const trigger = plan.bonusTrigger === 'immediate' ? t('pricing.bonusImmediate') : t('pricing.bonusOnQuota');
     features.push(`${plan.bonusQuantityPerUser} bonus (${plan.bonusType}) - ${trigger}`);
   }
 
@@ -98,6 +99,7 @@ function getPlanFamilyKey(plan) {
 const MAX_FAMILY_MEMBERS = 10;
 
 function MemberSelector({ count, min, max, onChange }) {
+  const { t } = useTranslation();
   return (
     <Box
       sx={{
@@ -112,7 +114,7 @@ function MemberSelector({ count, min, max, onChange }) {
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.2 }}>
         <GroupIcon sx={{ fontSize: 18, color: primary }} />
         <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#5a5047', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Nombre de membres
+          {t('pricing.nbrMembers')}
         </Typography>
       </Stack>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -130,7 +132,7 @@ function MemberSelector({ count, min, max, onChange }) {
             {count}
           </Typography>
           <Typography sx={{ fontSize: '0.72rem', color: '#8a8279', mt: 0.2 }}>
-            {count === min ? `minimum (${min} inclus)` : `${count - min} supplémentaire${count - min > 1 ? 's' : ''}`}
+            {count === min ? t('pricing.minimumIncluded', { min }) : t(count - min > 1 ? 'pricing.extraMembers_plural' : 'pricing.extraMembers', { n: count - min })}
           </Typography>
         </Box>
 
@@ -148,6 +150,7 @@ function MemberSelector({ count, min, max, onChange }) {
 }
 
 function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabled = false, membersCount, onMembersCountChange, localCurrency, convertFromEUR, formatLocalFromEUR }) {
+  const { t } = useTranslation();
   const formatDirectMoney = React.useCallback((cents, currency) => formatMinorUnits(cents, currency || 'EUR'), []);
   const isPremium = getPlanFamilyKey(plan) === 'personal';
   const isFamily = getPlanFamilyKey(plan) === 'family';
@@ -192,7 +195,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
     >
       {isPremium && (
         <Chip
-          label="Recommandé"
+          label={t('pricing.recommended')}
           sx={{
             position: 'absolute',
             top: -14,
@@ -209,7 +212,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
       )}
 
       <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: isPremium ? primary : '#7a746d', fontWeight: 800 }}>
-        {planBadge(plan.slug)}
+        {planBadge(plan.slug, t)}
       </Typography>
       <Typography sx={{ mt: 0.5, fontSize: '1.6rem', fontWeight: 800 }}>{plan.name}</Typography>
 
@@ -227,7 +230,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
         <Typography sx={{ fontSize: { xs: '2rem', sm: '2.4rem' }, lineHeight: 1, fontWeight: 900, overflowWrap: 'anywhere' }}>
           {formatDirectMoney(computedPriceCents, displayCurrency)}
         </Typography>
-        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>/ {plan.durationDays} jours</Typography>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>{t('pricing.perDays', { n: plan.durationDays })}</Typography>
       </Box>
 
       {isLocalized && (
@@ -244,9 +247,9 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
       {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
-          Soit {isLocalized
+          {t('pricing.soit', { price: isLocalized
             ? formatDirectMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))), displayCurrency)
-            : formatLocalFromEUR(plan.monthlyEquivalentCents)} / mois
+            : formatLocalFromEUR(plan.monthlyEquivalentCents) })}
         </Typography>
       ) : null}
 
@@ -266,11 +269,11 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
           },
         }}
       >
-        {loadingCheckout ? 'Chargement...' : actionLabel}
+        {loadingCheckout ? t('common.loading') : actionLabel}
       </Button>
 
       <Stack spacing={1.7} sx={{ mt: 2.2 }}>
-        {planFeatures(plan, formatDirectMoney).map((feature) => (
+        {planFeatures(plan, formatDirectMoney, t).map((feature) => (
           <Box key={feature} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
             <CheckCircleOutlineIcon sx={{ color: isPremium ? primary : isFamily ? '#2563eb' : '#30a46c', fontSize: 20 }} />
             <Typography sx={{ fontSize: '0.9rem', color: '#1c160d' }}>{feature}</Typography>
@@ -283,6 +286,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
 export default function PricingPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width:900px)');
   const { currency: localCurrency, country: localCountry, isLocalized: isFrontendLocalized, convertFromEUR, formatPrice: formatLocalPrice } = useCurrency();
 
@@ -325,7 +329,7 @@ export default function PricingPage() {
       });
       setPromoResult(result);
     } catch (err) {
-      setPromoError(err.message || 'Code promo invalide.');
+      setPromoError(err.message || t('pricing.promoInvalid'));
     } finally {
       setPromoLoading(false);
     }
@@ -344,7 +348,7 @@ export default function PricingPage() {
         setGeoInfo(geo || null);
       } catch (err) {
         console.error('Pricing plans error:', err);
-        setError('Impossible de charger les forfaits pour le moment.');
+        setError(t('pricing.cannotLoadPlans'));
       } finally {
         setLoadingPlans(false);
       }
@@ -462,20 +466,20 @@ export default function PricingPage() {
     setError('');
     try {
       if (plan.displayOnlyAnnual) {
-        showSnack(`Plan annuel pour "${plan.name}" non disponible pour l'instant.`, 'warning');
+        showSnack(t('pricing.planNotAvailable', { name: plan.name }), 'warning');
         return;
       }
 
       if (activeSub) {
         if (Number(plan.basePriceCents || 0) <= currentPrice) {
-          showSnack('Seuls les upgrades vers un plan supérieur sont disponibles ici.', 'warning');
+          showSnack(t('pricing.upgradeOnly'), 'warning');
           return;
         }
         await subscriptionsService.changePlan({
           planId: plan.id,
           usersLimit: Math.max(currentUsersLimit, resolvedUsersLimit),
         });
-        showSnack(`✓ Changement vers "${plan.name}" planifié — effectif au prochain cycle.`, 'success');
+        showSnack(t('pricing.planChanged', { name: plan.name }), 'success');
         setLoadingCheckoutSlug('');
       } else {
         // Open payment method dialog — user will choose between Stripe (card) or Flutterwave (mobile money)
@@ -489,7 +493,7 @@ export default function PricingPage() {
         navigate('/login');
         return;
       }
-      showSnack(msg || 'Une erreur est survenue. Réessaie dans quelques instants.', 'error');
+      showSnack(msg || t('pricing.genericError'), 'error');
       setLoadingCheckoutSlug('');
     }
   };
@@ -514,7 +518,7 @@ export default function PricingPage() {
         window.location.href = response.paymentLink;
         return;
       }
-      showSnack('Le lien de paiement est indisponible pour ce plan.', 'warning');
+      showSnack(t('pricing.paymentLinkUnavailable'), 'warning');
     } catch (err) {
       console.error('doCheckout error:', err);
       const msg = err?.message || '';
@@ -522,7 +526,7 @@ export default function PricingPage() {
         navigate('/login');
         return;
       }
-      showSnack(msg || 'Une erreur est survenue. Réessaie dans quelques instants.', 'error');
+      showSnack(msg || t('pricing.genericError'), 'error');
       setPaymentDialog((d) => ({ ...d, providerBusy: '' }));
     } finally {
       setLoadingCheckoutSlug('');
@@ -531,7 +535,8 @@ export default function PricingPage() {
 
   const comparisonRows = [
     {
-      key: 'Prix',
+      key: 'price',
+      label: t('pricing.priceLabel'),
       value: (p) => {
         if (p.localizedPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedPriceCents, p.localizedCurrency);
         if (isFrontendLocalized) return formatLocalPrice(p.basePriceCents);
@@ -539,23 +544,28 @@ export default function PricingPage() {
       },
     },
     {
-      key: 'Utilisateurs inclus',
+      key: 'includedUsers',
+      label: t('pricing.includedUsers', { n: '' }),
       value: (p) => String(p.includedUsers || 1),
     },
     {
-      key: 'Quota texte / utilisateur',
+      key: 'textQuota',
+      label: t('pricing.textBooksQuota', { n: '' }),
       value: (p) => String(p.textQuotaPerUser || 0),
     },
     {
-      key: 'Quota audio / utilisateur',
+      key: 'audioQuota',
+      label: t('pricing.audioBooksQuota', { n: '' }),
       value: (p) => String(p.audioQuotaPerUser || 0),
     },
     {
-      key: 'Réduction livres payants',
+      key: 'discount',
+      label: t('pricing.discountPaid', { n: '' }),
       value: (p) => `${p.discountPercentPaidBooks || 0}%`,
     },
     {
-      key: 'Coût utilisateur supplémentaire',
+      key: 'extraUser',
+      label: t('pricing.extraUser', { price: '' }),
       value: (p) => {
         if (Number(p.extraUserPriceCents || 0) <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
         if (p.localizedExtraUserPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraUserPriceCents, p.localizedCurrency);
@@ -577,21 +587,21 @@ export default function PricingPage() {
       <Box sx={{ background: 'linear-gradient(to bottom, rgba(244,168,37,0.12), rgba(244,168,37,0))', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
           <Typography sx={{ fontFamily: 'Playfair Display, Newsreader, serif', fontSize: { xs: '2.2rem', md: '4rem' }, fontWeight: 900, lineHeight: 1.05 }}>
-            Choisissez votre plan
+            {t('pricing.choosePlan2')}
           </Typography>
           <Typography sx={{ mt: 2, color: '#6d665d' }}>
-            Forfaits connectés aux données backend en temps réel.
+            {t('pricing.realtimePricing')}
           </Typography>
 
           {(geoInfo?.currency && geoInfo.currency !== 'EUR') || isFrontendLocalized ? (
             <Typography sx={{ mt: 1, fontSize: '0.82rem', color: '#9a7f4d', bgcolor: 'rgba(244,168,37,0.08)', display: 'inline-block', px: 2, py: 0.5, borderRadius: '20px', border: '1px solid rgba(244,168,37,0.2)' }}>
-              Prix affichés en {geoInfo?.currency || localCurrency} · basé sur votre localisation
+              {t('pricing.priceDisplayed', { currency: geoInfo?.currency || localCurrency })}
               {(geoInfo?.country || localCountry) ? ` (${geoInfo?.country || localCountry})` : ''}
             </Typography>
           ) : null}
 
           <Box sx={{ mt: 4.5, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5 }}>
-            {!isMobile && <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>Facturation mensuelle</Typography>}
+            {!isMobile && <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>{t('pricing.monthlyBilling')}</Typography>}
             <Box sx={{ width: 260, borderRadius: 999, p: 0.5, bgcolor: '#fff', border: '1px solid rgba(244,168,37,0.25)', display: 'flex' }}>
               <Box
                 onClick={() => setBillingCycle('monthly')}
@@ -606,7 +616,7 @@ export default function PricingPage() {
                 }}
               >
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: billingCycle === 'monthly' ? '#111' : '#1c160d' }}>
-                  Mensuel
+                  {t('pricing.monthly')}
                 </Typography>
               </Box>
               <Box
@@ -625,7 +635,7 @@ export default function PricingPage() {
                 }}
               >
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 800, color: billingCycle === 'annual' ? '#111' : '#1c160d' }}>
-                  Annuel
+                  {t('pricing.annual')}
                 </Typography>
               </Box>
             </Box>
@@ -633,9 +643,9 @@ export default function PricingPage() {
               <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>
                 {annualAvailableCount > 0
                   ? billingCycle === 'annual'
-                    ? 'Économie annuelle active'
-                    : 'Basculer en annuel'
-                  : 'Annuel bientôt disponible'}
+                    ? t('pricing.annualSavings')
+                    : t('pricing.annualBilling')
+                  : t('pricing.annualComingSoon')}
               </Typography>
             )}
           </Box>
@@ -664,18 +674,18 @@ export default function PricingPage() {
                 || (currentPlanType && getPlanFamilyKey({ slug: currentPlanType }) === getPlanFamilyKey(plan))
               );
 
-              let actionLabel = planCta(plan.slug);
+              let actionLabel = planCta(plan.slug, t);
               let actionDisabled = false;
               if (!isAuthenticated) {
-                actionLabel = planCta(plan.slug);
+                actionLabel = planCta(plan.slug, t);
               } else if (samePlan) {
-                actionLabel = 'Plan actuel';
+                actionLabel = t('pricing.currentPlan');
                 actionDisabled = true;
               } else if (activeSub) {
                 if (Number(plan.basePriceCents || 0) > currentPrice) {
-                  actionLabel = 'Upgrade';
+                  actionLabel = t('pricing.upgrade');
                 } else {
-                  actionLabel = 'Plan inférieur';
+                  actionLabel = t('pricing.lowerPlan');
                   actionDisabled = true;
                 }
               }
@@ -704,13 +714,13 @@ export default function PricingPage() {
 
       <Container maxWidth="md" sx={{ py: 8 }}>
         <Typography sx={{ textAlign: 'center', fontFamily: 'Playfair Display, Newsreader, serif', fontWeight: 700, fontSize: '2rem', mb: 4.5 }}>
-          Comparaison détaillée
+          {t('pricing.detailedComparison')}
         </Typography>
         <Box sx={{ overflowX: 'auto' }}>
           <Table sx={{ minWidth: 700 }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#75706a', fontWeight: 800 }}>Fonctionnalités</TableCell>
+                <TableCell sx={{ fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#75706a', fontWeight: 800 }}>{t('pricing.features')}</TableCell>
                 {sortedPlans.map((p) => (
                   <TableCell key={p.id} sx={{ color: getPlanFamilyKey(p) === 'personal' ? primary : 'inherit', fontWeight: getPlanFamilyKey(p) === 'personal' ? 800 : 700 }}>
                     {p.name}
@@ -721,7 +731,7 @@ export default function PricingPage() {
             <TableBody>
               {comparisonRows.map((row) => (
                 <TableRow key={row.key}>
-                  <TableCell sx={{ fontSize: '0.9rem', fontWeight: 600 }}>{row.key}</TableCell>
+                  <TableCell sx={{ fontSize: '0.9rem', fontWeight: 600 }}>{row.label}</TableCell>
                   {sortedPlans.map((p) => (
                     <TableCell key={`${row.key}-${p.id}`} sx={{ fontSize: '0.9rem' }}>
                       {row.value(p)}
@@ -735,12 +745,12 @@ export default function PricingPage() {
       </Container>
 
       <Container maxWidth="md" sx={{ py: 8 }}>
-        <Typography sx={{ textAlign: 'center', fontFamily: 'Playfair Display, Newsreader, serif', fontWeight: 700, fontSize: '2rem', mb: 4 }}>Questions fréquentes</Typography>
+        <Typography sx={{ textAlign: 'center', fontFamily: 'Playfair Display, Newsreader, serif', fontWeight: 700, fontSize: '2rem', mb: 4 }}>{t('pricing.faqTitle')}</Typography>
         <Stack spacing={1.5}>
           {[
-            ["Puis-je annuler mon abonnement à tout moment ?", 'Oui, annulation possible depuis votre espace.'],
-            ["Quand les quotas se réinitialisent ?", 'Chaque cycle de 30 jours.'],
-            ['Les bonus expirent quand ?', 'Les bonus expirent après 12 mois si non utilisés.'],
+            [t('pricing.faq0Q'), t('pricing.faq0A')],
+            [t('pricing.faq1Q'), t('pricing.faq1A')],
+            [t('pricing.faq2Q'), t('pricing.faq2A')],
           ].map((faq, index) => (
             <Accordion
               key={faq[0]}
@@ -761,16 +771,16 @@ export default function PricingPage() {
 
       <Container maxWidth="lg" sx={{ pb: 10 }}>
         <Box sx={{ borderRadius: '18px', px: { xs: 3, md: 7 }, py: { xs: 4, md: 7 }, background: 'linear-gradient(90deg,#f4a825,#f97316)', textAlign: 'center', boxShadow: '0 18px 30px rgba(0,0,0,0.15)' }}>
-          <Typography sx={{ fontSize: { xs: '1.8rem', md: '3rem' }, lineHeight: 1.05, fontWeight: 900 }}>Prêt à déverrouiller votre prochain livre ?</Typography>
+          <Typography sx={{ fontSize: { xs: '1.8rem', md: '3rem' }, lineHeight: 1.05, fontWeight: 900 }}>{t('pricing.readyToUnlock')}</Typography>
           <Typography sx={{ mt: 1.2, color: 'rgba(0,0,0,0.72)' }}>
-            Choisissez un plan et commencez immédiatement.
+            {t('pricing.choosePlanStart')}
           </Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 3, justifyContent: 'center' }}>
             <Button sx={{ bgcolor: '#111', color: '#fff', height: 46, px: 3.2, borderRadius: '10px', fontWeight: 800, '&:hover': { bgcolor: '#000' } }} onClick={() => navigate(isAuthenticated ? '/subscription' : '/register')}>
-              {isAuthenticated ? 'Mon espace' : 'Créer un compte'}
+              {isAuthenticated ? t('pricing.mySpace') : t('pricing.createAccount')}
             </Button>
             <Button sx={{ bgcolor: 'rgba(255,255,255,0.28)', color: '#111', height: 46, px: 3.2, borderRadius: '10px', border: '1px solid rgba(0,0,0,0.1)', fontWeight: 800 }} onClick={() => navigate('/catalogue')}>
-              Voir la bibliothèque
+              {t('pricing.viewLibrary')}
             </Button>
           </Stack>
         </Box>
@@ -779,7 +789,7 @@ export default function PricingPage() {
       <Box sx={{ borderTop: '1px solid #e6e2db', py: 4.2, bgcolor: '#fff' }}>
         <Container maxWidth="lg" sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2.5 }}>
           <Box component="img" src={papyriLogo} alt="Papyri" sx={{ height: 38, objectFit: 'contain' }} />
-          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>© 2026 Papyri · Développé par Afrik NoCode</Typography>
+          <Typography sx={{ fontSize: '0.74rem', color: '#9b9488' }}>{t('landing.footerCopyright')}</Typography>
         </Container>
       </Box>
 
@@ -790,11 +800,11 @@ export default function PricingPage() {
         PaperProps={{ sx: { borderRadius: 4, p: 0.5, maxWidth: 420, width: '100%' } }}
       >
         <DialogTitle sx={{ fontWeight: 800, fontSize: '1.2rem', pb: 0.5, color: '#1c160d' }}>
-          Choisir le mode de paiement
+          {t('pricing.paymentTitle')}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#8a7f74', mb: 2, fontSize: '0.92rem' }}>
-            Sélectionne comment tu souhaites régler ton abonnement{paymentDialog.plan ? ` "${paymentDialog.plan.name}"` : ''}.
+            {paymentDialog.plan ? t('pricing.paymentDescPlan', { plan: paymentDialog.plan.name }) : t('pricing.paymentDesc')}
           </Typography>
 
           {/* ── Code promo ── */}
@@ -802,7 +812,7 @@ export default function PricingPage() {
             <Stack direction="row" spacing={1} alignItems="flex-start">
               <TextField
                 size="small"
-                placeholder="Code promo (ex: BIENVENUE20)"
+                placeholder={t('pricing.promoPlaceholder')}
                 value={promoCode}
                 onChange={(e) => {
                   setPromoCode(e.target.value.toUpperCase());
@@ -827,7 +837,7 @@ export default function PricingPage() {
                 disabled={!promoCode.trim() || Boolean(paymentDialog.providerBusy) || promoLoading}
                 sx={{ whiteSpace: 'nowrap', borderRadius: 2, textTransform: 'none', height: 40 }}
               >
-                {promoLoading ? <CircularProgress size={16} /> : 'Appliquer'}
+                {promoLoading ? <CircularProgress size={16} /> : t('pricing.promoApply')}
               </Button>
             </Stack>
 
@@ -835,18 +845,16 @@ export default function PricingPage() {
               {promoResult && (
                 <Box sx={{ mt: 1, p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
                   <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>
-                    ✓ Code «{promoResult.code}» appliqué !
+                    {t('pricing.promoApplied', { code: promoResult.code })}
                   </Typography>
                   <Typography sx={{ fontSize: '0.82rem', color: '#166534', mt: 0.3 }}>
-                    Remise : {promoResult.discountType === 'percent'
-                      ? `-${promoResult.discountValue}%`
-                      : `-${formatMinorUnits(promoResult.discountCents, paymentDialog.plan?.currency || 'EUR')}`
-                    }
-                    {' '}→ Total :{' '}
-                    <strong>
-                      {formatMinorUnits(promoResult.finalAmountCents, paymentDialog.plan?.currency || 'EUR')}
-                    </strong>
-                    {' '}au lieu de {formatMinorUnits(promoResult.originalAmountCents, paymentDialog.plan?.currency || 'EUR')}
+                    {t('pricing.promoDiscount', {
+                      discount: promoResult.discountType === 'percent'
+                        ? `-${promoResult.discountValue}%`
+                        : `-${formatMinorUnits(promoResult.discountCents, paymentDialog.plan?.currency || 'EUR')}`,
+                      total: formatMinorUnits(promoResult.finalAmountCents, paymentDialog.plan?.currency || 'EUR'),
+                      original: formatMinorUnits(promoResult.originalAmountCents, paymentDialog.plan?.currency || 'EUR'),
+                    })}
                   </Typography>
                 </Box>
               )}
@@ -886,10 +894,10 @@ export default function PricingPage() {
               )}
               <Stack alignItems="flex-start" spacing={0.2} sx={{ flex: 1 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#5469d4' }}>
-                  Carte bancaire
+                  {t('pricing.cardPayment')}
                 </Typography>
                 <Typography sx={{ fontSize: '0.78rem', color: '#888' }}>
-                  Visa, Mastercard · sécurisé par Stripe
+                  {t('pricing.cardSubtitle')}
                 </Typography>
               </Stack>
             </Button>
@@ -918,10 +926,10 @@ export default function PricingPage() {
               )}
               <Stack alignItems="flex-start" spacing={0.2} sx={{ flex: 1 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#e65100' }}>
-                  Mobile Money
+                  {t('pricing.mobileMoneyPayment')}
                 </Typography>
                 <Typography sx={{ fontSize: '0.78rem', color: '#888' }}>
-                  MTN, Orange, Wave · via Flutterwave
+                  {t('pricing.mobileMoneySubtitle')}
                 </Typography>
               </Stack>
             </Button>
@@ -943,7 +951,7 @@ export default function PricingPage() {
           action={
             snack.severity === 'success' ? (
               <Button color="inherit" size="small" onClick={() => navigate('/subscription')}>
-                Voir mon abonnement →
+                {t('pricing.seeSubscription')}
               </Button>
             ) : null
           }

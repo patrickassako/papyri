@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -278,19 +278,15 @@ export default function DashboardPage() {
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState({ type: 'none', endDate: '' });
   const [usage, setUsage] = useState(null);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
   const nouveautesRef = useRef(null);
   const populairesRef = useRef(null);
   const recommendationsRef = useRef(null);
 
-  useEffect(() => {
-    let alive = true;
-
-    const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async (aliveRef) => {
       try {
-        const userData = await authService.getUser();
-        if (alive && userData) setUser(userData);
-
-        const [historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes, usageRes] = await Promise.allSettled([
+        const [userData, historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes, usageRes] = await Promise.allSettled([
+          authService.getUser(),
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/reading-history/continue?limit=3`),
           authFetch(`${API_URL}/api/subscriptions/me`),
@@ -300,13 +296,17 @@ export default function DashboardPage() {
           authFetch(`${API_URL}/api/subscriptions/usage/me`),
         ]);
 
+        if (userData.status === 'fulfilled' && aliveRef.current && userData.value) {
+          setUser(userData.value);
+        }
+
         let historyItems = [];
         if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
           const payload = await safeJson(historyRes.value);
           historyItems = Array.isArray(payload?.data) ? payload.data : [];
         }
 
-        if (alive) {
+        if (aliveRef.current) {
           setStats(computeStats(historyItems));
           setActivity(buildWeekActivity(historyItems));
         }
@@ -314,8 +314,8 @@ export default function DashboardPage() {
         if (continueRes.status === 'fulfilled' && continueRes.value.ok) {
           const payload = await safeJson(continueRes.value);
           const items = Array.isArray(payload?.data) ? payload.data : [];
-          if (alive) setContinueReading(items);
-        } else if (alive) {
+          if (aliveRef.current) setContinueReading(items);
+        } else if (aliveRef.current) {
           const fallback = historyItems
             .filter((item) => Number(item.progress_percent || 0) > 0 && Number(item.progress_percent || 0) < 100)
             .slice(0, 3);
@@ -324,7 +324,7 @@ export default function DashboardPage() {
 
         if (subscriptionRes.status === 'fulfilled' && subscriptionRes.value.ok) {
           const payload = await safeJson(subscriptionRes.value);
-          if (alive) {
+          if (aliveRef.current) {
             const isActive = Boolean(payload?.isActive);
             const subscription = payload?.subscription || null;
             setHasActiveSubscription(isActive);
@@ -339,19 +339,19 @@ export default function DashboardPage() {
             else if (payload?.hasSubscription) subType = 'inactive';
             setSubscriptionInfo({ type: subType, endDate });
           }
-        } else if (alive) {
+        } else if (aliveRef.current) {
           setHasActiveSubscription(false);
           setSubscriptionInfo({ type: 'none', endDate: '' });
         }
 
         if (usageRes.status === 'fulfilled' && usageRes.value.ok) {
           const payload = await safeJson(usageRes.value);
-          if (alive && payload?.data?.usage) {
+          if (aliveRef.current && payload?.data?.usage) {
             setUsage(payload.data.usage);
           }
         }
 
-        if (alive) {
+        if (aliveRef.current) {
           if (nouveautesRes.status === 'fulfilled') {
             setNouveautes(Array.isArray(nouveautesRes.value?.data) ? nouveautesRes.value.data : []);
           }
@@ -367,10 +367,18 @@ export default function DashboardPage() {
         console.error('Failed to load dashboard data:', err);
         setSectionsLoading(false);
       }
-    };
+  }, []);
 
-    loadDashboardData();
-    return () => { alive = false; };
+  useEffect(() => {
+    const aliveRef = { current: true };
+    loadDashboardData(aliveRef);
+    return () => { aliveRef.current = false; };
+  }, [loadDashboardData, profileReloadKey]);
+
+  useEffect(() => {
+    const handleProfileChange = () => setProfileReloadKey((v) => v + 1);
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
   }, []);
 
   const userName = user?.full_name || t('common.unknown');
@@ -509,14 +517,14 @@ export default function DashboardPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: 3 }}>
             {[
               {
-                label: i18n.language?.startsWith('en') ? 'eBook credits' : 'Crédits livres texte',
+                label: t('dashboard.ebookCredits'),
                 icon: MenuBookOutlined,
                 color: tokens.colors.primary,
                 used: Number(usage.text_unlocked_count || 0),
                 quota: Number(usage.text_quota || 0),
               },
               {
-                label: i18n.language?.startsWith('en') ? 'Audiobook credits' : 'Crédits livres audio',
+                label: t('dashboard.audiobookCredits'),
                 icon: HeadphonesOutlined,
                 color: tokens.colors.secondary,
                 used: Number(usage.audio_unlocked_count || 0),
@@ -634,13 +642,13 @@ export default function DashboardPage() {
             ) : (
               <Paper elevation={0} sx={{ p: 3, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
                 <Typography sx={{ color: '#9c7e49', fontSize: '0.9rem' }}>
-                  {i18n.language?.startsWith('en') ? 'No reading in progress.' : 'Aucune lecture en cours pour le moment.'}
+                  {t('dashboard.noReadingInProgress')}
                 </Typography>
               </Paper>
             )}
 
             <HScrollSection
-              title={i18n.language?.startsWith('en') ? 'New Releases' : 'Nouveautés'}
+              title={t('dashboard.newReleases')}
               viewAllPath="/catalogue?sort=newest"
               items={nouveautes}
               loading={sectionsLoading}
@@ -649,7 +657,7 @@ export default function DashboardPage() {
             />
 
             <HScrollSection
-              title={i18n.language?.startsWith('en') ? 'Popular' : 'Populaires'}
+              title={t('dashboard.popular')}
               viewAllPath="/catalogue?sort=popular"
               items={populaires}
               loading={sectionsLoading}
@@ -659,7 +667,7 @@ export default function DashboardPage() {
 
             {(sectionsLoading || recommendations.length > 0) && (
               <HScrollSection
-                title={i18n.language?.startsWith('en') ? 'You might like' : 'Ça peut vous intéresser'}
+                title={t('dashboard.mayLike')}
                 viewAllPath="/catalogue"
                 items={recommendations}
                 loading={sectionsLoading}

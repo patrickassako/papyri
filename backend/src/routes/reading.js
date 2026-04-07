@@ -4,6 +4,7 @@ const { supabaseAdmin } = require('../config/database');
 const { verifyJWT } = require('../middleware/auth');
 const contentsService = require('../services/contents.service');
 const contentAccessService = require('../services/content-access.service');
+const familyProfilesService = require('../services/family-profiles.service');
 const r2Service = require('../services/r2.service');
 const geoService = require('../services/geo.service');
 
@@ -57,8 +58,21 @@ function isSkippableReadingHistoryError(error) {
   return false;
 }
 
+async function resolveProfileContext(req) {
+  const requestedProfileId = req.headers['x-profile-id'] || null;
+  return familyProfilesService.resolveProfileForUser(req.user.id, requestedProfileId);
+}
+
+function applyProfileScope(query, profileId) {
+  if (profileId) {
+    return query.eq('profile_id', profileId);
+  }
+  return query.is('profile_id', null);
+}
+
 async function upsertReadingProgress({
   userId,
+  profileId = null,
   contentId,
   progressPercent,
   lastPosition,
@@ -88,12 +102,15 @@ async function upsertReadingProgress({
   console.log('[upsertReadingProgress] userId=%s, contentId=%s, progress=%s', userId, contentId, progressPercent);
 
   // Check if reading history entry exists
-  const { data: existingHistory, error: existingHistoryError } = await supabaseAdmin
+  let existingHistoryQuery = supabaseAdmin
     .from('reading_history')
     .select('id, started_at, total_time_seconds')
     .eq('user_id', userId)
-    .eq('content_id', contentId)
-    .single();
+    .eq('content_id', contentId);
+
+  existingHistoryQuery = applyProfileScope(existingHistoryQuery, profileId);
+
+  const { data: existingHistory, error: existingHistoryError } = await existingHistoryQuery.single();
 
   if (isMissingReadingHistoryTable(existingHistoryError)) {
     console.warn('[upsertReadingProgress] reading_history table missing');
@@ -121,6 +138,7 @@ async function upsertReadingProgress({
   // Prepare update data
   const updateData = {
     user_id: userId,
+    profile_id: profileId,
     content_id: contentId,
     progress_percent: normalizedProgress,
     last_position: normalizeLastPosition(lastPosition),
@@ -381,12 +399,13 @@ async function getUserAudioPlaylist(userId) {
 router.get('/reading-history', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const page = parseInt(req.query.page) || 1;
     const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Max 100 items per page
     const offset = (page - 1) * limit;
 
     // Get reading history with content details
-    const { data: history, error: historyError, count } = await supabaseAdmin
+    let historyQuery = supabaseAdmin
       .from('reading_history')
       .select(`
         id,
@@ -409,8 +428,11 @@ router.get('/reading-history', verifyJWT, async (req, res, next) => {
         )
       `, { count: 'exact' })
       .eq('user_id', userId)
-      .order('last_read_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('last_read_at', { ascending: false });
+
+    historyQuery = applyProfileScope(historyQuery, profileContext.profileId);
+
+    const { data: history, error: historyError, count } = await historyQuery.range(offset, offset + limit - 1);
 
     if (historyError) {
       console.error('Error fetching reading history:', historyError);
@@ -460,6 +482,7 @@ router.put('/reading-history/:content_id', verifyJWT, async (req, res, next) => 
   try {
     await ensureLegacyUserRow(req.user);
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { progress_percent, last_position, total_time_seconds } = req.body;
 
@@ -476,6 +499,7 @@ router.put('/reading-history/:content_id', verifyJWT, async (req, res, next) => 
 
     const result = await upsertReadingProgress({
       userId,
+      profileId: profileContext.profileId,
       contentId,
       progressPercent: progress_percent,
       lastPosition: last_position,
@@ -495,11 +519,16 @@ router.put('/reading-history/:content_id', verifyJWT, async (req, res, next) => 
 router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
 
-    const { data: history, error } = await supabaseAdmin
+    let statsQuery = supabaseAdmin
       .from('reading_history')
       .select('content_id, status, progress_percent, total_time_seconds, last_read_at, contents(type)')
       .eq('user_id', userId);
+
+    statsQuery = applyProfileScope(statsQuery, profileContext.profileId);
+
+    const { data: history, error } = await statsQuery;
 
     if (error && !isMissingReadingHistoryTable(error)) {
       return next(error);
@@ -577,11 +606,16 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
 router.delete('/reading-history', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
 
-    const { error } = await supabaseAdmin
+    let deleteQuery = supabaseAdmin
       .from('reading_history')
       .delete()
       .eq('user_id', userId);
+
+    deleteQuery = applyProfileScope(deleteQuery, profileContext.profileId);
+
+    const { error } = await deleteQuery;
 
     if (error && !isMissingReadingHistoryTable(error)) {
       return next(error);
@@ -600,12 +634,14 @@ router.delete('/reading-history', verifyJWT, async (req, res, next) => {
 router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
       zone: geoService.getGeoFromRequest(req),
+      profileId: profileContext.profileId,
     });
 
     if (!accessContext.access.can_read) {
@@ -630,12 +666,15 @@ router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next)
       content.content_type
     );
 
-    const { data: history, error: historyError } = await supabaseAdmin
+    let sessionQuery = supabaseAdmin
       .from('reading_history')
       .select('*')
       .eq('user_id', userId)
-      .eq('content_id', contentId)
-      .maybeSingle();
+      .eq('content_id', contentId);
+
+    sessionQuery = applyProfileScope(sessionQuery, profileContext.profileId);
+
+    const { data: history, error: historyError } = await sessionQuery.maybeSingle();
 
     console.log('[session] userId=%s, contentId=%s, hasHistory=%s, historyError=%s, cfi=%s',
       userId, contentId, !!history, historyError?.message || 'none',
@@ -677,8 +716,8 @@ router.get('/api/reading/:content_id/session', verifyJWT, async (req, res, next)
       return res.status(404).json({
         success: false,
         error: {
-          code: 'CONTENT_NOT_FOUND',
-          message: 'Contenu non trouvé.',
+            code: 'CONTENT_NOT_FOUND',
+            message: 'Contenu non trouvé.',
         },
       });
     }
@@ -694,6 +733,7 @@ router.post('/api/reading/:content_id/progress', verifyJWT, async (req, res, nex
   try {
     await ensureLegacyUserRow(req.user);
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { progress_percent, last_position, total_time_seconds } = req.body;
 
@@ -712,6 +752,7 @@ router.post('/api/reading/:content_id/progress', verifyJWT, async (req, res, nex
       userId,
       contentId,
       zone: geoService.getGeoFromRequest(req),
+      profileId: profileContext.profileId,
     });
     if (!accessContext.access.can_read) {
       const statusCode = accessContext.access.denial?.code === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402;
@@ -726,6 +767,7 @@ router.post('/api/reading/:content_id/progress', verifyJWT, async (req, res, nex
 
     const result = await upsertReadingProgress({
       userId,
+      profileId: profileContext.profileId,
       contentId,
       progressPercent: progress_percent,
       lastPosition: last_position,
@@ -745,11 +787,13 @@ router.post('/api/reading/:content_id/progress', verifyJWT, async (req, res, nex
 router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
       zone: geoService.getGeoFromRequest(req),
+      profileId: profileContext.profileId,
     });
 
     if (!accessContext.access.can_read) {
@@ -865,6 +909,7 @@ router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next
 router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const chapterId = req.params.chapter_id;
 
@@ -872,6 +917,7 @@ router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, 
       userId,
       contentId,
       zone: geoService.getGeoFromRequest(req),
+      profileId: profileContext.profileId,
     });
 
     if (!accessContext.access.can_read) {
@@ -937,12 +983,14 @@ router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, 
 router.get('/api/reading/:content_id/file', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
     const accessContext = await contentAccessService.resolveContentAccess({
       userId,
       contentId,
       zone: geoService.getGeoFromRequest(req),
+      profileId: profileContext.profileId,
     });
 
     if (!accessContext.access.can_read) {
@@ -1025,10 +1073,11 @@ router.get('/api/reading/:content_id/file', verifyJWT, async (req, res, next) =>
 router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const limit = parseInt(req.query.limit) || 10;
 
     // Get currently in-progress reading history items
-    const { data: history, error: historyError } = await supabaseAdmin
+    let continueQuery = supabaseAdmin
       .from('reading_history')
       .select(`
         id,
@@ -1049,8 +1098,11 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
       .eq('user_id', userId)
       .gt('progress_percent', 0)
       .lt('progress_percent', 100)
-      .order('last_read_at', { ascending: false })
-      .limit(limit);
+      .order('last_read_at', { ascending: false });
+
+    continueQuery = applyProfileScope(continueQuery, profileContext.profileId);
+
+    const { data: history, error: historyError } = await continueQuery.limit(limit);
 
     if (historyError) {
       console.error('Error fetching continue reading:', historyError);
@@ -1092,14 +1144,19 @@ router.get('/reading-history/continue', verifyJWT, async (req, res, next) => {
 router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('highlights')
       .select('*')
       .eq('user_id', userId)
       .eq('content_id', contentId)
       .order('created_at', { ascending: true });
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching highlights:', error);
@@ -1119,6 +1176,7 @@ router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, ne
 router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { text, cfi_range, position, color, note } = req.body;
 
@@ -1133,6 +1191,7 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
       .from('highlights')
       .insert({
         user_id: userId,
+        profile_id: profileContext.profileId,
         content_id: contentId,
         text,
         cfi_range,
@@ -1161,13 +1220,18 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
 router.delete('/api/reading/:content_id/highlights/:id', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const highlightId = req.params.id;
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('highlights')
       .delete()
       .eq('id', highlightId)
       .eq('user_id', userId);
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { error } = await query;
 
     if (error) {
       console.error('Error deleting highlight:', error);
@@ -1191,14 +1255,19 @@ router.delete('/api/reading/:content_id/highlights/:id', verifyJWT, async (req, 
 router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('bookmarks')
       .select('*')
       .eq('user_id', userId)
       .eq('content_id', contentId)
       .order('created_at', { ascending: true });
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching bookmarks:', error);
@@ -1218,6 +1287,7 @@ router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, nex
 router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { position, label } = req.body;
 
@@ -1232,6 +1302,7 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
       .from('bookmarks')
       .insert({
         user_id: userId,
+        profile_id: profileContext.profileId,
         content_id: contentId,
         position,
         label: label || null,
@@ -1257,13 +1328,18 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
 router.delete('/api/reading/:content_id/bookmarks/:id', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const bookmarkId = req.params.id;
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('bookmarks')
       .delete()
       .eq('id', bookmarkId)
       .eq('user_id', userId);
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { error } = await query;
 
     if (error) {
       console.error('Error deleting bookmark:', error);
@@ -1592,14 +1668,19 @@ router.delete('/api/reading/audio/playlist/:content_id', verifyJWT, async (req, 
 router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('bookmarks')
       .select('id, position, label, created_at')
       .eq('user_id', userId)
       .eq('content_id', contentId)
       .order('created_at', { ascending: false });
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -1616,6 +1697,7 @@ router.get('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, nex
 router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { position, label } = req.body;
 
@@ -1628,7 +1710,7 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
 
     const { data, error } = await supabaseAdmin
       .from('bookmarks')
-      .insert({ user_id: userId, content_id: contentId, position, label: label || null })
+      .insert({ user_id: userId, profile_id: profileContext.profileId, content_id: contentId, position, label: label || null })
       .select('id, position, label, created_at')
       .single();
 
@@ -1646,15 +1728,20 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
 router.delete('/api/reading/:content_id/bookmarks/:bookmark_id', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const bookmarkId = req.params.bookmark_id;
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('bookmarks')
       .delete()
       .eq('id', bookmarkId)
       .eq('user_id', userId)
       .eq('content_id', contentId);
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { error } = await query;
 
     if (error) throw error;
 
@@ -1674,14 +1761,19 @@ router.delete('/api/reading/:content_id/bookmarks/:bookmark_id', verifyJWT, asyn
 router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('highlights')
       .select('id, text, cfi_range, position, color, note, created_at')
       .eq('user_id', userId)
       .eq('content_id', contentId)
       .order('created_at', { ascending: true });
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -1698,6 +1790,7 @@ router.get('/api/reading/:content_id/highlights', verifyJWT, async (req, res, ne
 router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const { text, cfi_range, position, color, note } = req.body;
 
@@ -1712,6 +1805,7 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
       .from('highlights')
       .insert({
         user_id: userId,
+        profile_id: profileContext.profileId,
         content_id: contentId,
         text,
         cfi_range,
@@ -1736,15 +1830,20 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
 router.delete('/api/reading/:content_id/highlights/:highlight_id', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
     const highlightId = req.params.highlight_id;
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('highlights')
       .delete()
       .eq('id', highlightId)
       .eq('user_id', userId)
       .eq('content_id', contentId);
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { error } = await query;
 
     if (error) throw error;
 
@@ -1765,7 +1864,8 @@ router.delete('/api/reading/:content_id/highlights/:highlight_id', verifyJWT, as
 router.get('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { data, error } = await supabaseAdmin
+    const profileContext = await resolveProfileContext(req);
+    let query = supabaseAdmin
       .from('ebook_reading_list')
       .select(`
         id, added_at,
@@ -1773,6 +1873,10 @@ router.get('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
       `)
       .eq('user_id', userId)
       .order('added_at', { ascending: false });
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -1793,17 +1897,31 @@ router.get('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
 router.post('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const { content_id: contentId } = req.body;
 
     if (!contentId) {
       return res.status(422).json({ success: false, error: { message: 'content_id requis.' } });
     }
 
-    const { error } = await supabaseAdmin
+    let existingQuery = supabaseAdmin
       .from('ebook_reading_list')
-      .upsert({ user_id: userId, content_id: contentId }, { onConflict: 'user_id,content_id' });
+      .select('id')
+      .eq('user_id', userId)
+      .eq('content_id', contentId);
 
-    if (error) throw error;
+    existingQuery = applyProfileScope(existingQuery, profileContext.profileId);
+
+    const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+    if (existingError) throw existingError;
+
+    if (!existing) {
+      const { error } = await supabaseAdmin
+        .from('ebook_reading_list')
+        .insert({ user_id: userId, profile_id: profileContext.profileId, content_id: contentId });
+
+      if (error) throw error;
+    }
 
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -1818,13 +1936,18 @@ router.post('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
 router.delete('/api/reading/ebook/list/:content_id', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const profileContext = await resolveProfileContext(req);
     const contentId = req.params.content_id;
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('ebook_reading_list')
       .delete()
       .eq('user_id', userId)
       .eq('content_id', contentId);
+
+    query = applyProfileScope(query, profileContext.profileId);
+
+    const { error } = await query;
 
     if (error) throw error;
 

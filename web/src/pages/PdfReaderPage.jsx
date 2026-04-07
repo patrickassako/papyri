@@ -20,6 +20,7 @@ import { useReadingLock } from '../hooks/useReadingLock';
 import { contentsService } from '../services/contents.service';
 import papyriMark from '../assets/papyri-logo-gold.png';
 import tokens from '../config/tokens';
+import { useTranslation } from 'react-i18next';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -74,6 +75,7 @@ export default function PdfReaderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { lockState } = useReadingLock(id);
+  const { t: tl } = useTranslation();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [content, setContent] = useState(null);
@@ -139,7 +141,7 @@ export default function PdfReaderPage() {
         }
 
         if (!access?.canRead && !access?.has_access) {
-          setError('Abonnement requis pour accéder à ce contenu.');
+          setError(tl('reader_ui.subscriptionRequired'));
         }
       } catch (e) {
         if (active) setError(e.message);
@@ -175,7 +177,7 @@ export default function PdfReaderPage() {
           if (outline?.length) setToc(outline);
         } catch (_) {}
       } catch (e) {
-        if (active) setError('Impossible de charger le fichier PDF.');
+        if (active) setError(tl('reader_ui.pdfLoadError'));
       }
     }
 
@@ -389,7 +391,7 @@ export default function PdfReaderPage() {
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: T.bg, p: 3 }}>
         <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
         <Box component="button" onClick={() => navigate(-1)} sx={{ color: tokens.colors.primary, cursor: 'pointer', background: 'none', border: 'none', fontSize: '0.9rem' }}>
-          ← Retour
+          ← {tl('reader_ui.back')}
         </Box>
       </Box>
     );
@@ -418,7 +420,7 @@ export default function PdfReaderPage() {
         }}
       >
         {/* Retour */}
-        <Tooltip title="Retour">
+        <Tooltip title={tl('reader_ui.back')}>
           <IconButton onClick={() => navigate(-1)} size="small" sx={{ color: T.icon }}>
             <ArrowLeft size={18} />
           </IconButton>
@@ -438,28 +440,28 @@ export default function PdfReaderPage() {
         </Box>
 
         {/* TOC */}
-        <Tooltip title="Table des matières">
+        <Tooltip title={tl('reader_ui.toc')}>
           <IconButton onClick={() => setTocOpen(true)} size="small" sx={{ color: T.icon }} disabled={toc.length === 0}>
             <MenuIcon size={17} />
           </IconButton>
         </Tooltip>
 
         {/* Recherche */}
-        <Tooltip title="Rechercher">
+        <Tooltip title={tl('reader_ui.search')}>
           <IconButton onClick={() => setSearchOpen(o => !o)} size="small" sx={{ color: searchOpen ? tokens.colors.primary : T.icon }}>
             <Search size={17} />
           </IconButton>
         </Tooltip>
 
         {/* Rotation */}
-        <Tooltip title="Rotation">
+        <Tooltip title={tl('reader_ui.rotate')}>
           <IconButton onClick={rotate} size="small" sx={{ color: T.icon }}>
             <RotateCw size={17} />
           </IconButton>
         </Tooltip>
 
         {/* Zoom out */}
-        <Tooltip title="Dézoomer (-)">
+        <Tooltip title={tl('reader_ui.zoomOut')}>
           <IconButton onClick={zoomOut} size="small" sx={{ color: T.icon }} disabled={zoom <= ZOOM_MIN}>
             <ZoomOut size={17} />
           </IconButton>
@@ -474,21 +476,21 @@ export default function PdfReaderPage() {
         </Typography>
 
         {/* Zoom in */}
-        <Tooltip title="Zoomer (+)">
+        <Tooltip title={tl('reader_ui.zoomIn')}>
           <IconButton onClick={zoomIn} size="small" sx={{ color: T.icon }} disabled={zoom >= ZOOM_MAX}>
             <ZoomIn size={17} />
           </IconButton>
         </Tooltip>
 
         {/* Thème */}
-        <Tooltip title={`Thème : ${theme}`}>
+        <Tooltip title={`${tl('reader_ui.theme')} : ${tl(`reader_ui.${theme}`)}`}>
           <IconButton onClick={cycleTheme} size="small" sx={{ color: T.icon }}>
             {themeIcon}
           </IconButton>
         </Tooltip>
 
         {/* Plein écran */}
-        <Tooltip title={fullscreen ? 'Quitter plein écran' : 'Plein écran'}>
+        <Tooltip title={fullscreen ? tl('reader_ui.exitFullscreen') : tl('reader_ui.fullscreen')}>
           <IconButton onClick={toggleFullscreen} size="small" sx={{ color: T.icon }}>
             {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
           </IconButton>
@@ -507,7 +509,7 @@ export default function PdfReaderPage() {
         >
           <TextField
             size="small"
-            placeholder="Rechercher dans le document…"
+            placeholder={tl('reader_ui.searchInDocument')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -535,7 +537,7 @@ export default function PdfReaderPage() {
               '&:disabled': { opacity: 0.6 },
             }}
           >
-            {searchLoading ? '…' : 'Chercher'}
+            {searchLoading ? '…' : tl('reader_ui.search')}
           </Box>
         </Box>
       )}
@@ -559,7 +561,7 @@ export default function PdfReaderPage() {
               }}
             >
               <Typography sx={{ fontSize: '0.75rem', color: tokens.colors.primary, fontWeight: 700 }}>
-                Page {r.page}
+                {tl('reader_ui.pageN', { n: r.page })}
               </Typography>
               <Typography sx={{ fontSize: '0.78rem', color: T.subText }}>
                 …{r.excerpt}…
@@ -705,7 +707,7 @@ export default function PdfReaderPage() {
       >
         <Box sx={{ px: 2, pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: T.text }}>
-            Table des matières
+            {tl('reader_ui.toc')}
           </Typography>
           <IconButton size="small" onClick={() => setTocOpen(false)} sx={{ color: T.subText }}>
             <X size={16} />
@@ -723,7 +725,7 @@ export default function PdfReaderPage() {
           ))}
           {toc.length === 0 && (
             <Typography sx={{ px: 2, py: 2, fontSize: '0.82rem', color: T.subText }}>
-              Aucune table des matières disponible.
+              {tl('reader_ui.noToc')}
             </Typography>
           )}
         </List>

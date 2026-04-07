@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Container, Stack, Typography } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { subscriptionsService } from '../services/subscriptions.service';
 
 export default function SubscriptionCallbackPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,7 +32,7 @@ export default function SubscriptionCallbackPage() {
     const verify = async () => {
       if (!isSuccessCallback) {
         setLoading(false);
-        setError('Paiement non confirmé. Vérifie le statut et réessaie.');
+        setError(t('subscriptionCallback.unconfirmed'));
         return;
       }
 
@@ -42,7 +44,7 @@ export default function SubscriptionCallbackPage() {
         }
         setVerified(true);
       } catch (err) {
-        setError(err.message || 'Impossible de confirmer le paiement.');
+        setError(err.message || t('subscriptionCallback.cannotConfirm'));
       } finally {
         setLoading(false);
       }
@@ -52,48 +54,48 @@ export default function SubscriptionCallbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const providerLabel = isStripe ? 'Stripe (carte bancaire)' : 'Flutterwave (mobile money)';
+  const providerLabel = isStripe ? t('subscriptionCallback.stripeLabel') : t('subscriptionCallback.flutterwaveLabel');
 
   return (
     <Container maxWidth="sm" sx={{ py: 10 }}>
       <Box sx={{ bgcolor: '#fff', border: '1px solid #ece8e1', borderRadius: 3, p: 4 }}>
         <Typography sx={{ fontSize: '1.8rem', fontWeight: 800, mb: 0.5 }}>
-          Confirmation paiement
+          {t('subscriptionCallback.pageTitle')}
         </Typography>
         {!loading && (
           <Typography sx={{ color: '#aaa', fontSize: '0.85rem', mb: 2 }}>
-            via {providerLabel}
+            {t('subscriptionCallback.via', { provider: providerLabel })}
           </Typography>
         )}
 
         {loading ? (
           <Stack spacing={2} sx={{ alignItems: 'center', py: 3 }}>
             <CircularProgress />
-            <Typography>Vérification du paiement en cours...</Typography>
+            <Typography>{t('subscriptionCallback.verifying')}</Typography>
           </Stack>
         ) : verified ? (
           <Stack spacing={2.5}>
             <Alert severity="success">
-              Paiement confirmé. Ton abonnement est actif.
+              {t('subscriptionCallback.confirmed')}
             </Alert>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               <Button variant="contained" onClick={() => navigate('/catalogue')}>
-                Aller au catalogue
+                {t('subscriptionCallback.gotoCatalog')}
               </Button>
               <Button variant="outlined" onClick={() => navigate('/subscription')}>
-                Voir mon abonnement
+                {t('subscriptionCallback.gotoSubscription')}
               </Button>
             </Stack>
           </Stack>
         ) : (
           <Stack spacing={2.5}>
-            <Alert severity="error">{error || 'Le paiement n\'a pas pu être validé.'}</Alert>
+            <Alert severity="error">{error || t('subscriptionCallback.cannotConfirm')}</Alert>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               <Button variant="contained" onClick={() => navigate('/pricing')}>
-                Retour aux tarifs
+                {t('subscriptionCallback.gotoPricing')}
               </Button>
               <Button variant="outlined" onClick={() => navigate('/login')}>
-                Se reconnecter
+                {t('subscriptionCallback.reconnect')}
               </Button>
             </Stack>
           </Stack>

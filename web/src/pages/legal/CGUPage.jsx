@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography } from '@mui/material';
 import LegalLayout, { LegalSection, LegalList, LegalSubSection } from './LegalLayout';
+import { useTranslation } from 'react-i18next';
 
 const PLATFORM = 'Papyri';
 const COMPANY = 'Papyri Inc.';
@@ -10,9 +11,10 @@ const DATE = 'Mars 2026';
 const MAX_DEVICES = '2';
 
 export default function CGUPage() {
+  const { t } = useTranslation();
   return (
     <LegalLayout
-      title="Conditions Générales d'Utilisation"
+      title={t('legal.cguTitle')}
       subtitle={`Plateforme ${PLATFORM} – Livres numériques et livres audio`}
       lastUpdated={DATE}
     >

@@ -260,7 +260,7 @@ export const readingService = {
     });
     const data = await response.json();
     if (!response.ok || !data?.success) {
-      throw new Error(data?.error?.message || 'Impossible d’ajouter ce contenu à la playlist.');
+      throw new Error(data?.error?.message || "Impossible d'ajouter ce contenu à la playlist.");
     }
     return data.data;
   },

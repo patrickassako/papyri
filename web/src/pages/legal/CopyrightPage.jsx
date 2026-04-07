@@ -1,11 +1,13 @@
 import React from 'react';
 import { Typography } from '@mui/material';
 import LegalLayout, { LegalSection, LegalList } from './LegalLayout';
+import { useTranslation } from 'react-i18next';
 
 export default function CopyrightPage() {
+  const { t } = useTranslation();
   return (
     <LegalLayout
-      title="Politique Copyright & Signalement"
+      title={t('legal.copyrightTitle')}
       subtitle="Signalement de violation de droit d'auteur"
     >
       <LegalSection title="1. Respect du droit d'auteur">

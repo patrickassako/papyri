@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -103,8 +104,18 @@ function getItemRoute(item) {
 
 export default function MyListPage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [user, setUser] = useState(null);
-  const [subscriptionLabel, setSubscriptionLabel] = useState('Chargement de l abonnement...');
+  const [subscriptionData, setSubscriptionData] = useState(null);
+  const subscriptionLabel = useMemo(() => {
+    if (!subscriptionData) return t('common.loading');
+    const { type, endDate } = subscriptionData;
+    if (type === 'cancelled' && endDate) return t('myList.subscriptionCancelled', { date: endDate });
+    if (type === 'active' && endDate) return t('myList.subscriptionActive', { date: endDate });
+    if (type === 'active') return t('myList.subscriptionActiveNoDate');
+    return t('myList.subscriptionNone');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptionData, i18n.language]);
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
@@ -124,21 +135,22 @@ export default function MyListPage() {
           const subscription = sub?.subscription || null;
           const isActive = sub?.isActive === true;
           const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
+          const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
           const endDate = subscription?.current_period_end
-            ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
+            ? new Date(subscription.current_period_end).toLocaleDateString(locale)
             : '';
 
           if (isActive && cancelAtPeriodEnd && endDate) {
-            setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
+            setSubscriptionData({ type: 'cancelled', endDate });
           } else if (isActive && endDate) {
-            setSubscriptionLabel(`Actif jusqu au ${endDate}`);
+            setSubscriptionData({ type: 'active', endDate });
           } else if (isActive) {
-            setSubscriptionLabel('Abonnement actif');
+            setSubscriptionData({ type: 'active', endDate: '' });
           } else {
-            setSubscriptionLabel('Aucun abonnement actif');
+            setSubscriptionData({ type: 'none', endDate: '' });
           }
         } catch (_) {
-          if (alive) setSubscriptionLabel('Aucun abonnement actif');
+          if (alive) setSubscriptionData({ type: 'none', endDate: '' });
         }
 
         const [historyRes, playlistRes, ebookListRes] = await Promise.allSettled([
@@ -165,8 +177,8 @@ export default function MyListPage() {
             .map((row) => ({
               id: row?.content?.id || row?.content_id,
               content_id: row?.content_id || row?.content?.id,
-              title: row?.content?.title || 'Titre inconnu',
-              author: row?.content?.author || 'Auteur inconnu',
+              title: row?.content?.title || t('common.unknownTitle'),
+              author: row?.content?.author || t('common.unknownAuthor'),
               cover_url: row?.content?.cover_url || null,
               content_type: row?.content?.content_type || null,
               format: row?.content?.format || null,
@@ -189,8 +201,8 @@ export default function MyListPage() {
             .map((item) => ({
               id: item.id,
               content_id: item.id,
-              title: item.title || 'Titre inconnu',
-              author: item.author || 'Auteur inconnu',
+              title: item.title || t('common.unknownTitle'),
+              author: item.author || t('common.unknownAuthor'),
               cover_url: item.cover_url || null,
               content_type: item.content_type || null,
               format: null,
@@ -239,9 +251,9 @@ export default function MyListPage() {
   const stats = useMemo(() => buildReadingStats(history), [history]);
 
   const smartFilters = [
-    { key: 'favoris', label: 'Favoris', icon: <FavoriteOutlined fontSize="small" /> },
-    { key: 'en_cours', label: 'En cours', icon: <PlayCircleOutlineOutlined fontSize="small" /> },
-    { key: 'termines', label: 'Terminés', icon: <CheckCircleOutlined fontSize="small" /> },
+    { key: 'favoris', label: t('myList.favorites'), icon: <FavoriteOutlined fontSize="small" /> },
+    { key: 'en_cours', label: t('myList.inProgress'), icon: <PlayCircleOutlineOutlined fontSize="small" /> },
+    { key: 'termines', label: t('myList.completed'), icon: <CheckCircleOutlined fontSize="small" /> },
   ];
 
   const allItems = useMemo(() => {
@@ -311,7 +323,7 @@ export default function MyListPage() {
 
   const BookCover = ({ coverUrl, width = 80, height = 112 }) => (
     coverUrl ? (
-      <Box component="img" src={coverUrl} alt="Couverture" sx={{ width, height, borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />
+      <Box component="img" src={coverUrl} alt={t('common.bookCover')} sx={{ width, height, borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />
     ) : (
       <Box sx={{ width, height, borderRadius: '8px', bgcolor: surfaceVariant, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <MenuBookOutlined sx={{ fontSize: 32, color: textMuted }} />
@@ -339,7 +351,7 @@ export default function MyListPage() {
                   letterSpacing: '-0.033em',
                 }}
               >
-                Ma Liste
+                {t('myList.pageTitle')}
               </Typography>
               <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                 <Button
@@ -355,7 +367,7 @@ export default function MyListPage() {
                     '&:hover': { bgcolor: `${primary}22` },
                   }}
                 >
-                  Catalogue
+                  {t('common.catalog')}
                 </Button>
                 <IconButton onClick={() => setViewMode('grid')} sx={{ color: viewMode === 'grid' ? primary : textMuted, bgcolor: viewMode === 'grid' ? `${primary}1A` : 'transparent', borderRadius: '10px' }}>
                   <GridViewOutlined />
@@ -365,13 +377,13 @@ export default function MyListPage() {
                 </IconButton>
               </Box>
             </Box>
-            <Typography sx={{ fontSize: '1rem', color: textMuted }}>Gérez votre bibliothèque numérique personnelle</Typography>
+            <Typography sx={{ fontSize: '1rem', color: textMuted }}>{t('myList.subtitle')}</Typography>
           </Box>
 
           <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 1.2, mb: 2.5 }}>
             <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
-                Aujourd hui
+                {t('myList.today')}
               </Typography>
               <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '1rem', color: textMain }}>
                 {stats.todayMinutes} min
@@ -379,7 +391,7 @@ export default function MyListPage() {
             </Paper>
             <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
-                Serie
+                {t('myList.streak')}
               </Typography>
               <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '1rem', color: secondary }}>
                 {stats.streakDays} j
@@ -387,7 +399,7 @@ export default function MyListPage() {
             </Paper>
             <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
-                Statut
+                {t('myList.status')}
               </Typography>
               <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '0.86rem', color: primary, lineHeight: 1.2 }}>
                 {subscriptionLabel}
@@ -399,7 +411,7 @@ export default function MyListPage() {
             <Box sx={{ flex: 1, bgcolor: surfaceVariant, borderRadius: '12px', height: 48, display: 'flex', alignItems: 'center', px: 2 }}>
               <SearchIcon sx={{ color: textMuted, mr: 1.5 }} />
               <InputBase
-                placeholder="Rechercher dans ma liste..."
+                placeholder={t('myList.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 sx={{ flex: 1, fontSize: '0.95rem', color: textMain, '& input::placeholder': { color: textMuted, opacity: 1 } }}
@@ -441,9 +453,9 @@ export default function MyListPage() {
 
           <Box sx={{ mb: 4 }}>
             <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 2, gap: 1 }}>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>Reprendre la lecture</Typography>
+              <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>{t('myList.continueReading')}</Typography>
               <Box onClick={() => navigate('/history')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: primary, '&:hover': { textDecoration: 'underline' } }}>
-                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Tout voir</Typography>
+                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{t('landing.viewAll')}</Typography>
                 <ArrowForwardOutlined sx={{ fontSize: 16 }} />
               </Box>
             </Box>
@@ -490,7 +502,7 @@ export default function MyListPage() {
                 </Paper>
               )) : (
                 <Paper elevation={0} sx={{ p: 2, borderRadius: '16px', border: `1px solid ${surfaceVariant}`, width: '100%' }}>
-                  <Typography sx={{ color: textMuted, fontSize: '0.9rem' }}>Aucune lecture en cours.</Typography>
+                  <Typography sx={{ color: textMuted, fontSize: '0.9rem' }}>{t('myList.noReading')}</Typography>
                 </Paper>
               )}
             </Box>
@@ -499,10 +511,10 @@ export default function MyListPage() {
           <Box>
             <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 2, gap: 1 }}>
               <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>
-                {activeFilter === 'termines' ? 'Terminés' : activeFilter === 'en_cours' ? 'En cours' : 'Mes Favoris'}
+                {activeFilter === 'termines' ? t('myList.completed') : activeFilter === 'en_cours' ? t('myList.inProgress') : t('myList.favorites')}
               </Typography>
               <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: primary }}>
-                {visibleItems.length} titre{visibleItems.length > 1 ? 's' : ''}
+                {visibleItems.length} {t(visibleItems.length > 1 ? 'myList.titlePlural' : 'myList.titleSingular')}
               </Typography>
             </Box>
 
@@ -543,14 +555,14 @@ export default function MyListPage() {
         <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' } }}>
           <Box sx={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Paper elevation={0} sx={{ p: 2.5, borderRadius: '16px', border: `1px solid ${surfaceVariant}` }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: textMain, mb: 2 }}>Activité de lecture</Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: textMain, mb: 2 }}>{t('myList.readingActivity')}</Typography>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                 <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: `${primary}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <ScheduleOutlined sx={{ color: primary, fontSize: 20 }} />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>Temps aujourd&apos;hui</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>{t('myList.timeToday')}</Typography>
                   <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: textMain }}>{stats.todayMinutes} min</Typography>
                 </Box>
               </Box>
@@ -560,14 +572,14 @@ export default function MyListPage() {
                   <LocalFireDepartmentOutlined sx={{ color: secondary, fontSize: 20 }} />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>Série actuelle</Typography>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: textMain }}>{stats.streakDays} jours</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: textMuted }}>{t('myList.currentStreak')}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: textMain }}>{stats.streakDays} {t('myList.days')}</Typography>
                 </Box>
               </Box>
 
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>Objectif du mois</Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>{t('myList.monthlyGoal')}</Typography>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: primary }}>{stats.monthlyGoalPercent}%</Typography>
                 </Box>
                 <LinearProgress

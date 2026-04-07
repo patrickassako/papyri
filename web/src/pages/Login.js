@@ -11,11 +11,14 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import * as authService from '../services/auth.service';
+import * as familyService from '../services/family.service';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -31,14 +34,14 @@ const Login = () => {
   // Email validation
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) return 'L\'email est obligatoire.';
-    if (!emailRegex.test(email)) return 'Format d\'email invalide.';
+    if (!email) return t('auth.emailRequired');
+    if (!emailRegex.test(email)) return t('auth.emailInvalid');
     return null;
   };
 
   // Password validation
   const validatePassword = (password) => {
-    if (!password) return 'Le mot de passe est obligatoire.';
+    if (!password) return t('auth.passwordRequired');
     return null;
   };
 
@@ -90,7 +93,18 @@ const Login = () => {
     setApiError(null);
 
     try {
-      await authService.login(formData.email, formData.password);
+      const result = await authService.login(formData.email, formData.password);
+
+      if (result?.requires_mfa && result?.mfa_method === 'email') {
+        navigate('/mfa-verify', {
+          state: {
+            method: 'email',
+            challengeId: result.challenge_id,
+            email: result.user?.email || formData.email,
+          },
+        });
+        return;
+      }
 
       // Check if MFA verification is required before full access
       const mfaRequired = await authService.checkMfaRequired();
@@ -107,11 +121,16 @@ const Login = () => {
       } else if (role === 'publisher') {
         navigate('/publisher/dashboard');
       } else {
+        const familyRequirement = await familyService.resolveProfileRequirement().catch(() => null);
+        if (familyRequirement?.needsSelection) {
+          navigate('/profiles/select');
+          return;
+        }
         navigate('/dashboard');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setApiError(error.message || 'Erreur de connexion. Veuillez réessayer.');
+      setApiError(error.message || t('auth.loginError'));
     } finally {
       setLoading(false);
     }
@@ -158,7 +177,7 @@ const Login = () => {
             textAlign: 'center'
           }}
         >
-          Se connecter
+          {t('auth.loginTitle')}
         </Typography>
 
         {/* API Error Alert */}
@@ -185,7 +204,7 @@ const Login = () => {
               marginBottom: '8px'
             }}
           >
-            Email
+            {t('auth.email')}
           </Typography>
           <TextField
             id="email"
@@ -196,7 +215,7 @@ const Login = () => {
             onBlur={handleBlur('email')}
             error={touched.email && !!errors.email}
             helperText={touched.email && errors.email}
-            placeholder="votre.email@exemple.com"
+            placeholder={t('auth.emailPlaceholder')}
             autoComplete="email"
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -232,7 +251,7 @@ const Login = () => {
               marginBottom: '8px'
             }}
           >
-            Mot de passe
+            {t('auth.password')}
           </Typography>
           <TextField
             id="password"
@@ -243,13 +262,13 @@ const Login = () => {
             onBlur={handleBlur('password')}
             error={touched.password && !!errors.password}
             helperText={touched.password && errors.password}
-            placeholder="Votre mot de passe"
+            placeholder={t('auth.passwordPlaceholder')}
             autoComplete="current-password"
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     onClick={() => setShowPassword(!showPassword)}
                     edge="end"
                   >
@@ -297,7 +316,7 @@ const Login = () => {
               }
             }}
           >
-            Mot de passe oublié ?
+            {t('auth.forgotPassword')}
           </Link>
         </Box>
 
@@ -325,7 +344,7 @@ const Login = () => {
             }
           }}
         >
-          {loading ? 'Connexion en cours...' : 'Se connecter'}
+          {loading ? t('auth.loggingIn') : t('auth.loginButton')}
         </Button>
 
         {/* Register Link */}
@@ -336,7 +355,7 @@ const Login = () => {
             textAlign: 'center'
           }}
         >
-          Vous n'avez pas encore de compte ?{' '}
+          {t('auth.noAccount')}{' '}
           <Link
             component="button"
             type="button"
@@ -351,7 +370,7 @@ const Login = () => {
               '&:hover': { textDecoration: 'underline' }
             }}
           >
-            Créer un compte
+            {t('auth.registerButton')}
           </Link>
         </Typography>
 
@@ -370,7 +389,7 @@ const Login = () => {
               '&:hover': { color: 'primary.main', textDecoration: 'underline' }
             }}
           >
-            ← Retour à l'accueil
+            {t('auth.backToHome')}
           </Link>
         </Typography>
       </Box>

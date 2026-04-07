@@ -1,5 +1,6 @@
 const contentsService = require('./contents.service');
 const subscriptionsService = require('./subscriptions.service');
+const familyProfilesService = require('./family-profiles.service');
 const { supabaseAdmin } = require('../config/database');
 
 /**
@@ -87,19 +88,22 @@ function extractGutenbergSeriesId(content) {
   return null;
 }
 
-async function getSharedSeriesUnlock(userId, content) {
+async function getSharedSeriesUnlock(userId, content, profileId = null) {
   const seriesId = extractGutenbergSeriesId(content);
   if (!seriesId) return null;
 
   // Shared access for multipart Gutenberg content:
   // if one part is unlocked, all parts from the same series are readable.
   // Do this in two steps to avoid fragile cross-table OR filters.
-  const { data: unlocks, error: unlocksError } = await supabaseAdmin
+  let unlocksQuery = supabaseAdmin
     .from('content_unlocks')
-    .select('id, content_id, source, unlocked_at, paid_amount_cents, currency, metadata')
+    .select('id, content_id, source, unlocked_at, paid_amount_cents, currency, metadata, profile_id')
     .eq('user_id', userId)
     .order('unlocked_at', { ascending: false })
     .limit(200);
+
+  unlocksQuery = profileId ? unlocksQuery.eq('profile_id', profileId) : unlocksQuery.is('profile_id', null);
+  const { data: unlocks, error: unlocksError } = await unlocksQuery;
 
   if (unlocksError || !Array.isArray(unlocks) || unlocks.length === 0) return null;
 
@@ -124,8 +128,10 @@ async function getSharedSeriesUnlock(userId, content) {
   return unlocks.find((u) => matchedContentIds.has(u.content_id)) || null;
 }
 
-async function resolveContentAccess({ userId, contentId, zone = null }) {
+async function resolveContentAccess({ userId, contentId, zone = null, profileId = null }) {
   const content = await contentsService.getContentByIdForUnlock(contentId);
+  const familyContext = await familyProfilesService.resolveProfileForUser(userId, profileId);
+  const effectiveProfileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
 
   // Vérification des restrictions géographiques (avant tout le reste)
   const geoCheck = await checkGeoRestriction(contentId, zone);
@@ -154,8 +160,8 @@ async function resolveContentAccess({ userId, contentId, zone = null }) {
     };
   }
 
-  const directUnlock = await contentsService.getUserContentUnlock(userId, contentId);
-  const sharedSeriesUnlock = directUnlock ? null : await getSharedSeriesUnlock(userId, content);
+  const directUnlock = await contentsService.getUserContentUnlock(userId, contentId, effectiveProfileId);
+  const sharedSeriesUnlock = directUnlock ? null : await getSharedSeriesUnlock(userId, content, effectiveProfileId);
   const unlock = directUnlock || sharedSeriesUnlock;
   const membership = await subscriptionsService.getActiveSubscriptionForMember(userId);
   const hasActiveSubscription = Boolean(membership?.subscription);

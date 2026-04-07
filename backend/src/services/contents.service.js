@@ -257,13 +257,16 @@ async function getContentByIdForUnlock(contentId) {
   };
 }
 
-async function getUserContentUnlock(userId, contentId) {
-  const { data, error } = await supabaseAdmin
+async function getUserContentUnlock(userId, contentId, profileId = null) {
+  let query = supabaseAdmin
     .from('content_unlocks')
     .select('*')
     .eq('user_id', userId)
-    .eq('content_id', contentId)
-    .maybeSingle();
+    .eq('content_id', contentId);
+
+  query = profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data || null;

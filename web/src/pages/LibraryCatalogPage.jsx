@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Box,
@@ -30,8 +31,18 @@ const surfaceVariant = tokens.colors.surfaces.light.variant;
 
 export default function LibraryCatalogPage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [user, setUser] = useState(null);
-  const [subscriptionLabel, setSubscriptionLabel] = useState('Chargement de l abonnement...');
+  const [subscriptionData, setSubscriptionData] = useState(null);
+  const subscriptionLabel = useMemo(() => {
+    if (!subscriptionData) return t('common.loading');
+    const { type, endDate } = subscriptionData;
+    if (type === 'cancelled' && endDate) return t('libraryCatalog.subscriptionCancelled', { date: endDate });
+    if (type === 'active' && endDate) return t('libraryCatalog.subscriptionActive', { date: endDate });
+    if (type === 'active') return t('libraryCatalog.subscriptionActiveNoDate');
+    return t('libraryCatalog.subscriptionNone');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptionData, i18n.language]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -53,25 +64,26 @@ export default function LibraryCatalogPage() {
           const subscription = sub?.subscription || null;
           const isActive = sub?.isActive === true;
           const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
+          const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
           const endDate = subscription?.current_period_end
-            ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
+            ? new Date(subscription.current_period_end).toLocaleDateString(locale)
             : '';
 
           setHasActiveSubscription(isActive);
 
           if (isActive && cancelAtPeriodEnd && endDate) {
-            setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
+            setSubscriptionData({ type: 'cancelled', endDate });
           } else if (isActive && endDate) {
-            setSubscriptionLabel(`Actif jusqu au ${endDate}`);
+            setSubscriptionData({ type: 'active', endDate });
           } else if (isActive) {
-            setSubscriptionLabel('Abonnement actif');
+            setSubscriptionData({ type: 'active', endDate: '' });
           } else {
-            setSubscriptionLabel('Aucun abonnement actif');
+            setSubscriptionData({ type: 'none', endDate: '' });
           }
         } catch (_) {
           if (alive) {
             setHasActiveSubscription(false);
-            setSubscriptionLabel('Aucun abonnement actif');
+            setSubscriptionData({ type: 'none', endDate: '' });
           }
         }
       } catch (err) {
@@ -100,7 +112,7 @@ export default function LibraryCatalogPage() {
         setItems(Array.isArray(response.data) ? response.data : []);
       } catch (err) {
         console.error('Failed to load user catalog:', err);
-        if (alive) setError('Impossible de charger le catalogue.');
+        if (alive) setError(t('libraryCatalog.cannotLoad'));
       } finally {
         if (alive) setLoading(false);
       }
@@ -138,10 +150,10 @@ export default function LibraryCatalogPage() {
                 letterSpacing: '-0.033em',
               }}
             >
-              Catalogue
+              {t('libraryCatalog.pageTitle')}
             </Typography>
             <Typography sx={{ mt: 0.75, fontSize: '1rem', color: textMuted }}>
-              Retrouvez tout le catalogue depuis votre espace utilisateur.
+              {t('libraryCatalog.pageSubtitle')}
             </Typography>
           </Box>
 
@@ -149,7 +161,7 @@ export default function LibraryCatalogPage() {
             <Box sx={{ flex: '1 1 280px', bgcolor: surfaceVariant, borderRadius: '12px', minHeight: 48, display: 'flex', alignItems: 'center', px: 2 }}>
               <SearchIcon sx={{ color: textMuted, mr: 1.5 }} />
               <InputBase
-                placeholder="Rechercher un titre ou un auteur..."
+                placeholder={t('libraryCatalog.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 sx={{ flex: 1, fontSize: '0.95rem', color: tokens.colors.onBackground.light, '& input::placeholder': { color: textMuted, opacity: 1 } }}
@@ -157,26 +169,26 @@ export default function LibraryCatalogPage() {
             </Box>
 
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220 } }}>
-              <InputLabel id="user-catalog-type-label">Type</InputLabel>
+              <InputLabel id="user-catalog-type-label">{t('libraryCatalog.typeLabel')}</InputLabel>
               <Select
                 labelId="user-catalog-type-label"
                 value={contentType}
-                label="Type"
+                label={t('libraryCatalog.typeLabel')}
                 onChange={(e) => setContentType(e.target.value)}
                 sx={{ borderRadius: '12px', bgcolor: '#fff' }}
               >
-                <MenuItem value="">Tous les contenus</MenuItem>
-                <MenuItem value="ebook">Ebooks</MenuItem>
-                <MenuItem value="audiobook">Livres audio</MenuItem>
+                <MenuItem value="">{t('libraryCatalog.allContents')}</MenuItem>
+                <MenuItem value="ebook">{t('libraryCatalog.ebooks')}</MenuItem>
+                <MenuItem value="audiobook">{t('libraryCatalog.audiobooks')}</MenuItem>
               </Select>
             </FormControl>
           </Box>
 
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
             {[
-              { key: '', label: 'Tout', icon: <AutoStoriesOutlined fontSize="small" /> },
-              { key: 'ebook', label: 'Ebooks', icon: <MenuBookOutlined fontSize="small" /> },
-              { key: 'audiobook', label: 'Audio', icon: <HeadphonesOutlined fontSize="small" /> },
+              { key: '', label: t('common.all'), icon: <AutoStoriesOutlined fontSize="small" /> },
+              { key: 'ebook', label: t('libraryCatalog.ebooks'), icon: <MenuBookOutlined fontSize="small" /> },
+              { key: 'audiobook', label: t('libraryCatalog.audiobooks'), icon: <HeadphonesOutlined fontSize="small" /> },
             ].map((filter) => {
               const isActive = contentType === filter.key;
               return (
@@ -215,17 +227,17 @@ export default function LibraryCatalogPage() {
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.2, gap: 1 }}>
                 <Typography sx={{ fontSize: '1.2rem', fontWeight: 700, color: tokens.colors.onBackground.light }}>
-                  Tous les livres
+                  {t('libraryCatalog.allBooks')}
                 </Typography>
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: tokens.colors.primary }}>
-                  {visibleItems.length} titre{visibleItems.length > 1 ? 's' : ''}
+                  {visibleItems.length} {t(visibleItems.length > 1 ? 'libraryCatalog.titlePlural' : 'libraryCatalog.titleSingular')}
                 </Typography>
               </Box>
 
               {visibleItems.length === 0 ? (
                 <Paper elevation={0} sx={{ p: 2.5, borderRadius: '16px', border: `1px solid ${surfaceVariant}` }}>
                   <Typography sx={{ color: textMuted, fontSize: '0.95rem' }}>
-                    Aucun contenu ne correspond à votre recherche.
+                    {t('libraryCatalog.noResults')}
                   </Typography>
                 </Paper>
               ) : (

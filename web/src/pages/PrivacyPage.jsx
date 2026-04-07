@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import LegalLayout, { LegalSection, LegalList, LegalSubSection } from './legal/LegalLayout';
 
 const PLATFORM = 'Papyri';
@@ -8,9 +9,10 @@ const EMAIL = 'privacy@papyri.app';
 const DATE = 'Mars 2026';
 
 export default function PrivacyPage() {
+  const { t } = useTranslation();
   return (
     <LegalLayout
-      title="Politique de Confidentialité"
+      title={t('privacy.title')}
       subtitle={`${PLATFORM} – Protection de vos données personnelles`}
       lastUpdated={DATE}
     >

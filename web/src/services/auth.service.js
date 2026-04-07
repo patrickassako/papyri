@@ -10,6 +10,7 @@ import {
   getRefreshToken as getStoredRefreshToken,
   setTokens,
 } from '../config/storage';
+import { clearActiveProfile, getActiveProfileId } from '../config/profileStorage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -18,6 +19,9 @@ function toErrorMessage(code, fallback = 'Une erreur est survenue.') {
   if (code === 'INVALID_CREDENTIALS') return 'Email ou mot de passe incorrect.';
   if (code === 'PASSWORD_TOO_SHORT') return 'Le mot de passe doit contenir au moins 8 caractères.';
   if (code === 'MISSING_FIELDS') return 'Veuillez remplir tous les champs obligatoires.';
+  if (code === 'INVALID_MFA_CODE') return 'Code incorrect.';
+  if (code === 'MFA_CHALLENGE_EXPIRED') return 'Le code a expiré. Demandez-en un nouveau.';
+  if (code === 'MFA_TOO_MANY_ATTEMPTS') return 'Trop de tentatives. Reconnectez-vous.';
   return fallback;
 }
 
@@ -128,9 +132,65 @@ export async function login(email, password) {
     }),
   });
   const data = await parseAuthResponse(response);
-  await syncClientSession(data.session);
+  if (data?.session) {
+    await syncClientSession(data.session);
+  }
 
   return data;
+}
+
+export async function verifyEmailMfa(challengeId, code) {
+  const response = await fetch(`${API_URL}/auth/mfa/email/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      challenge_id: challengeId,
+      code,
+    }),
+  });
+  const data = await parseAuthResponse(response);
+  if (data?.session) {
+    await syncClientSession(data.session);
+  }
+  return data;
+}
+
+export async function resendEmailMfa(challengeId) {
+  const response = await fetch(`${API_URL}/auth/mfa/email/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      challenge_id: challengeId,
+    }),
+  });
+  return parseAuthResponse(response);
+}
+
+export async function startProfilePinEmailVerification() {
+  const response = await authFetch(`${API_URL}/auth/mfa/email/profile-pin/start`, {
+    method: 'POST',
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.error?.message || 'Impossible d envoyer le code email.');
+  }
+  return payload.data;
+}
+
+export async function verifyProfilePinEmailVerification(challengeId, code) {
+  const response = await authFetch(`${API_URL}/auth/mfa/email/profile-pin/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      challenge_id: challengeId,
+      code,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.error?.message || 'Code email invalide.');
+  }
+  return payload.data;
 }
 
 /**
@@ -158,6 +218,7 @@ export async function logout() {
     // Don't throw - logout should always succeed client-side
   }
   clearTokens();
+  clearActiveProfile();
 
   // Redirect to login
   window.location.href = '/login';
@@ -336,6 +397,11 @@ export async function authFetch(url, options = {}) {
     'Authorization': `Bearer ${accessToken}`,
   };
 
+  const activeProfileId = getActiveProfileId();
+  if (activeProfileId) {
+    headers['x-profile-id'] = activeProfileId;
+  }
+
   const response = await fetch(url, { ...options, headers });
 
   // If 401, attempt token refresh before giving up
@@ -347,6 +413,9 @@ export async function authFetch(url, options = {}) {
         ...options.headers,
         'Authorization': `Bearer ${newToken}`,
       };
+      if (activeProfileId) {
+        retryHeaders['x-profile-id'] = activeProfileId;
+      }
       const retryResponse = await fetch(url, { ...options, headers: retryHeaders });
       if (retryResponse.status === 401) {
         // Refresh succeeded but still rejected — force logout

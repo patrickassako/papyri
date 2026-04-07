@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -64,19 +65,19 @@ function formatTotalTime(seconds) {
   return `${m}m`;
 }
 
-function timeAgo(dateString) {
+function timeAgo(dateString, t) {
   const now = new Date();
   const then = new Date(dateString);
   const diffMs = now - then;
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "À l'instant";
-  if (diffMin < 60) return `Il y a ${diffMin}min`;
+  if (diffMin < 1) return t('history.justNow');
+  if (diffMin < 60) return t('history.minutesAgo', { n: diffMin });
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `Il y a ${diffH}h`;
+  if (diffH < 24) return t('history.hoursAgo', { n: diffH });
   const diffD = Math.floor(diffH / 24);
-  if (diffD === 1) return 'Hier';
-  if (diffD < 7) return `Il y a ${diffD}j`;
-  return `Il y a ${Math.floor(diffD / 7)} sem.`;
+  if (diffD === 1) return t('history.yesterday');
+  if (diffD < 7) return t('history.daysAgo', { n: diffD });
+  return t('history.weeksAgo', { n: Math.floor(diffD / 7) });
 }
 
 function groupByTimePeriod(items) {
@@ -86,22 +87,22 @@ function groupByTimePeriod(items) {
   const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
 
   const groups = {
-    "Aujourd'hui": [],
-    'Hier': [],
-    'La semaine dernière': [],
-    'Plus ancien': [],
+    today: [],
+    yesterday: [],
+    lastWeek: [],
+    older: [],
   };
 
   items.forEach((item) => {
     const itemDate = new Date(item.last_read_at);
     if (itemDate >= todayStart) {
-      groups["Aujourd'hui"].push(item);
+      groups.today.push(item);
     } else if (itemDate >= yesterdayStart) {
-      groups['Hier'].push(item);
+      groups.yesterday.push(item);
     } else if (itemDate >= weekStart) {
-      groups['La semaine dernière'].push(item);
+      groups.lastWeek.push(item);
     } else {
-      groups['Plus ancien'].push(item);
+      groups.older.push(item);
     }
   });
 
@@ -113,9 +114,9 @@ function groupByTimePeriod(items) {
 /* ------------------------------------------------------------------ */
 
 const statusConfig = {
-  in_progress: { label: 'EN COURS', bg: '#FFF3E0', color: '#E65100' },
-  paused: { label: 'PAUSE', bg: '#F5F5F5', color: '#616161' },
-  completed: { label: 'TERMINÉ', bg: '#E8F5E9', color: tokens.colors.semantic.success },
+  in_progress: { labelKey: 'history.statusInProgress', bg: '#FFF3E0', color: '#E65100' },
+  paused: { labelKey: 'history.statusPaused', bg: '#F5F5F5', color: '#616161' },
+  completed: { labelKey: 'history.statusCompleted', bg: '#E8F5E9', color: tokens.colors.semantic.success },
 };
 
 function getStatusChip(status) {
@@ -128,10 +129,10 @@ function getStatusChip(status) {
 /* ------------------------------------------------------------------ */
 
 const sectionOpacity = {
-  "Aujourd'hui": 1,
-  'Hier': 0.85,
-  'La semaine dernière': 0.7,
-  'Plus ancien': 0.6,
+  today: 1,
+  yesterday: 0.85,
+  lastWeek: 0.7,
+  older: 0.6,
 };
 
 /* ------------------------------------------------------------------ */
@@ -140,6 +141,7 @@ const sectionOpacity = {
 
 function HistoryCard({ item, onResume }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isAudio = item.content_type === 'audiobook';
   const isCompleted = item.status === 'completed';
   const isPaused = item.status === 'paused';
@@ -153,17 +155,17 @@ function HistoryCard({ item, onResume }) {
   // Action button
   let actionLabel, ActionIcon, actionBg, actionColor;
   if (isCompleted) {
-    actionLabel = 'Relire';
+    actionLabel = t('history.actionRelire');
     ActionIcon = ReplayOutlined;
     actionBg = tokens.colors.surfaces.light.variant;
     actionColor = tokens.colors.onBackground.light;
   } else if (isPaused && isAudio) {
-    actionLabel = 'Écouter';
+    actionLabel = t('history.actionListen');
     ActionIcon = PlayArrowOutlined;
     actionBg = tokens.colors.surfaces.light.variant;
     actionColor = tokens.colors.onBackground.light;
   } else {
-    actionLabel = 'Reprendre';
+    actionLabel = t('history.actionResume');
     ActionIcon = PlayArrowOutlined;
     actionBg = tokens.colors.primary;
     actionColor = '#FFFFFF';
@@ -343,7 +345,7 @@ function HistoryCard({ item, onResume }) {
         {/* Status chip */}
         <Box>
           <Chip
-            label={chipCfg.label}
+            label={t(chipCfg.labelKey)}
             size="small"
             sx={{
               height: 22,
@@ -381,7 +383,7 @@ function HistoryCard({ item, onResume }) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <ScheduleOutlined sx={{ fontSize: 14, color: '#9c7e49' }} />
             <Typography sx={{ fontSize: '0.72rem', color: '#9c7e49' }}>
-              {timeAgo(item.last_read_at)}
+              {timeAgo(item.last_read_at, t)}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -391,7 +393,7 @@ function HistoryCard({ item, onResume }) {
               <TextFieldsOutlined sx={{ fontSize: 14, color: '#9c7e49' }} />
             )}
             <Typography sx={{ fontSize: '0.72rem', color: '#9c7e49' }}>
-              {isAudio ? 'Audiobook' : 'Lecture'}
+              {isAudio ? t('history.typeAudiobook') : t('history.typeReading')}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -452,6 +454,7 @@ function HistoryCard({ item, onResume }) {
 
 export default function HistoryPage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [user, setUser] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -496,12 +499,12 @@ export default function HistoryPage() {
           setHasMore((data?.pagination?.total_pages || 1) > 1);
         } else {
           setHistory([]);
-          setError("Impossible de charger l'historique.");
+          setError(t('history.cannotLoad'));
         }
       } catch (err) {
         console.warn('Failed to load history:', err.message);
         setHistory([]);
-        setError("Impossible de charger l'historique.");
+        setError(t('history.cannotLoad'));
       } finally {
         setLoading(false);
       }
@@ -557,11 +560,11 @@ export default function HistoryPage() {
         setStats(null);
         setHasMore(false);
       } else {
-        setError("Impossible d'effacer l'historique. Réessayez.");
+        setError(t('history.cannotClear'));
       }
     } catch (err) {
       console.warn('Clear history error:', err.message);
-      setError("Impossible d'effacer l'historique. Réessayez.");
+      setError(t('history.cannotClear'));
     } finally {
       setClearing(false);
     }
@@ -603,14 +606,14 @@ export default function HistoryPage() {
 
   // Filter tabs config
   const typeFilters = [
-    { key: 'all', label: 'Tout' },
-    { key: 'books', label: 'Livres' },
-    { key: 'audio', label: 'Audio' },
+    { key: 'all', label: t('history.filterAll') },
+    { key: 'books', label: t('history.filterBooks') },
+    { key: 'audio', label: t('history.filterAudio') },
   ];
 
   const statusFilters = [
-    { key: 'in_progress', label: 'En cours' },
-    { key: 'completed', label: 'Terminé' },
+    { key: 'in_progress', label: t('history.filterInProgress') },
+    { key: 'completed', label: t('history.filterCompleted') },
   ];
 
   return (
@@ -645,7 +648,7 @@ export default function HistoryPage() {
                 lineHeight: 1.2,
               }}
             >
-              Historique de Lecture
+              {t('history.pageTitle')}
             </Typography>
             <Typography
               sx={{
@@ -654,7 +657,7 @@ export default function HistoryPage() {
                 mt: 0.5,
               }}
             >
-              Reprenez l&agrave; o&ugrave; vous vous &ecirc;tes arr&ecirc;t&eacute;.
+              {t('history.pageSubtitle')}
             </Typography>
           </Box>
 
@@ -676,7 +679,7 @@ export default function HistoryPage() {
               },
             }}
           >
-            {clearing ? 'Suppression...' : 'Tout effacer'}
+            {clearing ? t('history.clearing') : t('history.clearAll')}
           </Button>
         </Box>
 
@@ -686,27 +689,27 @@ export default function HistoryPage() {
             {[
               {
                 icon: <MenuBookOutlined sx={{ fontSize: 22, color: tokens.colors.primary }} />,
-                label: 'Livres lus',
+                label: t('history.totalBooks'),
                 value: statsLoading ? '—' : (stats?.total_books ?? 0),
-                sub: statsLoading ? '' : `${stats?.completed ?? 0} terminés`,
+                sub: statsLoading ? '' : t('history.completedCount', { n: stats?.completed ?? 0 }),
               },
               {
                 icon: <TimelapseOutlined sx={{ fontSize: 22, color: '#5E8A6E' }} />,
-                label: 'Temps total',
+                label: t('history.totalTime'),
                 value: statsLoading ? '—' : formatTotalTime(stats?.total_time_seconds),
-                sub: statsLoading ? '' : `dont ${formatTotalTime(stats?.audio_time_seconds)} audio`,
+                sub: statsLoading ? '' : t('history.audioTime', { time: formatTotalTime(stats?.audio_time_seconds) }),
               },
               {
                 icon: <LocalFireDepartmentOutlined sx={{ fontSize: 22, color: '#E65100' }} />,
-                label: 'Série actuelle',
+                label: t('history.currentStreak'),
                 value: statsLoading ? '—' : `${stats?.streak_days ?? 0}j`,
-                sub: 'jours consécutifs',
+                sub: t('history.consecutiveDays'),
               },
               {
                 icon: <DonutLargeOutlined sx={{ fontSize: 22, color: tokens.colors.secondary }} />,
-                label: 'Taux de complétion',
+                label: t('history.completionRate'),
                 value: statsLoading ? '—' : `${stats?.completion_rate ?? 0}%`,
-                sub: statsLoading ? '' : `${stats?.in_progress ?? 0} en cours`,
+                sub: statsLoading ? '' : t('history.inProgressCount', { n: stats?.in_progress ?? 0 }),
               },
             ].map((card) => (
               <Paper
@@ -753,7 +756,7 @@ export default function HistoryPage() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <CalendarMonthOutlined sx={{ fontSize: 18, color: tokens.colors.primary }} />
               <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: tokens.colors.onBackground.light }}>
-                Activité — 30 derniers jours
+                {t('history.activity30Days')}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: 56 }}>
@@ -765,7 +768,7 @@ export default function HistoryPage() {
                 return (
                   <Box
                     key={day.date}
-                    title={`${day.date}: ${day.count} lecture(s)`}
+                    title={`${day.date}: ${day.count} ${t('history.readingsSuffix', { count: day.count })}`}
                     sx={{
                       flex: 1,
                       height: `${heightPct}%`,
@@ -787,7 +790,7 @@ export default function HistoryPage() {
                 {stats.daily_activity[0]?.date}
               </Typography>
               <Typography sx={{ fontSize: '0.65rem', color: '#9c7e49' }}>
-                Aujourd'hui
+                {t('history.today')}
               </Typography>
             </Box>
           </Paper>
@@ -906,7 +909,7 @@ export default function HistoryPage() {
           >
             <SearchIcon sx={{ color: '#9c7e49', fontSize: 20, mr: 1 }} />
             <InputBase
-              placeholder="Rechercher..."
+              placeholder={t('history.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               sx={{
@@ -940,7 +943,7 @@ export default function HistoryPage() {
                 textTransform: 'none',
               }}
             >
-              Réessayer
+              {t('common.retry')}
             </Button>
           </Box>
         )}
@@ -960,13 +963,13 @@ export default function HistoryPage() {
               }}
             >
               {searchQuery || filter !== 'all' || statusFilter !== 'all'
-                ? 'Aucun résultat trouvé'
-                : 'Votre historique est vide'}
+                ? t('history.noResultsFound')
+                : t('history.emptyHistory')}
             </Typography>
             <Typography sx={{ fontSize: '0.9rem', color: '#9c7e49' }}>
               {searchQuery || filter !== 'all' || statusFilter !== 'all'
-                ? 'Essayez de modifier vos filtres.'
-                : 'Commencez à lire pour voir votre historique ici.'}
+                ? t('history.noResultsHint')
+                : t('history.emptyHistoryHint')}
             </Typography>
           </Box>
         )}
@@ -1006,7 +1009,7 @@ export default function HistoryPage() {
                         letterSpacing: '-0.01em',
                       }}
                     >
-                      {period}
+                      {t(`history.${period}`)}
                     </Typography>
                     <Typography
                       sx={{
@@ -1058,7 +1061,7 @@ export default function HistoryPage() {
                 },
               }}
             >
-              {loadingMore ? 'Chargement...' : "Charger plus d'historique"}
+              {loadingMore ? t('common.loading') : t('history.loadMore')}
             </Button>
           </Box>
         )}
@@ -1077,11 +1080,11 @@ export default function HistoryPage() {
         }}
       >
         <DialogTitle sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
-          Effacer l&apos;historique ?
+          {t('history.clearDialogTitle')}
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: '#9c7e49' }}>
-            Cette action supprimera tout votre historique de lecture. Cette action est irr&eacute;versible.
+            {t('history.clearDialogText')}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -1093,7 +1096,7 @@ export default function HistoryPage() {
               fontWeight: 600,
             }}
           >
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleClearAll}
@@ -1109,7 +1112,7 @@ export default function HistoryPage() {
               },
             }}
           >
-            Effacer tout
+            {t('history.clearAll')}
           </Button>
         </DialogActions>
       </Dialog>

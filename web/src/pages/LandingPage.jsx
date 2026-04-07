@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { contentsService } from '../services/contents.service';
 import * as authService from '../services/auth.service';
 import PublicHeader from '../components/PublicHeader';
@@ -43,16 +44,18 @@ function shuffle(arr) {
 
 function TypeBadge({ type }) {
   const isAudio = type === 'audiobook';
+  const { t } = useTranslation();
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.5,
       px: 1, py: 0.3, borderRadius: 99,
-      bgcolor: isAudio ? 'rgba(33,150,243,0.15)' : 'rgba(181,101,29,0.15)',
-      color: isAudio ? '#1565c0' : tokens.colors.primary,
+      bgcolor: isAudio ? '#1565c0' : tokens.colors.primary,
+      color: '#fff',
       fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+      boxShadow: '0 4px 10px rgba(0,0,0,0.16)',
     }}>
       {isAudio ? <Headphones size={10} /> : <Book size={10} />}
-      {isAudio ? 'Audio' : 'Livre'}
+      {isAudio ? t('landing.typeAudio') : t('landing.typeBook')}
     </Box>
   );
 }
@@ -154,6 +157,7 @@ function SkeletonStrip({ count = 5 }) {
 
 /* ─── section header ──────────────────────────────────────── */
 function SectionHeader({ icon, title, subtitle, onViewAll }) {
+  const { t } = useTranslation();
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3 }}>
       <Box>
@@ -168,7 +172,7 @@ function SectionHeader({ icon, title, subtitle, onViewAll }) {
       {onViewAll && (
         <Button endIcon={<ArrowRight size={15} />} onClick={onViewAll}
           sx={{ color: tokens.colors.primary, fontWeight: 700, textTransform: 'none', flexShrink: 0, '&:hover': { textDecoration: 'underline', bgcolor: 'transparent' } }}>
-          Tout voir
+          {t('landing.viewAll')}
         </Button>
       )}
     </Box>
@@ -179,11 +183,12 @@ function SectionHeader({ icon, title, subtitle, onViewAll }) {
 export default function LandingPage() {
   const { formatPrice } = useCurrency();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [categories, setCategories] = useState([{ id: 'tous', label: 'Tous' }]);
+  const [categories, setCategories] = useState([{ id: 'tous', label: t('common.all') }]);
   const [selectedCategory, setSelectedCategory] = useState('tous');
   const [loading, setLoading] = useState(true);
 
@@ -263,17 +268,17 @@ export default function LandingPage() {
   useEffect(() => { loadContents(); }, [loadContents]);
 
   const features = [
-    { icon: <Library size={28} />, title: 'Vaste Catalogue', description: 'Littérature africaine et francophone — classiques, nouveautés, essais.' },
-    { icon: <AudioLines size={28} />, title: 'Audio HD', description: 'Narrations professionnelles pour une immersion totale.' },
-    { icon: <Smartphone size={28} />, title: 'Multi-plateforme', description: 'Lecture fluide sur mobile, tablette ou ordinateur.' },
-    { icon: <Lock size={28} />, title: 'Accès Sécurisé', description: 'Vos données et lectures protégées par les meilleurs standards.' },
+    { icon: <Library size={28} />, title: t('landing.feat1Title'), description: t('landing.feat1Desc') },
+    { icon: <AudioLines size={28} />, title: t('landing.feat2Title'), description: t('landing.feat2Desc') },
+    { icon: <Smartphone size={28} />, title: t('landing.feat3Title'), description: t('landing.feat3Desc') },
+    { icon: <Lock size={28} />, title: t('landing.feat4Title'), description: t('landing.feat4Desc') },
   ];
 
   const stats = [
-    { value: '500+', label: 'Titres disponibles' },
-    { value: '12k+', label: 'Lecteurs actifs' },
-    { value: '4.9', label: 'Note moyenne' },
-    { value: '3', label: 'Plateformes' },
+    { value: '500+', label: t('landing.statsTitles') },
+    { value: '12k+', label: t('landing.statsReaders') },
+    { value: '4.9', label: t('landing.statsRating') },
+    { value: '3', label: t('landing.statsPlatforms') },
   ];
 
   return (
@@ -298,21 +303,21 @@ export default function LandingPage() {
                   fontSize: { xs: '2.6rem', md: '3.6rem', lg: '4.2rem' },
                   lineHeight: 1.08, color: '#1d160c', mb: 2.5, fontWeight: 800,
                 }}>
-                  Votre prochaine grande lecture commence ici
+                  {t('landing.heroH1')}
                 </Typography>
                 <Typography sx={{ fontSize: '1.1rem', lineHeight: 1.75, color: 'rgba(29,22,12,0.72)', mb: 4, maxWidth: 520 }}>
-                  Plongez dans un univers de littérature africaine et francophone. Des classiques aux nouveautés, partout avec vous.
+                  {t('landing.heroDesc')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
                   <Button variant="contained" size="large" endIcon={<ArrowRight />}
                     sx={{ bgcolor: tokens.colors.primary, px: 3.5, py: 1.5, fontSize: '1rem', fontWeight: 700, textTransform: 'none', boxShadow: '0 8px 24px rgba(181,101,29,0.3)', borderRadius: 2, '&:hover': { bgcolor: '#9a5418', transform: 'translateY(-2px)', boxShadow: '0 12px 32px rgba(181,101,29,0.35)' }, transition: 'all 0.25s' }}
                     onClick={() => navigate('/register')}>
-                    Commencer gratuitement
+                    {t('landing.heroCta')}
                   </Button>
                   <Button variant="outlined" size="large"
                     sx={{ px: 3.5, py: 1.5, fontSize: '1rem', fontWeight: 700, textTransform: 'none', color: '#1d160c', borderColor: 'rgba(29,22,12,0.25)', borderRadius: 2, bgcolor: 'rgba(255,255,255,0.6)', '&:hover': { bgcolor: 'white', borderColor: 'rgba(29,22,12,0.4)' } }}
                     onClick={() => navigate('/catalogue')}>
-                    Voir le catalogue
+                    {t('landing.heroCta2')}
                   </Button>
                 </Box>
               </Box>
@@ -391,7 +396,7 @@ export default function LandingPage() {
                     },
                   }}>
                     <Typography sx={{ color: '#fff', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.05em' }}>
-                      ✦ À la une
+                      {t('landing.featuredBadge')}
                     </Typography>
                   </Box>
                 </Box>
@@ -439,7 +444,7 @@ export default function LandingPage() {
             {categories.map((cat) => (
               <Chip
                 key={cat.id}
-                label={cat.label}
+                label={cat.id === 'tous' ? t('common.all') : cat.label}
                 onClick={() => setSelectedCategory(cat.id)}
                 sx={{
                   flexShrink: 0,
@@ -462,8 +467,8 @@ export default function LandingPage() {
           <FadeIn>
             <SectionHeader
               icon={<TrendingUp size={22} color={tokens.colors.primary} />}
-              title="Populaires en ce moment"
-              subtitle="Les titres les plus consultés · change à chaque visite"
+              title={t('landing.sectionPopular')}
+              subtitle={t('landing.sectionPopularSub')}
               onViewAll={() => navigate('/catalogue?sort=popular')}
             />
             {loading ? <SkeletonStrip count={6} /> : <HScrollStrip items={popular} onItemClick={(id) => navigate(`/catalogue/${id}`)} />}
@@ -477,8 +482,8 @@ export default function LandingPage() {
           <FadeIn delay={60}>
             <SectionHeader
               icon={<Zap size={22} color={tokens.colors.primary} />}
-              title="Nouveautés"
-              subtitle="Derniers ajouts à la bibliothèque"
+              title={t('landing.sectionNew')}
+              subtitle={t('landing.sectionNewSub')}
               onViewAll={() => navigate('/catalogue?sort=newest')}
             />
             {loading ? <SkeletonStrip count={6} /> : <HScrollStrip items={recent} onItemClick={(id) => navigate(`/catalogue/${id}`)} />}
@@ -492,8 +497,8 @@ export default function LandingPage() {
           <FadeIn delay={80}>
             <SectionHeader
               icon={<Sparkles size={22} color={tokens.colors.primary} />}
-              title="Ça peut vous intéresser"
-              subtitle="Une sélection différente à chaque visite"
+              title={t('landing.sectionMayLike')}
+              subtitle={t('landing.sectionMayLikeSub')}
               onViewAll={() => navigate('/catalogue')}
             />
             {loading ? (
@@ -545,7 +550,7 @@ export default function LandingPage() {
                           }}>
                             <Button size="small" variant="contained"
                               sx={{ bgcolor: tokens.colors.primary, textTransform: 'none', fontSize: '0.72rem', fontWeight: 700, px: 1.5, py: 0.5, borderRadius: 99, '&:hover': { bgcolor: '#9a5418' } }}>
-                              {c.content_type === 'audiobook' ? 'Écouter' : 'Lire'}
+                              {c.content_type === 'audiobook' ? t('common.listen') : t('common.read')}
                             </Button>
                           </Box>
                         </Box>
@@ -575,10 +580,10 @@ export default function LandingPage() {
           <FadeIn>
             <Box sx={{ textAlign: 'center', mb: 7 }}>
               <Typography sx={{ fontFamily: 'Playfair Display, serif', fontSize: { xs: '2rem', md: '2.75rem' }, fontWeight: 800, color: '#1d160c', mb: 1.5 }}>
-                Pourquoi Papyri ?
+                {t('landing.whyTitle')}
               </Typography>
               <Typography sx={{ color: '#8a7a6a', maxWidth: 560, mx: 'auto', fontSize: '1rem', lineHeight: 1.7 }}>
-                Une expérience conçue pour les amoureux de la littérature, avec des outils modernes.
+                {t('landing.whyDesc')}
               </Typography>
             </Box>
             <Grid container spacing={3}>
@@ -621,23 +626,23 @@ export default function LandingPage() {
               <Box sx={{ position: 'absolute', bottom: -60, left: -60, width: 220, height: 220, borderRadius: '50%', bgcolor: 'rgba(181,101,29,0.2)', filter: 'blur(50px)' }} />
               <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 680, mx: 'auto' }}>
                 <Typography sx={{ fontFamily: 'Playfair Display, serif', fontSize: { xs: '2rem', md: '2.8rem' }, mb: 2.5, lineHeight: 1.2, fontWeight: 800 }}>
-                  Prêt pour votre prochain voyage littéraire ?
+                  {t('landing.ctaReady')}
                 </Typography>
                 <Typography sx={{ mb: 1.5, opacity: 0.88, fontSize: '1.05rem', lineHeight: 1.7 }}>
-                  Rejoignez des milliers de lecteurs passionnés.
+                  {t('landing.ctaJoin')}
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5, mb: 4, flexWrap: 'wrap' }}>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(500)} / mois</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(500)} {t('common.per_month')}</Typography>
                   </Box>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(5000)} / an</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(5000)} {t('common.per_year')}</Typography>
                   </Box>
                 </Box>
                 <Button variant="contained" size="large"
                   sx={{ bgcolor: tokens.colors.secondary, color: '#1d160c', px: 5, py: 1.8, fontSize: '1.05rem', fontWeight: 800, textTransform: 'none', borderRadius: 2.5, boxShadow: '0 8px 32px rgba(212,160,23,0.4)', '&:hover': { bgcolor: '#c49014', transform: 'translateY(-2px)' }, transition: 'all 0.25s' }}
                   onClick={() => navigate('/register')}>
-                  Créer mon compte
+                  {t('landing.heroCta3')}
                 </Button>
               </Box>
             </Box>
@@ -659,42 +664,42 @@ export default function LandingPage() {
                 />
               </Box>
               <Typography sx={{ lineHeight: 1.75, fontSize: '0.875rem', maxWidth: 280 }}>
-                La destination privilégiée pour la lecture numérique en français et en langues africaines.
+                {t('landing.footerDesc')}
               </Typography>
             </Grid>
             {[
               {
-                title: 'Navigation',
+                title: t('landing.footerNavTitle'),
                 links: [
-                  { label: 'Accueil', action: () => navigate('/') },
-                  { label: 'Bibliothèque', action: () => navigate('/catalogue') },
-                  { label: 'Nouveautés', action: () => navigate('/catalogue?sort=newest') },
-                  { label: 'Tarifs', action: () => navigate('/pricing') },
-                  { label: 'Se connecter', action: () => navigate('/login') },
-                  { label: 'S\'inscrire', action: () => navigate('/register') },
+                  { label: t('common.home'), action: () => navigate('/') },
+                  { label: t('publicNav.library'), action: () => navigate('/catalogue') },
+                  { label: t('publicNav.newReleases'), action: () => navigate('/catalogue?sort=newest') },
+                  { label: t('publicNav.pricing'), action: () => navigate('/pricing') },
+                  { label: t('publicNav.login'), action: () => navigate('/login') },
+                  { label: t('publicNav.register'), action: () => navigate('/register') },
                 ],
               },
               {
-                title: 'Support',
+                title: t('landing.footerSupportTitle'),
                 links: [
-                  { label: 'Centre d\'aide', action: null },
-                  { label: 'FAQ', action: null },
-                  { label: 'Contact', action: null },
+                  { label: t('landing.footerHelp'), action: null },
+                  { label: t('landing.footerFaq'), action: null },
+                  { label: t('landing.footerContact'), action: null },
                 ],
               },
               {
-                title: 'Légal',
+                title: t('landing.footerLegalTitle'),
                 links: [
-                  { label: 'CGU', action: () => navigate('/cgu') },
-                  { label: 'CGV', action: () => navigate('/cgv') },
-                  { label: 'Confidentialité', action: () => navigate('/privacy') },
-                  { label: 'Cookies', action: () => navigate('/cookies') },
-                  { label: 'Mentions légales', action: () => navigate('/mentions-legales') },
-                  { label: 'Copyright', action: () => navigate('/copyright') },
+                  { label: t('legal.cgu'), action: () => navigate('/cgu') },
+                  { label: t('legal.cgv'), action: () => navigate('/cgv') },
+                  { label: t('legal.privacy'), action: () => navigate('/privacy') },
+                  { label: t('legal.cookies'), action: () => navigate('/cookies') },
+                  { label: t('legal.legalNotice'), action: () => navigate('/mentions-legales') },
+                  { label: t('legal.copyright'), action: () => navigate('/copyright') },
                 ],
               },
             ].map((col) => (
-              <Grid size={{ xs: 6, md: 2.67 }} key={col.title}>
+              <Grid size={{ xs: 6, md: 4, lg: 2.66 }} key={col.title}>
                 <Typography sx={{ fontWeight: 700, color: '#fff', mb: 2, fontSize: '0.9rem' }}>{col.title}</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                   {col.links.map((link) => (
@@ -717,8 +722,8 @@ export default function LandingPage() {
             ))}
           </Grid>
           <Box sx={{ pt: 4, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-            <Typography sx={{ fontSize: '0.8rem' }}>© 2026 Papyri · Développé par Afrik NoCode</Typography>
-            <Typography sx={{ fontSize: '0.8rem' }}>Yaoundé, Cameroun 🇨🇲</Typography>
+            <Typography sx={{ fontSize: '0.8rem' }}>{t('landing.footerCopyright')}</Typography>
+            <Typography sx={{ fontSize: '0.8rem' }}>{t('landing.footerLocation')}</Typography>
           </Box>
         </Container>
       </Box>

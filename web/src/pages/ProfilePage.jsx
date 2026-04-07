@@ -28,6 +28,7 @@ import EditOutlined from '@mui/icons-material/EditOutlined';
 import WorkspacePremiumOutlined from '@mui/icons-material/WorkspacePremiumOutlined';
 import CreditCardOutlined from '@mui/icons-material/CreditCardOutlined';
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined';
+import DevicesOutlined from '@mui/icons-material/DevicesOutlined';
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
 import FormatListNumberedOutlined from '@mui/icons-material/FormatListNumberedOutlined';
 import HeadphonesOutlined from '@mui/icons-material/HeadphonesOutlined';
@@ -36,6 +37,7 @@ import RecordVoiceOverOutlined from '@mui/icons-material/RecordVoiceOverOutlined
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import ShareOutlined from '@mui/icons-material/ShareOutlined';
 import LocalLibraryOutlined from '@mui/icons-material/LocalLibraryOutlined';
+import { useTranslation } from 'react-i18next';
 import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
@@ -112,21 +114,20 @@ function computeProfileStats(historyItems) {
   };
 }
 
-function formatMemberSince(createdAt) {
-  if (!createdAt) return 'Membre depuis récemment';
+function formatMemberSince(createdAt, t, locale = 'fr-FR') {
+  if (!createdAt) return t('profile.memberSinceRecently');
   const parsed = new Date(createdAt);
-  if (Number.isNaN(parsed.getTime())) return 'Membre depuis récemment';
-  const label = parsed.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  return `Membre depuis ${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+  if (Number.isNaN(parsed.getTime())) return t('profile.memberSinceRecently');
+  const label = parsed.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  return t('profile.memberSince', { date: label.charAt(0).toUpperCase() + label.slice(1) });
 }
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   const [user, setUser] = useState(null);
   const [exportLoading, setExportLoading]       = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm]       = useState('');
-  const [deleteLoading, setDeleteLoading]       = useState(false);
   const [gdprRequestSent, setGdprRequestSent]   = useState(false);
   const [gdprLoading, setGdprLoading]           = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -139,13 +140,24 @@ export default function ProfilePage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [stats, setStats] = useState(emptyStats);
-  const [subscriptionLabel, setSubscriptionLabel] = useState('Aucun abonnement actif');
+  const [subscriptionData, setSubscriptionData] = useState(null);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState('');
   const [notifPrefs, setNotifPrefs] = useState(null);
   const [notifSaving, setNotifSaving] = useState(false);
+
+  const subscriptionLabel = useMemo(() => {
+    if (!subscriptionData) return t('profile.noActiveSubscription');
+    const { isActive, cancelAtPeriodEnd, endDateRaw, hasSubscription } = subscriptionData;
+    const endDate = endDateRaw ? new Date(endDateRaw).toLocaleDateString(locale) : '';
+    if (isActive && cancelAtPeriodEnd && endDate) return t('profile.cancelledUntil', { date: endDate });
+    if (isActive && endDate) return t('profile.activeUntil', { date: endDate });
+    if (isActive) return t('profile.activeSubscription');
+    if (hasSubscription) return t('profile.inactiveSubscription');
+    return t('profile.noActiveSubscription');
+  }, [subscriptionData, i18n.language, locale, t]);
 
   useEffect(() => {
     async function loadProfile() {
@@ -198,24 +210,17 @@ export default function ProfilePage() {
           const subscription = payload?.subscription || null;
           setHasActiveSubscription(isActive);
           const cancelAtPeriodEnd = Boolean(subscription?.cancel_at_period_end);
-          const endDate = subscription?.current_period_end
-            ? new Date(subscription.current_period_end).toLocaleDateString('fr-FR')
-            : '';
-          if (isActive && cancelAtPeriodEnd && endDate) {
-            setSubscriptionLabel(`Resilie, acces jusqu au ${endDate}`);
-          } else if (isActive && endDate) {
-            setSubscriptionLabel(`Actif jusqu au ${endDate}`);
-          } else if (isActive) {
-            setSubscriptionLabel('Abonnement actif');
-          } else if (payload?.hasSubscription) {
-            setSubscriptionLabel('Abonnement inactif');
-          } else {
-            setSubscriptionLabel('Aucun abonnement actif');
-          }
+          const endDateRaw = subscription?.current_period_end || null;
+          setSubscriptionData({
+            isActive,
+            cancelAtPeriodEnd,
+            endDateRaw,
+            hasSubscription: Boolean(payload?.hasSubscription),
+          });
         }
       } catch (err) {
         console.error('Failed to load profile:', err);
-        setErrorMsg('Impossible de charger le profil.');
+        setErrorMsg(t('profile.cannotLoad'));
       } finally {
         setLoading(false);
       }
@@ -254,10 +259,10 @@ export default function ProfilePage() {
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error?.message || 'Erreur lors de la sauvegarde.');
+        throw new Error(payload?.error?.message || t('profile.saveError'));
       }
       const payload = await safeJson(response);
-      setSuccessMsg('Profil mis à jour avec succès !');
+      setSuccessMsg(t('profile.saveSuccess'));
       // Update local user state
       setUser((prev) => ({
         ...prev,
@@ -266,7 +271,7 @@ export default function ProfilePage() {
         language: profileForm.language,
       }));
     } catch (err) {
-      setErrorMsg(err.message || 'Erreur lors de la sauvegarde.');
+      setErrorMsg(err.message || t('profile.saveError'));
     } finally {
       setSaving(false);
     }
@@ -274,7 +279,7 @@ export default function ProfilePage() {
 
   const handleSaveAvatar = async () => {
     if (!avatarFile) {
-      setErrorMsg('Sélectionnez une image avant de continuer.');
+      setErrorMsg(t('profile.selectImageFirst'));
       return;
     }
 
@@ -291,7 +296,7 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const payload = await safeJson(response);
-        throw new Error(payload?.error?.message || 'Erreur lors de la mise à jour de la photo.');
+        throw new Error(payload?.error?.message || t('profile.avatarUpdateError'));
       }
 
       const payload = await safeJson(response);
@@ -299,9 +304,9 @@ export default function ProfilePage() {
       setAvatarFile(null);
       setAvatarPreview(payload?.data?.avatar_url || '');
       setAvatarDialogOpen(false);
-      setSuccessMsg('Photo de profil mise à jour.');
+      setSuccessMsg(t('profile.avatarUpdateSuccess'));
     } catch (err) {
-      setErrorMsg(err.message || 'Erreur lors de la mise à jour de la photo.');
+      setErrorMsg(err.message || t('profile.avatarUpdateError'));
     } finally {
       setSaving(false);
     }
@@ -312,12 +317,12 @@ export default function ProfilePage() {
     if (!file) return;
 
     if (!String(file.type || '').startsWith('image/')) {
-      setErrorMsg('Le fichier doit être une image.');
+      setErrorMsg(t('profile.mustBeImage'));
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setErrorMsg('L’image dépasse 5MB.');
+      setErrorMsg(t('profile.imageTooLarge'));
       return;
     }
 
@@ -344,7 +349,7 @@ export default function ProfilePage() {
     }
   };
 
-  const memberSinceLabel = useMemo(() => formatMemberSince(user?.created_at), [user?.created_at]);
+  const memberSinceLabel = useMemo(() => formatMemberSince(user?.created_at, t, locale), [user?.created_at, i18n.language, t, locale]);
 
   const handleShareSuccesses = async () => {
     const name = user?.full_name?.split(' ')[0] || 'Un lecteur Papyri';
@@ -366,9 +371,9 @@ export default function ProfilePage() {
     } else {
       try {
         await navigator.clipboard.writeText(text);
-        setSuccessMsg('Succès copiés dans le presse-papier !');
+        setSuccessMsg(t('profile.copiedToClipboard'));
       } catch (_) {
-        setSuccessMsg('Impossible de partager sur cet appareil.');
+        setSuccessMsg(t('profile.cannotShare'));
       }
     }
   };
@@ -427,17 +432,8 @@ export default function ProfilePage() {
       const url  = URL.createObjectURL(blob);
       const a    = Object.assign(document.createElement('a'), { href: url, download: `mes-donnees-papyri-${new Date().toISOString().split('T')[0]}.json` });
       a.click(); URL.revokeObjectURL(url);
-    } catch (e) { setErrorMsg('Erreur lors de l\'export.'); }
+    } catch (e) { setErrorMsg(t('profile.exportError')); }
     finally { setExportLoading(false); }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (deleteConfirm !== 'SUPPRIMER') return;
-    setDeleteLoading(true);
-    try {
-      await authFetch(`${API_URL}/users/me`, { method: 'DELETE' });
-      await authService.logout();
-    } catch (e) { setErrorMsg('Erreur lors de la suppression.'); setDeleteLoading(false); }
   };
 
   const handleGdprRequest = async () => {
@@ -449,9 +445,9 @@ export default function ProfilePage() {
         body: JSON.stringify({ request_type: 'deletion' }),
       });
       setGdprRequestSent(true);
-      setSuccessMsg('Demande de suppression envoyée. Notre équipe la traitera sous 30 jours conformément au RGPD.');
+      setSuccessMsg(t('profile.gdprRequestSent'));
     } catch (e) {
-      setErrorMsg(e.message?.includes('409') || e.message?.includes('en cours') ? 'Une demande est déjà en cours de traitement.' : 'Erreur lors de la soumission de la demande.');
+      setErrorMsg(e.message?.includes('409') || e.message?.includes('en cours') ? t('profile.gdprAlreadyPending') : t('profile.gdprSubmitError'));
     } finally {
       setGdprLoading(false);
     }
@@ -487,7 +483,7 @@ export default function ProfilePage() {
                 letterSpacing: '-0.033em',
               }}
             >
-              Mon Profil et Succ&egrave;s
+              {t('profile.pageTitle')}
             </Typography>
             <Typography
               sx={{
@@ -495,7 +491,7 @@ export default function ProfilePage() {
                 fontSize: '0.95rem',
               }}
             >
-              G&eacute;rez votre identit&eacute; litt&eacute;raire et c&eacute;l&eacute;brez chaque page tourn&eacute;e.
+              {t('profile.pageSubtitle')}
             </Typography>
           </Box>
           <Button
@@ -514,7 +510,7 @@ export default function ProfilePage() {
               },
             }}
           >
-            Param&egrave;tres
+            {t('common.settings')}
           </Button>
         </Box>
 
@@ -527,9 +523,9 @@ export default function ProfilePage() {
           }}
         >
           {[
-            { label: 'Termines', value: `${stats.completedBooks}` },
-            { label: 'En cours', value: `${stats.inProgressBooks}` },
-            { label: 'Serie', value: `${stats.streakDays}j` },
+            { label: t('profile.statCompleted'), value: `${stats.completedBooks}` },
+            { label: t('profile.statInProgress'), value: `${stats.inProgressBooks}` },
+            { label: t('profile.statStreak'), value: `${stats.streakDays}j` },
           ].map((item) => (
             <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -541,6 +537,54 @@ export default function ProfilePage() {
             </Paper>
           ))}
         </Box>
+
+        <Paper
+          elevation={0}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            p: 1.25,
+            mb: 2.5,
+            borderRadius: '12px',
+            border: `1px solid ${surfaceVariant}`,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
+            {t('common.settings')}
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
+            {[
+              { label: t('common.profile'), icon: SettingsOutlined, active: true, onClick: () => navigate('/profile') },
+              { label: t('common.devices'), icon: DevicesOutlined, onClick: () => navigate('/devices') },
+              { label: t('common.security'), icon: LockOutlined, onClick: () => navigate('/security') },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.label}
+                  onClick={item.onClick}
+                  sx={{
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0.5,
+                    borderRadius: '12px',
+                    py: 1.1,
+                    px: 0.75,
+                    textTransform: 'none',
+                    color: item.active ? primary : textMain,
+                    bgcolor: item.active ? `${primary}12` : surfaceVariant,
+                    '&:hover': { bgcolor: item.active ? `${primary}18` : `${primary}0D` },
+                  }}
+                >
+                  <Icon sx={{ fontSize: 20 }} />
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, lineHeight: 1.1, textAlign: 'center' }}>
+                    {item.label}
+                  </Typography>
+                </Button>
+              );
+            })}
+          </Box>
+        </Paper>
 
         {/* Two-column layout */}
         <Grid container spacing={3}>
@@ -675,7 +719,7 @@ export default function ProfilePage() {
                   }}
                 >
                   <WorkspacePremiumOutlined sx={{ fontSize: 16 }} />
-                  {hasActiveSubscription ? 'Membre Premium' : 'Membre Standard'}
+                  {hasActiveSubscription ? t('profile.premiumMember') : t('profile.standardMember')}
                 </Box>
               </Box>
 
@@ -695,7 +739,7 @@ export default function ProfilePage() {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Box>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: textMain, mb: 0.5 }}>
-                    Nom complet
+                    {t('profile.fullName')}
                   </Typography>
                   <TextField
                     fullWidth
@@ -721,7 +765,7 @@ export default function ProfilePage() {
 
                 <Box>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: textMain, mb: 0.5 }}>
-                    Adresse email
+                    {t('profile.email')}
                   </Typography>
                   <TextField
                     fullWidth
@@ -748,7 +792,7 @@ export default function ProfilePage() {
 
                 <Box>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: textMain, mb: 0.5 }}>
-                    Langue
+                    {t('profile.language')}
                   </Typography>
                   <TextField
                     fullWidth
@@ -801,7 +845,7 @@ export default function ProfilePage() {
                     },
                   }}
                 >
-                  {saving ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
+                  {saving ? t('common.loading') : t('profile.saveChanges')}
                 </Button>
               </Box>
             </Paper>
@@ -825,7 +869,7 @@ export default function ProfilePage() {
                   pb: 1,
                 }}
               >
-                S&eacute;curit&eacute; &amp; Compte
+                {t('profile.securityAccount')}
               </Typography>
 
               {/* Manage subscription */}
@@ -843,7 +887,7 @@ export default function ProfilePage() {
               >
                 <CreditCardOutlined sx={{ fontSize: 20, color: textMuted, mr: 1.5 }} />
                 <Typography sx={{ flex: 1, fontSize: '0.875rem', color: textMain }}>
-                  G&eacute;rer l&apos;abonnement
+                  {t('subscription.manageSubscription')}
                 </Typography>
                 <ChevronRightOutlined sx={{ fontSize: 20, color: textMuted }} />
               </Box>
@@ -855,13 +899,13 @@ export default function ProfilePage() {
                 variant="overline"
                 sx={{ fontWeight: 700, color: textMuted, fontSize: '0.7rem', px: 3, pt: 2, pb: 0.5, display: 'block' }}
               >
-                Notifications
+                  {t('profile.notifications')}
               </Typography>
               {[
-                { key: 'push_enabled',          icon: NotificationsNoneOutlined, label: 'Notifications push' },
-                { key: 'new_content',            icon: null,                       label: 'Nouveaux contenus', indent: true, depends: 'push_enabled' },
-                { key: 'reading_reminders',      icon: null,                       label: 'Rappels de lecture', indent: true, depends: 'push_enabled' },
-                { key: 'subscription_updates',   icon: null,                       label: 'Abonnement & paiements', indent: true, depends: 'push_enabled' },
+                { key: 'push_enabled',          icon: NotificationsNoneOutlined, label: t('profile.pushNotifications') },
+                { key: 'new_content',            icon: null,                       label: t('profile.newContent'), indent: true, depends: 'push_enabled' },
+                { key: 'reading_reminders',      icon: null,                       label: t('profile.readingReminders'), indent: true, depends: 'push_enabled' },
+                { key: 'subscription_updates',   icon: null,                       label: t('profile.subscriptionUpdates'), indent: true, depends: 'push_enabled' },
               ].map(({ key, icon: Icon, label, indent, depends }) => {
                 const disabled = notifSaving || (depends && !notifPrefs?.[depends]);
                 const checked = Boolean(notifPrefs?.[key]);
@@ -899,11 +943,11 @@ export default function ProfilePage() {
 
               {/* RGPD */}
               <Typography variant="overline" sx={{ fontWeight: 700, color: textMuted, fontSize: '0.7rem', px: 3, pt: 2, pb: 0.5, display: 'block' }}>
-                Données &amp; confidentialité
+                {t('profile.dataPrivacy')}
               </Typography>
               <Box sx={{ px: 3, pb: 1 }}>
                 <Typography sx={{ fontSize: '0.75rem', color: textMuted, mb: 1.5, lineHeight: 1.5 }}>
-                  Conformément au RGPD, vous pouvez télécharger toutes vos données personnelles ou supprimer définitivement votre compte.
+                  {t('profile.gdprDesc')}
                 </Typography>
                 <Button
                   fullWidth variant="outlined" size="small"
@@ -911,7 +955,7 @@ export default function ProfilePage() {
                   onClick={handleDataExport}
                   sx={{ mb: 1, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderColor: primary, color: primary, '&:hover': { bgcolor: `${primary}10` } }}
                 >
-                  {exportLoading ? 'Export en cours...' : 'Télécharger mes données'}
+                  {exportLoading ? t('common.loading') : t('profile.downloadData')}
                 </Button>
                 <Button
                   fullWidth variant="outlined" size="small"
@@ -919,14 +963,7 @@ export default function ProfilePage() {
                   onClick={handleGdprRequest}
                   sx={{ mb: 1, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderColor: '#dc2626', color: '#dc2626', '&:hover': { bgcolor: '#fee2e2' } }}
                 >
-                  {gdprLoading ? 'Envoi...' : gdprRequestSent ? 'Demande envoyée ✓' : 'Demander la suppression'}
-                </Button>
-                <Button
-                  fullWidth variant="text" size="small"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 500, fontSize: '0.75rem', color: '#9E9E9E', '&:hover': { color: '#dc2626', bgcolor: '#fee2e2' } }}
-                >
-                  Suppression immédiate (irréversible)
+                  {gdprLoading ? t('common.loading') : gdprRequestSent ? t('profile.gdprRequestSent') : t('profile.deleteAccount')}
                 </Button>
               </Box>
               <Box sx={{ pb: 2 }} />
@@ -938,9 +975,9 @@ export default function ProfilePage() {
             {/* Stats Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
               {[
-                { icon: MenuBookOutlined, value: stats.completedBooks, label: 'LIVRES TERMINÉS', color: primary },
-                { icon: FormatListNumberedOutlined, value: stats.inProgressBooks, label: 'EN COURS', color: secondary },
-                { icon: HeadphonesOutlined, value: `${stats.totalHours}h`, label: 'TEMPS TOTAL', color: tokens.colors.accent },
+                { icon: MenuBookOutlined, value: stats.completedBooks, label: t('profile.statCompletedLabel'), color: primary },
+                { icon: FormatListNumberedOutlined, value: stats.inProgressBooks, label: t('profile.statInProgressLabel'), color: secondary },
+                { icon: HeadphonesOutlined, value: `${stats.totalHours}h`, label: t('profile.statTotalTimeLabel'), color: tokens.colors.accent },
               ].map((stat) => (
                 <Grid size={{ xs: 4, sm: 4 }} key={stat.label}>
                   <Paper
@@ -1202,37 +1239,6 @@ export default function ProfilePage() {
         </Grid>
       </Box>
       </Box>
-
-      {/* Dialog suppression compte RGPD */}
-      <Dialog open={deleteDialogOpen} onClose={() => { setDeleteDialogOpen(false); setDeleteConfirm(''); }} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ color: '#dc2626', fontWeight: 700 }}>Supprimer mon compte</DialogTitle>
-        <DialogContent>
-          <Alert severity="error" sx={{ mb: 2 }}>
-            Cette action est <strong>irréversible</strong>. Toutes vos données (historique, abonnement, profil) seront définitivement supprimées.
-          </Alert>
-          <Typography sx={{ fontSize: '0.85rem', mb: 2, color: textMain }}>
-            Tapez <strong>SUPPRIMER</strong> pour confirmer :
-          </Typography>
-          <TextField
-            fullWidth size="small" value={deleteConfirm}
-            onChange={e => setDeleteConfirm(e.target.value)}
-            placeholder="SUPPRIMER"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setDeleteDialogOpen(false); setDeleteConfirm(''); }} disabled={deleteLoading}>
-            Annuler
-          </Button>
-          <Button
-            onClick={handleDeleteAccount}
-            disabled={deleteConfirm !== 'SUPPRIMER' || deleteLoading}
-            sx={{ color: '#dc2626', fontWeight: 700 }}
-          >
-            {deleteLoading ? 'Suppression...' : 'Supprimer définitivement'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={avatarDialogOpen} onClose={() => setAvatarDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Modifier la photo de profil</DialogTitle>

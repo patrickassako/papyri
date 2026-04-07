@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Button } from '@mui/material';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
@@ -7,13 +7,22 @@ import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
 import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
+import SwitchAccountOutlined from '@mui/icons-material/SwitchAccountOutlined';
 import tokens from '../config/tokens';
 import { useTranslation } from 'react-i18next';
+import { getActiveProfile } from '../config/profileStorage';
 
 export default function MobileBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const [activeProfile, setActiveProfile] = useState(() => getActiveProfile());
+
+  useEffect(() => {
+    const handleProfileChange = (event) => setActiveProfile(event?.detail || null);
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
 
   const navItems = [
     { label: t('mobileNav.home'), icon: DashboardOutlined, route: '/dashboard' },
@@ -35,8 +44,34 @@ export default function MobileBottomNav() {
           right: 12,
           bottom: 76,
           zIndex: 1201,
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 1,
         }}
       >
+        {activeProfile?.id && (
+          <Button
+            variant="contained"
+            startIcon={<SwitchAccountOutlined sx={{ fontSize: 16 }} />}
+            onClick={() => navigate('/profiles/select')}
+            sx={{
+              textTransform: 'none',
+              borderRadius: '999px',
+              px: 1.6,
+              py: 0.85,
+              minHeight: 36,
+              bgcolor: '#fff',
+              color: tokens.colors.onBackground.light,
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.14)',
+              maxWidth: 220,
+              '&:hover': { bgcolor: '#f5f0e7' },
+            }}
+          >
+            {t('sidebar.profile', { name: activeProfile.name })}
+          </Button>
+        )}
         <Button
           variant="contained"
           startIcon={<LanguageOutlined sx={{ fontSize: 16 }} />}

@@ -2,10 +2,12 @@ import React from 'react';
 import { Typography } from '@mui/material';
 import LegalLayout, { LegalSection } from './LegalLayout';
 import tokens from '../../config/tokens';
+import { useTranslation } from 'react-i18next';
 
 export default function MentionsLegalesPage() {
+  const { t } = useTranslation();
   return (
-    <LegalLayout title="Mentions Légales">
+    <LegalLayout title={t('legal.mentionsTitle')}>
       <LegalSection title="Éditeur de la plateforme">
         <Typography sx={{ fontSize: '0.9rem', lineHeight: 2, color: '#374151' }}>
           <strong>Nom de la plateforme :</strong> Papyri<br />

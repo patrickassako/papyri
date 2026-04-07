@@ -7,10 +7,12 @@ import {
   Alert,
   Link
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const ForgotPassword = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -20,8 +22,8 @@ const ForgotPassword = () => {
   // Email validation
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) return 'L\'email est obligatoire.';
-    if (!emailRegex.test(email)) return 'Format d\'email invalide.';
+    if (!email) return t('auth.emailRequired');
+    if (!emailRegex.test(email)) return t('auth.emailInvalid');
     return null;
   };
 
@@ -53,7 +55,7 @@ const ForgotPassword = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error?.message || 'Une erreur est survenue.');
+        setError(data.error?.message || t('common.error'));
         setLoading(false);
         return;
       }
@@ -63,7 +65,7 @@ const ForgotPassword = () => {
       setLoading(false);
     } catch (err) {
       console.error('Forgot password error:', err);
-      setError('Erreur de connexion. Veuillez réessayer.');
+      setError(t('errors.networkError'));
       setLoading(false);
     }
   };
@@ -98,7 +100,7 @@ const ForgotPassword = () => {
             textAlign: 'center'
           }}
         >
-          Récupérer votre mot de passe
+          {t('auth.forgotPasswordTitle')}
         </Typography>
 
         <Typography
@@ -110,7 +112,7 @@ const ForgotPassword = () => {
             textAlign: 'center'
           }}
         >
-          Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+          {t('auth.forgotPasswordDesc')}
         </Typography>
 
         {/* Success Alert */}
@@ -119,7 +121,7 @@ const ForgotPassword = () => {
             severity="success"
             sx={{ marginBottom: '24px' }}
           >
-            Email envoyé ! Vérifiez votre boîte de réception.
+            {t('auth.forgotPasswordSuccess')}
           </Alert>
         )}
 
@@ -149,7 +151,7 @@ const ForgotPassword = () => {
                   marginBottom: '8px'
                 }}
               >
-                Email
+                {t('auth.email')}
               </Typography>
               <TextField
                 id="email"
@@ -160,7 +162,7 @@ const ForgotPassword = () => {
                 onBlur={() => setTouched(true)}
                 error={!!emailError}
                 helperText={emailError}
-                placeholder="votre.email@exemple.com"
+                placeholder={t('auth.emailPlaceholder')}
                 autoComplete="email"
                 autoFocus
                 sx={{
@@ -208,7 +210,7 @@ const ForgotPassword = () => {
                 }
               }}
             >
-              {loading ? 'Envoi en cours...' : 'Envoyer le lien'}
+              {loading ? t('auth.sending') : t('auth.sendResetLink')}
             </Button>
           </>
         )}
@@ -226,7 +228,7 @@ const ForgotPassword = () => {
               }
             }}
           >
-            ← Retour à la connexion
+            {t('auth.backToLogin')}
           </Link>
         </Box>
       </Box>

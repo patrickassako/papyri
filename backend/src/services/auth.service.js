@@ -4,12 +4,110 @@
  */
 
 const { supabase, supabaseAdmin } = require('../config/database');
-const { sendWelcomeEmail } = require('./email.service');
+const crypto = require('crypto');
+const { sendWelcomeEmail, sendEmailVerificationCodeEmail } = require('./email.service');
 
 function makeError(code, message = code) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+const EMAIL_MFA_TTL_MS = 10 * 60 * 1000;
+const EMAIL_MFA_MAX_ATTEMPTS = 5;
+const pendingEmailMfaChallenges = new Map();
+const verifiedEmailActionTokens = new Map();
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+function generateEmailCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function cleanupExpiredEmailMfaChallenges() {
+  const now = Date.now();
+  for (const [challengeId, challenge] of pendingEmailMfaChallenges.entries()) {
+    if (challenge.expiresAt <= now) {
+      pendingEmailMfaChallenges.delete(challengeId);
+    }
+  }
+
+  for (const [token, payload] of verifiedEmailActionTokens.entries()) {
+    if (payload.expiresAt <= now) {
+      verifiedEmailActionTokens.delete(token);
+    }
+  }
+}
+
+async function createEmailMfaChallenge({ user, profile, session }) {
+  cleanupExpiredEmailMfaChallenges();
+
+  for (const [existingId, existing] of pendingEmailMfaChallenges.entries()) {
+    if (existing.userId === user.id) {
+      pendingEmailMfaChallenges.delete(existingId);
+    }
+  }
+
+  const code = generateEmailCode();
+  const challengeId = crypto.randomUUID();
+  pendingEmailMfaChallenges.set(challengeId, {
+    challengeId,
+    userId: user.id,
+    email: user.email,
+    fullName: profile?.full_name || user.email,
+    codeHash: hashCode(code),
+    attempts: 0,
+    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
+    session,
+  });
+
+  await sendEmailVerificationCodeEmail(user.email, profile?.full_name || user.email, code);
+  return challengeId;
+}
+
+async function createEmailActionChallenge({ userId, purpose }) {
+  cleanupExpiredEmailMfaChallenges();
+
+  const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  const user = authUserData?.user || null;
+  if (authUserError || !user?.email) {
+    throw makeError('USER_NOT_FOUND');
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .single();
+
+  for (const [existingId, existing] of pendingEmailMfaChallenges.entries()) {
+    if (existing.userId === userId && existing.purpose === purpose) {
+      pendingEmailMfaChallenges.delete(existingId);
+    }
+  }
+
+  const code = generateEmailCode();
+  const challengeId = crypto.randomUUID();
+  pendingEmailMfaChallenges.set(challengeId, {
+    challengeId,
+    userId,
+    purpose,
+    email: user.email,
+    fullName: profile?.full_name || user.email,
+    codeHash: hashCode(code),
+    attempts: 0,
+    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
+    session: null,
+  });
+
+  await sendEmailVerificationCodeEmail(user.email, profile?.full_name || user.email, code);
+  return {
+    challenge_id: challengeId,
+    challenge_expires_in: Math.floor(EMAIL_MFA_TTL_MS / 1000),
+    email: user.email,
+  };
 }
 
 /**
@@ -99,6 +197,29 @@ async function login(email, password) {
     .eq('id', data.user.id)
     .single();
 
+  const mfaMethod = data.user.user_metadata?.mfa_method || 'none';
+
+  if (mfaMethod === 'email') {
+    const challengeId = await createEmailMfaChallenge({
+      user: data.user,
+      profile,
+      session: data.session,
+    });
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        full_name: profile?.full_name,
+        role: data.user.user_metadata?.role || 'user',
+      },
+      requires_mfa: true,
+      mfa_method: 'email',
+      challenge_id: challengeId,
+      challenge_expires_in: Math.floor(EMAIL_MFA_TTL_MS / 1000),
+    };
+  }
+
   return {
     user: {
       id: data.user.id,
@@ -107,6 +228,112 @@ async function login(email, password) {
       role: data.user.user_metadata?.role || 'user',
     },
     session: data.session,
+  };
+}
+
+async function verifyEmailMfa(challengeId, code) {
+  cleanupExpiredEmailMfaChallenges();
+  const challenge = pendingEmailMfaChallenges.get(challengeId);
+
+  if (!challenge) {
+    throw makeError('MFA_CHALLENGE_INVALID');
+  }
+  if (challenge.expiresAt <= Date.now()) {
+    pendingEmailMfaChallenges.delete(challengeId);
+    throw makeError('MFA_CHALLENGE_EXPIRED');
+  }
+  if (challenge.attempts >= EMAIL_MFA_MAX_ATTEMPTS) {
+    pendingEmailMfaChallenges.delete(challengeId);
+    throw makeError('MFA_TOO_MANY_ATTEMPTS');
+  }
+
+  challenge.attempts += 1;
+  if (hashCode(code) !== challenge.codeHash) {
+    throw makeError('INVALID_MFA_CODE');
+  }
+
+  pendingEmailMfaChallenges.delete(challengeId);
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('id', challenge.userId)
+    .single();
+
+  return {
+    user: {
+      id: challenge.userId,
+      email: challenge.email,
+      full_name: profile?.full_name,
+      role: profile?.role || 'user',
+    },
+    session: challenge.session,
+  };
+}
+
+async function verifyEmailActionChallenge(userId, challengeId, code, purpose) {
+  cleanupExpiredEmailMfaChallenges();
+  const challenge = pendingEmailMfaChallenges.get(challengeId);
+
+  if (!challenge || challenge.userId !== userId || challenge.purpose !== purpose) {
+    throw makeError('MFA_CHALLENGE_INVALID');
+  }
+  if (challenge.expiresAt <= Date.now()) {
+    pendingEmailMfaChallenges.delete(challengeId);
+    throw makeError('MFA_CHALLENGE_EXPIRED');
+  }
+  if (challenge.attempts >= EMAIL_MFA_MAX_ATTEMPTS) {
+    pendingEmailMfaChallenges.delete(challengeId);
+    throw makeError('MFA_TOO_MANY_ATTEMPTS');
+  }
+
+  challenge.attempts += 1;
+  if (hashCode(code) !== challenge.codeHash) {
+    throw makeError('INVALID_MFA_CODE');
+  }
+
+  pendingEmailMfaChallenges.delete(challengeId);
+  const verificationToken = crypto.randomUUID();
+  verifiedEmailActionTokens.set(verificationToken, {
+    userId,
+    purpose,
+    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
+  });
+
+  return {
+    verification_token: verificationToken,
+    expires_in: Math.floor(EMAIL_MFA_TTL_MS / 1000),
+  };
+}
+
+function consumeVerifiedEmailActionToken(userId, token, purpose) {
+  cleanupExpiredEmailMfaChallenges();
+  const payload = verifiedEmailActionTokens.get(token);
+  if (!payload || payload.userId !== userId || payload.purpose !== purpose) {
+    throw makeError('EMAIL_ACTION_VERIFICATION_REQUIRED');
+  }
+  verifiedEmailActionTokens.delete(token);
+  return true;
+}
+
+async function resendEmailMfa(challengeId) {
+  cleanupExpiredEmailMfaChallenges();
+  const challenge = pendingEmailMfaChallenges.get(challengeId);
+  if (!challenge) throw makeError('MFA_CHALLENGE_INVALID');
+  if (challenge.expiresAt <= Date.now()) {
+    pendingEmailMfaChallenges.delete(challengeId);
+    throw makeError('MFA_CHALLENGE_EXPIRED');
+  }
+
+  const code = generateEmailCode();
+  challenge.codeHash = hashCode(code);
+  challenge.attempts = 0;
+  challenge.expiresAt = Date.now() + EMAIL_MFA_TTL_MS;
+  await sendEmailVerificationCodeEmail(challenge.email, challenge.fullName, code);
+
+  return {
+    challenge_id: challenge.challengeId,
+    challenge_expires_in: Math.floor(EMAIL_MFA_TTL_MS / 1000),
   };
 }
 
@@ -243,6 +470,11 @@ async function verifyToken(token) {
 module.exports = {
   register,
   login,
+  verifyEmailMfa,
+  resendEmailMfa,
+  createEmailActionChallenge,
+  verifyEmailActionChallenge,
+  consumeVerifiedEmailActionToken,
   logout,
   refresh: refreshToken,
   refreshToken,

@@ -15,6 +15,7 @@ async function resolveContentAccessContext(req, res, next) {
     const context = await resolveContentAccess({
       userId: req.user.id,
       contentId: req.params.id,
+      profileId: req.headers['x-profile-id'] || null,
     });
 
     req.contentAccessContext = context;
