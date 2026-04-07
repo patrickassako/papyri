@@ -155,11 +155,11 @@ export default function OnboardingPage() {
           <Typography variant="overline" sx={{ color: tokens.colors.primary, fontWeight: 700, letterSpacing: 1.5 }}>
             Abonnement individuel
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.5, my: 1 }}>
-            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent }}>{formatPrice(500)}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.5, my: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent, fontSize: { xs: '2rem', sm: '3rem' }, overflowWrap: 'anywhere' }}>{formatPrice(500)}</Typography>
             <Typography variant="body1" color="text.secondary">/mois</Typography>
           </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, overflowWrap: 'anywhere' }}>
             ou <strong>{formatPrice(5000)}/an</strong> — 2 mois offerts
           </Typography>
           <Typography variant="caption" color="text.secondary">

@@ -152,7 +152,7 @@ function ContentCard({ book, onClick }) {
       onClick={onClick}
       sx={{
         flexShrink: 0,
-        width: 130,
+        width: { xs: '100%', sm: 130 },
         borderRadius: '10px',
         overflow: 'hidden',
         border: `1px solid ${tokens.colors.surfaces.light.variant}`,
@@ -162,7 +162,16 @@ function ContentCard({ book, onClick }) {
         '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 6px 20px rgba(0,0,0,0.09)' },
       }}
     >
-      <Box sx={{ position: 'relative', width: 130, height: 174, bgcolor: tokens.colors.surfaces.light.variant, overflow: 'hidden' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          width: '100%',
+          height: { xs: 'auto', sm: 174 },
+          aspectRatio: { xs: '3 / 4', sm: 'auto' },
+          bgcolor: tokens.colors.surfaces.light.variant,
+          overflow: 'hidden',
+        }}
+      >
         <Box
           component="img"
           src={book.cover_url || book.cover_image_url || ''}
@@ -204,20 +213,20 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
   const navigate = onNavigate;
   return (
     <Box sx={{ mt: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, color: tokens.colors.onBackground.light }}>
           {title}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton size="small" aria-label="Faire défiler à gauche" onClick={() => scroll(scrollRef, -1)} sx={{ color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+          <IconButton size="small" aria-label="Faire défiler à gauche" onClick={() => scroll(scrollRef, -1)} sx={{ display: { xs: 'none', sm: 'inline-flex' }, color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
             <ChevronLeftIcon fontSize="small" />
           </IconButton>
-          <IconButton size="small" aria-label="Faire défiler à droite" onClick={() => scroll(scrollRef, 1)} sx={{ color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
+          <IconButton size="small" aria-label="Faire défiler à droite" onClick={() => scroll(scrollRef, 1)} sx={{ display: { xs: 'none', sm: 'inline-flex' }, color: '#9c7e49', '&:hover': { color: tokens.colors.primary } }}>
             <ChevronRightIcon fontSize="small" />
           </IconButton>
           <Button
             onClick={() => navigate(viewAllPath)}
-            sx={{ textTransform: 'none', color: tokens.colors.primary, fontWeight: 600, fontSize: '0.8rem', minWidth: 0, ml: 0.5, '&:hover': { bgcolor: `${tokens.colors.primary}0D` } }}
+            sx={{ textTransform: 'none', color: tokens.colors.primary, fontWeight: 600, fontSize: '0.8rem', minWidth: 0, ml: { xs: 0, sm: 0.5 }, '&:hover': { bgcolor: `${tokens.colors.primary}0D` } }}
           >
             Voir tout
           </Button>
@@ -226,19 +235,21 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
       <Box
         ref={scrollRef}
         sx={{
-          display: 'flex',
+          display: { xs: 'grid', sm: 'flex' },
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'none' },
           flexWrap: 'nowrap',
-          gap: 1.5,
-          overflowX: 'auto',
+          gap: { xs: 1, sm: 1.5 },
+          overflowX: { xs: 'hidden', sm: 'auto' },
           pb: 1,
+          minWidth: 0,
           scrollbarWidth: 'none',
           '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
         {loading
           ? Array.from({ length: 5 }).map((_, i) => (
-            <Box key={i} sx={{ flexShrink: 0, width: 130 }}>
-              <Skeleton variant="rectangular" width={130} height={174} sx={{ borderRadius: '10px' }} />
+            <Box key={i} sx={{ flexShrink: 0, width: { xs: '100%', sm: 130 } }}>
+              <Skeleton variant="rectangular" width="100%" height={174} sx={{ borderRadius: '10px' }} />
               <Skeleton width="80%" height={14} sx={{ mt: 0.75 }} />
               <Skeleton width="55%" height={12} sx={{ mt: 0.25 }} />
             </Box>
@@ -379,10 +390,10 @@ export default function DashboardPage() {
   const weeklyProgress = Math.min(100, Math.round((stats.weekly_hours_done / Math.max(stats.weekly_hours_target, 1)) * 100));
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light, overflowX: 'hidden' }}>
       <UserSpaceSidebar user={user} activeKey="overview" subscriptionLabel={subscriptionLabel} />
 
-      <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 4 }, overflow: 'auto', minWidth: 0 }}>
+      <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 4 }, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
         <Box sx={{ background: `linear-gradient(135deg, ${tokens.colors.primary} 0%, ${tokens.colors.primaryDark} 100%)`, borderRadius: '16px', p: { xs: 2.2, md: 4 }, mb: 3, position: 'relative', overflow: 'hidden' }}>
           <Box sx={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.08)' }} />
           <Box sx={{ position: 'absolute', bottom: -20, right: 80, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.05)' }} />
@@ -421,7 +432,7 @@ export default function DashboardPage() {
                 <Typography variant="body1" sx={{ fontWeight: 700, color: tokens.colors.accent, lineHeight: 1.2 }}>
                   Passez à l'abonnement pour accéder à tout le catalogue
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
                   Ebooks + Audio · {formatPrice(500)}/mois ou {formatPrice(5000)}/an · Annulez à tout moment
                 </Typography>
               </Box>

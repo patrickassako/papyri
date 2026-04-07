@@ -627,11 +627,11 @@ export default function LandingPage() {
                   Rejoignez des milliers de lecteurs passionnés.
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5, mb: 4, flexWrap: 'wrap' }}>
-                  <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>{formatPrice(500)} / mois</Typography>
+                  <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(500)} / mois</Typography>
                   </Box>
-                  <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: '1.05rem' }}>{formatPrice(5000)} / an</Typography>
+                  <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(5000)} / an</Typography>
                   </Box>
                 </Box>
                 <Button variant="contained" size="large"

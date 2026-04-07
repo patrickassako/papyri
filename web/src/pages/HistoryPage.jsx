@@ -184,10 +184,11 @@ function HistoryCard({ item, onResume }) {
     <Paper
       elevation={0}
       sx={{
-        p: 2,
+        p: { xs: 1.5, sm: 2 },
         borderRadius: '16px',
         display: 'flex',
-        gap: 2,
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: 1.5, sm: 2 },
         border: `1px solid ${tokens.colors.surfaces.light.variant}`,
         transition: 'box-shadow 0.2s ease, transform 0.15s ease',
         '&:hover': {
@@ -197,14 +198,18 @@ function HistoryCard({ item, onResume }) {
         '&:hover .history-action-btn': {
           opacity: 1,
         },
-        alignItems: 'center',
+        alignItems: { xs: 'stretch', sm: 'center' },
+        minWidth: 0,
+        overflowX: 'hidden',
       }}
     >
       {/* Cover image */}
       <Box
         sx={{
-          width: 80,
-          height: 112,
+          width: { xs: '100%', sm: 80 },
+          height: { xs: 'auto', sm: 112 },
+          aspectRatio: { xs: '3 / 4', sm: 'auto' },
+          maxWidth: { xs: 128, sm: 'none' },
           borderRadius: '8px',
           overflow: 'hidden',
           position: 'relative',
@@ -404,6 +409,7 @@ function HistoryCard({ item, onResume }) {
         sx={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: { xs: 'stretch', sm: 'flex-start' },
           flexShrink: 0,
           opacity: { xs: 1, md: 0 },
           transition: 'opacity 0.2s ease',
@@ -424,6 +430,7 @@ function HistoryCard({ item, onResume }) {
             px: 2,
             py: 0.8,
             whiteSpace: 'nowrap',
+            width: { xs: '100%', sm: 'auto' },
             '&:hover': {
               bgcolor: actionBg === tokens.colors.primary
                 ? tokens.colors.primaryDark
@@ -607,12 +614,12 @@ export default function HistoryPage() {
   ];
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light, display: 'flex' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: tokens.colors.backgrounds.light, display: 'flex', overflowX: 'hidden' }}>
       <UserSpaceSidebar user={user} activeKey="stats" />
 
-      <Box sx={{ flex: 1 }}>
+      <Box sx={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
       {/* Main content */}
-      <Box sx={{ maxWidth: 960, mx: 'auto', px: { xs: 2, md: 4 }, py: 4 }}>
+      <Box sx={{ maxWidth: 960, mx: 'auto', px: { xs: 1.5, sm: 2, md: 4 }, py: { xs: 2, md: 4 }, minWidth: 0, overflowX: 'hidden' }}>
         {/* Page heading area */}
         <Box
           sx={{
@@ -675,7 +682,7 @@ export default function HistoryPage() {
 
         {/* Stats banner */}
         {(stats || statsLoading) && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mb: 4 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }, gap: { xs: 1.2, sm: 2 }, mb: 4 }}>
             {[
               {
                 icon: <MenuBookOutlined sx={{ fontSize: 22, color: tokens.colors.primary }} />,
@@ -706,24 +713,25 @@ export default function HistoryPage() {
                 key={card.label}
                 elevation={0}
                 sx={{
-                  p: 2,
+                  p: { xs: 1.4, sm: 2 },
                   borderRadius: '16px',
                   border: `1px solid ${tokens.colors.surfaces.light.variant}`,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 0.5,
+                  minWidth: 0,
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                   {card.icon}
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49', fontWeight: 600 }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49', fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>
                     {card.label}
                   </Typography>
                 </Box>
-                <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
+                <Typography sx={{ fontSize: { xs: '1.2rem', sm: '1.6rem' }, fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1, minWidth: 0 }}>
                   {card.value}
                 </Typography>
-                <Typography sx={{ fontSize: '0.72rem', color: '#9c7e49' }}>
+                <Typography sx={{ fontSize: '0.72rem', color: '#9c7e49', minWidth: 0, overflowWrap: 'anywhere' }}>
                   {card.sub}
                 </Typography>
               </Paper>
@@ -803,6 +811,7 @@ export default function HistoryPage() {
               borderRadius: '12px',
               p: 0.5,
               gap: 0.5,
+              flexWrap: 'wrap',
             }}
           >
             {typeFilters.map((tf) => (
@@ -842,7 +851,7 @@ export default function HistoryPage() {
           />
 
           {/* Status chips */}
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {statusFilters.map((sf) => (
               <Button
                 key={sf.key}
@@ -855,7 +864,7 @@ export default function HistoryPage() {
                   fontWeight: 600,
                   fontSize: '0.78rem',
                   borderRadius: '20px',
-                  px: 2,
+                  px: { xs: 1.5, sm: 2 },
                   py: 0.5,
                   borderColor:
                     statusFilter === sf.key
@@ -892,6 +901,7 @@ export default function HistoryPage() {
               ml: { md: 'auto' },
               minWidth: { xs: '100%', md: 220 },
               maxWidth: { md: 280 },
+              width: { xs: '100%', md: 'auto' },
             }}
           >
             <SearchIcon sx={{ color: '#9c7e49', fontSize: 20, mr: 1 }} />

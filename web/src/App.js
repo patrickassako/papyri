@@ -25,6 +25,7 @@ const AudiobookPlayerPage = lazy(() => import('./pages/AudiobookPlayerPage'));
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const MyListPage = lazy(() => import('./pages/MyListPage'));
+const LibraryCatalogPage = lazy(() => import('./pages/LibraryCatalogPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const DevicesPage = lazy(() => import('./pages/DevicesPage'));
@@ -227,6 +228,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MyListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/library-catalog"
+              element={
+                <ProtectedRoute>
+                  <LibraryCatalogPage />
                 </ProtectedRoute>
               }
             />

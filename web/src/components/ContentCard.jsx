@@ -159,8 +159,17 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
                   size="small"
                   sx={{
                     fontWeight: 700,
+                    height: 'auto',
+                    maxWidth: '100%',
                     bgcolor: hasDiscount ? '#fff8e1' : undefined,
                     color: hasDiscount ? '#b5651d' : undefined,
+                    '& .MuiChip-label': {
+                      display: 'block',
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                      paddingTop: '4px',
+                      paddingBottom: '4px',
+                    },
                   }}
                 />
                 {hasDiscount && (

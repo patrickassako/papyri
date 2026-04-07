@@ -740,7 +740,7 @@ export default function ContentDetailPage() {
                   {isPaidBook && basePriceCents > 0 ? (() => {
                     const p = formatDisplayedPrice(basePriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}>
                         Prix: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}. Avec un abonnement actif, vous bénéficiez de
                         {' '}<strong>{defaultDiscountPercent}%</strong> de réduction.
                       </Typography>
@@ -770,7 +770,7 @@ export default function ContentDetailPage() {
                     return (
                       <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem' }}>
+                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
                           {isSubscriptionBook ? 'Ou achetez-le' : 'Prix abonné'}:{' '}
                           <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
                           {'  '}
@@ -784,7 +784,7 @@ export default function ContentDetailPage() {
                   })() : isPaidBook && basePriceCents > 0 && discountPercent === 0 ? (() => {
                     const pBase = formatDisplayedPrice(basePriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem' }}>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
                         Prix: <strong>{pBase.local}</strong>{pBase.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pBase.eur})</span> : ''}
                       </Typography>
                     );
@@ -801,7 +801,7 @@ export default function ContentDetailPage() {
                   {isPaidBook && basePriceCents > 0 ? (() => {
                     const p = formatDisplayedPrice(basePriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}>
                         Achat sans réduction: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}.
                       </Typography>
                     );

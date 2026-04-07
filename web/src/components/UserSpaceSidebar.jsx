@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Avatar, Button, IconButton } from '@mui/material';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined';
+import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined';
 import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
@@ -19,6 +20,7 @@ import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 const navItems = [
   { label: 'Vue d\'ensemble', icon: DashboardOutlined, key: 'overview', route: '/dashboard' },
   { label: 'Ma bibliothèque', icon: AutoStoriesOutlined, key: 'library', route: '/my-list' },
+  { label: 'Catalogue', icon: MenuBookOutlined, key: 'catalog', route: '/library-catalog' },
   { label: 'Statistiques', icon: AnalyticsOutlined, key: 'stats', route: '/history' },
   { label: 'Préférences', icon: SettingsOutlined, key: 'preferences', route: '/profile' },
   { label: 'Abonnement', icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
@@ -174,6 +176,27 @@ export default function UserSpaceSidebar({
             </Typography>
           </Box>
         </Box>
+
+        <Button
+          onClick={() => navigate('/')}
+          fullWidth
+          sx={{
+            justifyContent: 'flex-start',
+            borderRadius: '12px',
+            px: 2,
+            py: 1.25,
+            textTransform: 'none',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            color: tokens.colors.primary,
+            bgcolor: `${tokens.colors.primary}14`,
+            mb: 1,
+            '&:hover': { bgcolor: `${tokens.colors.primary}22` },
+            gap: 1,
+          }}
+        >
+          Visiter le site
+        </Button>
 
         <Button
           onClick={handleLogout}

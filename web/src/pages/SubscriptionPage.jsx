@@ -393,9 +393,9 @@ export default function SubscriptionPage() {
                   </Stack>
                 </Box>
               </Stack>
-              <Box sx={{ minWidth: { md: 170 }, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 } }}>
+              <Box sx={{ minWidth: { xs: 0, md: 170 }, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 }, width: { xs: '100%', md: 'auto' } }}>
                 <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>PROCHAIN PAIEMENT</Typography>
-                <Typography sx={{ fontSize: '2.1rem', color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1 }}>
+                <Typography sx={{ fontSize: { xs: '1.65rem', md: '2.1rem' }, color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1, overflowWrap: 'anywhere' }}>
                   {subscription ? formatDirectMoney(subscription.amount, subscription.currency || 'USD') : '-'}
                 </Typography>
                 <Typography sx={{ color: '#b5770c', fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }} onClick={() => navigate('/pricing')}>

@@ -223,27 +223,27 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
         />
       )}
 
-      <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-        <Typography sx={{ fontSize: '2.4rem', lineHeight: 1, fontWeight: 900 }}>
+      <Box sx={{ mt: isFamily ? 1.6 : 2.1, display: 'flex', alignItems: 'baseline', gap: 0.5, flexWrap: 'wrap' }}>
+        <Typography sx={{ fontSize: { xs: '2rem', sm: '2.4rem' }, lineHeight: 1, fontWeight: 900, overflowWrap: 'anywhere' }}>
           {formatDirectMoney(computedPriceCents, displayCurrency)}
         </Typography>
         <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>/ {plan.durationDays} jours</Typography>
       </Box>
 
       {isLocalized && (
-        <Typography sx={{ mt: 0.4, fontSize: '0.78rem', color: '#9a8c7f' }}>
+        <Typography sx={{ mt: 0.4, fontSize: '0.78rem', color: '#9a8c7f', overflowWrap: 'anywhere' }}>
           ≈ {formatDirectMoney(Number(plan.basePriceCents || 0) + extraMembers * Number(plan.extraUserPriceCents || 0), plan.currency || 'EUR')}
         </Typography>
       )}
 
       {isFamily && extraMembers > 0 && (
-        <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d' }}>
+        <Typography sx={{ mt: 0.6, fontSize: '0.8rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
           {formatDirectMoney(basePriceCents, displayCurrency)} base · +{formatDirectMoney(extraUserPriceCents, displayCurrency)} × {extraMembers}
         </Typography>
       )}
 
       {plan.monthlyEquivalentCents && !isFamily ? (
-        <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d' }}>
+        <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
           Soit {isLocalized
             ? formatDirectMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))), displayCurrency)
             : formatLocalFromEUR(plan.monthlyEquivalentCents)} / mois

@@ -8,6 +8,7 @@ import {
   Paper,
   LinearProgress,
   Grid,
+  Button,
 } from '@mui/material';
 import FavoriteOutlined from '@mui/icons-material/FavoriteOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
@@ -106,7 +107,6 @@ export default function MyListPage() {
   const [subscriptionLabel, setSubscriptionLabel] = useState('Chargement de l abonnement...');
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
-  const [catalogItems, setCatalogItems] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
   const [activeFilter, setActiveFilter] = useState('favoris');
   const [searchQuery, setSearchQuery] = useState('');
@@ -214,23 +214,6 @@ export default function MyListPage() {
           }
         }
 
-        const catalogRes = await authFetch(`${API_URL}/api/contents?page=1&limit=12&sort=newest`);
-        if (catalogRes.ok) {
-          const payload = await safeJson(catalogRes);
-          const rawItems = payload?.data?.contents || payload?.data || [];
-          if (alive && Array.isArray(rawItems)) {
-            const mappedCatalog = rawItems.map((item) => ({
-              id: item.id,
-              content_id: item.id,
-              title: item.title || 'Titre inconnu',
-              author: item.author || 'Auteur inconnu',
-              cover_url: item.cover_url || null,
-              content_type: item.content_type || null,
-              format: item.format || null,
-            }));
-            setCatalogItems(mappedCatalog);
-          }
-        }
       } catch (err) {
         console.error('Failed to load My List data:', err);
       }
@@ -337,14 +320,14 @@ export default function MyListPage() {
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: bgLight, display: 'flex' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: bgLight, display: 'flex', overflowX: 'hidden' }}>
       <UserSpaceSidebar user={user} activeKey="library" subscriptionLabel={subscriptionLabel} />
 
-      <Box sx={{ flex: 1 }}>
-        <Box sx={{ display: 'flex', maxWidth: 1440, mx: 'auto', px: { xs: 1.25, sm: 2, md: 3 }, py: { xs: 1.5, md: 3 }, gap: 3 }}>
+      <Box sx={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
+        <Box sx={{ display: 'flex', maxWidth: 1440, mx: 'auto', px: { xs: 1.25, sm: 2, md: 3 }, py: { xs: 1.5, md: 3 }, gap: { xs: 0, lg: 3 }, overflowX: 'hidden' }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 1, gap: 1 }}>
               <Typography
                 variant="h1"
                 sx={{
@@ -358,7 +341,22 @@ export default function MyListPage() {
               >
                 Ma Liste
               </Typography>
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                <Button
+                  onClick={() => navigate('/library-catalog')}
+                  sx={{
+                    display: { xs: 'none', sm: 'inline-flex' },
+                    textTransform: 'none',
+                    borderRadius: '10px',
+                    px: 1.4,
+                    color: primary,
+                    bgcolor: `${primary}14`,
+                    fontWeight: 700,
+                    '&:hover': { bgcolor: `${primary}22` },
+                  }}
+                >
+                  Catalogue
+                </Button>
                 <IconButton onClick={() => setViewMode('grid')} sx={{ color: viewMode === 'grid' ? primary : textMuted, bgcolor: viewMode === 'grid' ? `${primary}1A` : 'transparent', borderRadius: '10px' }}>
                   <GridViewOutlined />
                 </IconButton>
@@ -370,7 +368,7 @@ export default function MyListPage() {
             <Typography sx={{ fontSize: '1rem', color: textMuted }}>Gérez votre bibliothèque numérique personnelle</Typography>
           </Box>
 
-          <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.2, mb: 2.5 }}>
+          <Box sx={{ display: { xs: 'grid', lg: 'none' }, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 1.2, mb: 2.5 }}>
             <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.66rem', color: textMuted, textTransform: 'uppercase', letterSpacing: 0.45, fontWeight: 700 }}>
                 Aujourd hui
@@ -397,7 +395,7 @@ export default function MyListPage() {
             </Paper>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1.5, mb: 3, alignItems: 'stretch' }}>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 3, alignItems: 'stretch', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
             <Box sx={{ flex: 1, bgcolor: surfaceVariant, borderRadius: '12px', height: 48, display: 'flex', alignItems: 'center', px: 2 }}>
               <SearchIcon sx={{ color: textMuted, mr: 1.5 }} />
               <InputBase
@@ -442,7 +440,7 @@ export default function MyListPage() {
           </Box>
 
           <Box sx={{ mb: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 2, gap: 1 }}>
               <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>Reprendre la lecture</Typography>
               <Box onClick={() => navigate('/history')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', color: primary, '&:hover': { textDecoration: 'underline' } }}>
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Tout voir</Typography>
@@ -499,7 +497,7 @@ export default function MyListPage() {
           </Box>
 
           <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 2, gap: 1 }}>
               <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>
                 {activeFilter === 'termines' ? 'Terminés' : activeFilter === 'en_cours' ? 'En cours' : 'Mes Favoris'}
               </Typography>
@@ -540,58 +538,6 @@ export default function MyListPage() {
             </Grid>
           </Box>
 
-          <Box sx={{ mt: 5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>
-                Catalogue complet
-              </Typography>
-              <Box
-                onClick={() => navigate('/catalogue')}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  cursor: 'pointer',
-                  color: primary,
-                  '&:hover': { textDecoration: 'underline' },
-                }}
-              >
-                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Voir tout</Typography>
-                <ArrowForwardOutlined sx={{ fontSize: 16 }} />
-              </Box>
-            </Box>
-
-            <Grid container spacing={{ xs: 1.5, md: 2 }}>
-              {catalogItems.map((book) => (
-                <Grid size={{ xs: 6, sm: 4, md: 3 }} key={`catalog-${book.id}`}>
-                  <Box
-                    sx={{
-                      cursor: 'pointer',
-                      transition: 'all 0.25s ease',
-                      '&:hover': { transform: 'translateY(-4px)' },
-                    }}
-                    onClick={() => navigate(`/catalogue/${book.content_id || book.id}`)}
-                  >
-                    <Box sx={{ position: 'relative', aspectRatio: '2/3', borderRadius: '12px', overflow: 'hidden', mb: 1 }}>
-                      {book.cover_url ? (
-                        <Box component="img" src={book.cover_url} alt={book.title} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <Box sx={{ width: '100%', height: '100%', bgcolor: surfaceVariant, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <MenuBookOutlined sx={{ fontSize: 48, color: textMuted }} />
-                        </Box>
-                      )}
-                    </Box>
-                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: textMain, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {book.title}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.8rem', color: textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {book.author}
-                    </Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
         </Box>
 
         <Box sx={{ width: 280, flexShrink: 0, display: { xs: 'none', lg: 'block' } }}>
