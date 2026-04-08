@@ -841,6 +841,28 @@ router.get('/api/reading/:content_id/chapters', verifyJWT, async (req, res, next
           format: row.chapter_format || null,
         }));
       }
+
+      if (chapters.length === 0) {
+        const { data: legacyChapters, error: legacyError } = await supabaseAdmin
+          .from('audio_chapters')
+          .select('id, title, position, file_key, duration_seconds')
+          .eq('content_id', content.id)
+          .order('position', { ascending: true });
+
+        if (!legacyError && Array.isArray(legacyChapters) && legacyChapters.length > 0) {
+          chapters = legacyChapters.map((row) => ({
+            id: row.id,
+            index: Number(row.position || 0),
+            title: row.title || `Chapitre ${row.position || ''}`.trim(),
+            start_seconds: null,
+            end_seconds: null,
+            duration_seconds: row.duration_seconds == null ? null : Number(row.duration_seconds),
+            content_id: content.id,
+            file_key: row.file_key || null,
+            format: 'mp3',
+          }));
+        }
+      }
     }
 
     // Priority #2: metadata fallback
@@ -966,6 +988,24 @@ router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, 
         .maybeSingle();
       if (fallbackResult.error) throw fallbackResult.error;
       chapter = fallbackResult.data || null;
+    }
+
+    if (!chapter) {
+      const legacyResult = await supabaseAdmin
+        .from('audio_chapters')
+        .select('id, content_id, file_key, duration_seconds')
+        .eq('id', chapterId)
+        .eq('content_id', contentId)
+        .maybeSingle();
+      if (legacyResult.error) throw legacyResult.error;
+      if (legacyResult.data) {
+        chapter = {
+          id: legacyResult.data.id,
+          parent_content_id: legacyResult.data.content_id,
+          chapter_file_key: legacyResult.data.file_key,
+          chapter_format: 'mp3',
+        };
+      }
     }
 
     if (!chapter) {
