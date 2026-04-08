@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { supabase } = require('../config/database');
 const { verifyJWT } = require('../middleware/auth');
+const familyProfilesService = require('../services/family-profiles.service');
 
 /**
  * Build category-based recommendations for a user.
@@ -9,13 +10,21 @@ const { verifyJWT } = require('../middleware/auth');
  * fetches other content in those categories (excluding already read).
  * Falls back to newest content if no history.
  */
-async function buildRecommendations(userId, limit = 12) {
+function applyProfileScope(query, profileId) {
+  return profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
+}
+
+async function buildRecommendations(userId, profileId = null, limit = 12) {
   // Get content IDs the user has already interacted with
-  const { data: history } = await supabase
+  let historyQuery = supabase
     .from('reading_history')
     .select('content_id')
     .eq('user_id', userId)
     .limit(100);
+
+  historyQuery = applyProfileScope(historyQuery, profileId);
+
+  const { data: history } = await historyQuery;
 
   const readContentIds = (history || []).map((h) => h.content_id).filter(Boolean);
 
@@ -87,24 +96,30 @@ async function buildRecommendations(userId, limit = 12) {
 router.get('/home', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const profileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
+
+    let continueReadingQuery = supabase
+      .from('reading_history')
+      .select(`
+        content_id,
+        progress_percent,
+        last_read_at,
+        contents:content_id (
+          id, title, author, author_name, cover_url, cover_image_url, content_type, language
+        )
+      `)
+      .eq('user_id', userId)
+      .gt('progress_percent', 0)
+      .lt('progress_percent', 100)
+      .order('last_read_at', { ascending: false })
+      .limit(5);
+
+    continueReadingQuery = applyProfileScope(continueReadingQuery, profileId);
 
     const [continueResult, newReleasesResult, popularResult, recommendedResult] = await Promise.allSettled([
       // Continue Reading
-      supabase
-        .from('reading_history')
-        .select(`
-          content_id,
-          progress_percent,
-          last_read_at,
-          contents:content_id (
-            id, title, author, author_name, cover_url, cover_image_url, content_type, language
-          )
-        `)
-        .eq('user_id', userId)
-        .gt('progress_percent', 0)
-        .lt('progress_percent', 100)
-        .order('last_read_at', { ascending: false })
-        .limit(5),
+      continueReadingQuery,
 
       // New Releases
       supabase
@@ -121,7 +136,7 @@ router.get('/home', verifyJWT, async (req, res, next) => {
         .limit(500),
 
       // Recommended (category-based)
-      buildRecommendations(userId, 12),
+      buildRecommendations(userId, profileId, 12),
     ]);
 
     // Process continue reading
@@ -200,7 +215,9 @@ router.get('/api/recommendations', verifyJWT, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const limit = Math.min(Number(req.query.limit) || 12, 24);
-    const recommended = await buildRecommendations(userId, limit);
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const profileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
+    const recommended = await buildRecommendations(userId, profileId, limit);
     res.status(200).json({ success: true, data: recommended });
   } catch (error) {
     console.error('Error fetching recommendations:', error);

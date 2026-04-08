@@ -30,7 +30,10 @@ export default function MobileBottomNav() {
     { label: t('mobileNav.stats'), icon: AnalyticsOutlined, route: '/history' },
     { label: t('mobileNav.subscription'), icon: PaymentOutlined, route: '/subscription' },
     { label: t('mobileNav.settings'), icon: SettingsOutlined, route: '/profile', matchRoutes: ['/profile', '/devices', '/security'] },
-  ];
+  ].filter((item) => {
+    if (!activeProfile?.is_kid) return true;
+    return !['/subscription', '/profile'].includes(item.route);
+  });
 
   return (
     <>

@@ -208,11 +208,12 @@ async function updateProfile(userId, profileId, payload) {
   return sanitizeProfile(data);
 }
 
-async function deleteProfile(userId, profileId) {
+async function deleteProfile(userId, profileId, options = {}) {
   const { profile } = await getProfileForOwner(userId, profileId);
   if (profile.is_owner_profile) {
     throw new Error('OWNER_PROFILE_CANNOT_BE_DELETED');
   }
+  authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
 
   const { data, error } = await supabaseAdmin
     .from('family_profiles')

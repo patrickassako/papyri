@@ -538,7 +538,7 @@ async function verifyPayment(req, res) {
     // Find subscription by reference
     const { data: payment, error: paymentError } = await supabaseAdmin
       .from('payments')
-      .select('id, subscription_id')
+      .select('id, subscription_id, status, metadata')
       .eq('provider_payment_id', reference)
       .single();
 
@@ -682,7 +682,7 @@ async function verifyStripeSession(req, res) {
     // Find payment record
     const { data: payment } = await supabaseAdmin
       .from('payments')
-      .select('id, subscription_id, status')
+      .select('id, subscription_id, status, metadata')
       .eq('provider_payment_id', sessionId)
       .maybeSingle();
 
@@ -923,7 +923,13 @@ async function schedulePlanChange(req, res) {
       });
     }
 
-    const nextUsersLimit = Number(usersLimit || subscription.users_limit || targetPlan.includedUsers || 1);
+    const nextUsersLimit = Number(
+      usersLimit
+      || subscription.profiles_limit
+      || subscription.users_limit
+      || targetPlan.includedUsers
+      || 1
+    );
     if (!Number.isInteger(nextUsersLimit) || nextUsersLimit < Number(targetPlan.includedUsers || 1)) {
       return res.status(400).json({
         success: false,
@@ -946,6 +952,7 @@ async function schedulePlanChange(req, res) {
         plan_id: targetPlan.id,
         plan_slug: targetPlan.slug,
         users_limit: nextUsersLimit,
+        profiles_limit: nextUsersLimit,
         requested_at: new Date().toISOString(),
       },
     };
@@ -1414,7 +1421,9 @@ async function updateUsersLimit(req, res) {
     const minUsers = Number(livePlan?.includedUsers || snapshot.includedUsers || 1);
 
     // Security: increasing seats must go through buy-extra-seat (paid flow)
-    if (nextUsersLimit > Number(subscription.users_limit || 1)) {
+    const currentUsersLimit = Number(subscription.profiles_limit || subscription.users_limit || 1);
+
+    if (nextUsersLimit > currentUsersLimit) {
       return res.status(403).json({
         success: false,
         error: 'USE_BUY_EXTRA_SEAT',
@@ -1456,6 +1465,7 @@ async function updateUsersLimit(req, res) {
       .from('subscriptions')
       .update({
         users_limit: nextUsersLimit,
+        profiles_limit: nextUsersLimit,
         amount: subscriptionsService.toMajorAmount(amountCents),
         updated_at: new Date().toISOString(),
       })
@@ -1507,7 +1517,7 @@ async function buyExtraSeat(req, res) {
       return res.status(400).json({ success: false, error: 'NO_EXTRA_SEAT_PRICING', message: 'Your plan does not support extra seats.' });
     }
 
-    const targetUsersLimit = Number(subscription.users_limit || 1) + 1;
+    const targetUsersLimit = Number(subscription.profiles_limit || subscription.users_limit || 1) + 1;
     if (targetUsersLimit > MAX_FAMILY_SEATS) {
       return res.status(400).json({
         success: false,

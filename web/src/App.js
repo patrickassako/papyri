@@ -10,6 +10,7 @@ import MiniPlayer from './components/MiniPlayer';
 import * as authService from './services/auth.service';
 import * as familyService from './services/family.service';
 import CookieConsent from './components/CookieConsent';
+import { getActiveProfile, getActiveProfileId } from './config/profileStorage';
 
 const Register = lazy(() => import('./pages/Register'));
 const Login = lazy(() => import('./pages/Login'));
@@ -123,7 +124,7 @@ function useAuth() {
   return { loading, user };
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, allowKid = true }) {
   const { loading, user } = useAuth();
   const location = useLocation();
   const [profileCheck, setProfileCheck] = useState({ loading: true, redirect: false });
@@ -132,6 +133,11 @@ function ProtectedRoute({ children }) {
     let active = true;
 
     if (!user || user?.role === 'admin' || user?.role === 'publisher') {
+      setProfileCheck({ loading: false, redirect: false });
+      return undefined;
+    }
+
+    if (location.pathname !== '/profiles/select' && getActiveProfileId()) {
       setProfileCheck({ loading: false, redirect: false });
       return undefined;
     }
@@ -159,6 +165,10 @@ function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!allowKid && getActiveProfile()?.is_kid) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (profileCheck.redirect && location.pathname !== '/profiles/select') {
@@ -287,7 +297,7 @@ function App() {
             <Route
               path="/profile"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowKid={false}>
                   <ProfilePage />
                 </ProtectedRoute>
               }
@@ -295,7 +305,7 @@ function App() {
             <Route
               path="/subscription"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowKid={false}>
                   <SubscriptionPage />
                 </ProtectedRoute>
               }
@@ -303,7 +313,7 @@ function App() {
             <Route
               path="/devices"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowKid={false}>
                   <DevicesPage />
                 </ProtectedRoute>
               }
@@ -311,7 +321,7 @@ function App() {
             <Route
               path="/security"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowKid={false}>
                   <SecurityPage />
                 </ProtectedRoute>
               }

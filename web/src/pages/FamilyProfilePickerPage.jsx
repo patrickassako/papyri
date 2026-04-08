@@ -67,6 +67,15 @@ export default function FamilyProfilePickerPage() {
     return limit ? t('familyPicker.titleWithCount', { count: profiles.length, limit }) : t('familyPicker.title');
   }, [profiles.length, subscriptionMeta, t]);
 
+  const finishSelection = () => {
+    navigate(redirectTo, { replace: true });
+    window.setTimeout(() => {
+      if (window.location.pathname === '/profiles/select') {
+        window.location.replace(redirectTo);
+      }
+    }, 80);
+  };
+
   const handleSelect = async (profile) => {
     if (selectingProfileId || submittingPin) return;
     setError('');
@@ -80,7 +89,7 @@ export default function FamilyProfilePickerPage() {
     try {
       setSelectingProfileId(profile.id);
       await familyService.selectProfile(profile.id);
-      navigate(redirectTo, { replace: true });
+      finishSelection();
     } catch (err) {
       setError(err.message || t('familyPicker.cannotSelect'));
       setSelectingProfileId('');
@@ -95,7 +104,7 @@ export default function FamilyProfilePickerPage() {
     try {
       await familyService.selectProfile(pinDialog.profile.id, pin);
       setPinDialog({ open: false, profile: null });
-      navigate(redirectTo, { replace: true });
+      finishSelection();
     } catch (err) {
       setPinError(err.message || t('familyPicker.pinError'));
       setSelectingProfileId('');

@@ -44,7 +44,10 @@ export default function UserSpaceSidebar({
     { label: t('sidebar.subscription'), icon: PaymentOutlined, key: 'subscription', route: '/subscription' },
     { label: t('sidebar.devices'), icon: DevicesOutlined, key: 'devices', route: '/devices' },
     { label: t('sidebar.security'), icon: SecurityOutlined, key: 'security', route: '/security' },
-  ];
+  ].filter((item) => {
+    if (!activeProfile?.is_kid) return true;
+    return !['preferences', 'subscription', 'devices', 'security'].includes(item.key);
+  });
 
   const resolvedSubscriptionLabel = subscriptionLabel || t('sidebar.activeSubscription');
 

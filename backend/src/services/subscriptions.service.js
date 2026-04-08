@@ -46,6 +46,11 @@ function computeSubscriptionAmountCents(plan, usersLimit) {
   return Number(plan.basePriceCents) + (extraUsers * Number(plan.extraUserPriceCents || 0));
 }
 
+function getEffectiveProfilesLimit(subscription, plan = null) {
+  const fallbackIncluded = Number(plan?.includedUsers || subscription?.included_profiles || 3);
+  return Number(subscription?.profiles_limit || subscription?.users_limit || fallbackIncluded);
+}
+
 async function getPlans() {
   const { data, error } = await supabaseAdmin
     .from('subscription_plans')
@@ -198,6 +203,9 @@ async function createSubscription({ userId, planId, planCode, usersLimit, provid
       metadata: plan.metadata || {},
     },
     users_limit: normalizedUsersLimit,
+    profiles_limit: normalizedUsersLimit,
+    included_profiles: Number(plan.includedUsers || 1),
+    max_profiles: Number(plan.slug === 'family' ? 10 : Math.max(normalizedUsersLimit, Number(plan.includedUsers || 1))),
     amount: toMajorAmount(amountCents),
     currency: plan.currency,
     status: 'INACTIVE',
@@ -500,7 +508,7 @@ async function resolvePricingPlanForSubscription(subscription) {
     durationDays: LEGACY_PLAN_DURATION_DAYS[subscription.plan_type] || 30,
     basePriceCents: Math.round(Number(subscription.amount || 0) * 100),
     currency: subscription.currency || 'USD',
-    includedUsers: Number(subscription.users_limit || 1),
+    includedUsers: getEffectiveProfilesLimit(subscription),
     extraUserPriceCents: 0,
     textQuotaPerUser: 0,
     audioQuotaPerUser: 0,
@@ -515,7 +523,7 @@ async function resolvePricingPlanForSubscription(subscription) {
 
 async function computeRenewalAmountForSubscription(subscription) {
   const plan = await resolvePricingPlanForSubscription(subscription);
-  const amountCents = computeSubscriptionAmountCents(plan, subscription.users_limit || plan.includedUsers || 1);
+  const amountCents = computeSubscriptionAmountCents(plan, getEffectiveProfilesLimit(subscription, plan));
   return {
     plan,
     amountCents,
@@ -573,6 +581,9 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
       updateData.plan_type = nextPlan.slug;
       updateData.plan_snapshot = buildPlanSnapshot(nextPlan);
       updateData.users_limit = Math.max(nextUsersLimit, Number(nextPlan.includedUsers || 1));
+      updateData.profiles_limit = updateData.users_limit;
+      updateData.included_profiles = Number(nextPlan.includedUsers || 1);
+      updateData.max_profiles = Number(nextPlan.slug === 'family' ? 10 : updateData.users_limit);
       updateData.amount = toMajorAmount(nextAmountCents);
       updateData.currency = nextPlan.currency;
 
@@ -582,6 +593,9 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
         plan_type: nextPlan.slug,
         plan_snapshot: buildPlanSnapshot(nextPlan),
         users_limit: updateData.users_limit,
+        profiles_limit: updateData.profiles_limit,
+        included_profiles: updateData.included_profiles,
+        max_profiles: updateData.max_profiles,
         amount: updateData.amount,
         currency: nextPlan.currency,
       };
@@ -692,15 +706,16 @@ async function ensureOwnerMembership(subscription) {
 async function applyExtraSeat(subscriptionId, targetUsersLimit) {
   const { data: sub, error: subErr } = await supabaseAdmin
     .from('subscriptions')
-    .select('users_limit, plan_id, plan_type, plan_snapshot, currency, amount')
+    .select('users_limit, profiles_limit, included_profiles, plan_id, plan_type, plan_snapshot, currency, amount')
     .eq('id', subscriptionId)
     .single();
 
   if (subErr) throw subErr;
 
   // Idempotent guard: already at target or higher
-  if (Number(sub.users_limit) >= targetUsersLimit) {
-    console.log(`ℹ️  applyExtraSeat: already at ${sub.users_limit} seats, target=${targetUsersLimit}, skipping`);
+  const currentLimit = getEffectiveProfilesLimit(sub);
+  if (currentLimit >= targetUsersLimit) {
+    console.log(`ℹ️  applyExtraSeat: already at ${currentLimit} seats, target=${targetUsersLimit}, skipping`);
     return sub;
   }
 
@@ -721,6 +736,7 @@ async function applyExtraSeat(subscriptionId, targetUsersLimit) {
     .from('subscriptions')
     .update({
       users_limit: targetUsersLimit,
+      profiles_limit: targetUsersLimit,
       amount: toMajorAmount(amountCents),
       updated_at: new Date().toISOString(),
     })
@@ -942,6 +958,7 @@ module.exports = {
   updatePaymentStatus,
   calculatePeriodEnd,
   computeSubscriptionAmountCents,
+  getEffectiveProfilesLimit,
   computeRenewalAmountForSubscription,
   toMajorAmount,
   applySuccessfulSubscriptionPayment,

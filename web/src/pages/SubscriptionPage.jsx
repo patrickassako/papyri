@@ -55,6 +55,16 @@ function progressValue(value, total) {
   return Math.min(100, Math.round((safeValue / safeTotal) * 100));
 }
 
+function computeNextPaymentCents(plan, usersLimit) {
+  if (!plan) return null;
+  const basePriceCents = Number(plan.basePriceCents || 0);
+  const includedUsers = Number(plan.includedUsers || 1);
+  const extraUserPriceCents = Number(plan.extraUserPriceCents || 0);
+  const normalizedUsersLimit = Number(usersLimit || includedUsers || 1);
+  const extraUsers = Math.max(0, normalizedUsersLimit - includedUsers);
+  return basePriceCents + (extraUsers * extraUserPriceCents);
+}
+
 function RingCard({ title, value, hint, pct }) {
   const safePct = Math.min(100, Math.max(0, Number(pct || 0)));
   return (
@@ -145,9 +155,21 @@ export default function SubscriptionPage() {
 
   // Detect family plan
   const currentPlan = plans.find((p) => p.id === subscription?.plan_id);
-  const extraUserPriceCents = currentPlan?.extraUserPriceCents || 600;
-  const minFamilyMembers = currentPlan?.includedUsers || 3;
+  const snapshotPlan = subscription?.plan_snapshot
+    ? {
+      basePriceCents: Number(subscription.plan_snapshot.basePriceCents || 0),
+      includedUsers: Number(subscription.plan_snapshot.includedUsers || subscription?.included_profiles || 1),
+      extraUserPriceCents: Number(subscription.plan_snapshot.extraUserPriceCents || 0),
+      currency: subscription.plan_snapshot.currency || subscription?.currency || 'USD',
+    }
+    : null;
+  const billingPlan = currentPlan || snapshotPlan;
+  const extraUserPriceCents = Number(currentPlan?.extraUserPriceCents || snapshotPlan?.extraUserPriceCents || 600);
+  const minFamilyMembers = Number(currentPlan?.includedUsers || snapshotPlan?.includedUsers || subscription?.included_profiles || 3);
+  const nextPaymentCents = subscription ? computeNextPaymentCents(billingPlan, usersLimit) : null;
+  const nextPaymentCurrency = billingPlan?.currency || subscription?.currency || 'USD';
   const formatDirectMoney = (cents, currency = 'EUR') => formatMoneyFromSource(cents, currency);
+  const formatMajorMoney = (amount, currency = 'EUR') => formatMoneyFromSource(Math.round(Number(amount || 0) * 100), currency);
   const loadData = async () => {
     setLoading(true);
     setError('');
@@ -242,7 +264,7 @@ export default function SubscriptionPage() {
     } catch (err) {
       const msg = String(err?.message || t('subscription.memberActionError'));
       if (msg.includes('users_limit reached')) {
-        setError(t('subscription.seatLimitReached'));
+        setError(isFamilyPlan ? t('subscription.profileLimitReached') : t('subscription.seatLimitReached'));
       } else if (msg.includes('already a member')) {
         setError(t('subscription.alreadyMember'));
       } else if (msg.includes('Only subscription owner')) {
@@ -358,7 +380,7 @@ export default function SubscriptionPage() {
           >
             {[
               { label: t('subscription.plan'), value: hasActive ? t('subscription.active') : t('subscription.inactive') },
-              { label: t('subscription.seats'), value: `${activeMembersCount}/${usersLimit}` },
+              { label: isFamilyPlan ? t('subscription.profiles') : t('subscription.seats'), value: `${isFamilyPlan ? profileCount : activeMembersCount}/${usersLimit}` },
               { label: t('subscription.bonus'), value: `${bonusAvailableTotal}` },
             ].map((item) => (
               <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: '1px solid #ece7dd' }}>
@@ -405,7 +427,12 @@ export default function SubscriptionPage() {
               <Box sx={{ minWidth: { xs: 0, md: 170 }, textAlign: { xs: 'left', md: 'right' }, borderLeft: { md: '1px solid #efefef' }, pl: { md: 3 }, width: { xs: '100%', md: 'auto' } }}>
                 <Typography sx={{ color: '#9f9f9f', fontWeight: 700, fontSize: '0.75rem' }}>{t('subscription.nextPayment').toUpperCase()}</Typography>
                 <Typography sx={{ fontSize: { xs: '1.65rem', md: '2.1rem' }, color: '#1f1f1f', fontWeight: 800, lineHeight: 1.1, overflowWrap: 'anywhere' }}>
-                  {subscription ? formatDirectMoney(subscription.amount, subscription.currency || 'USD') : '-'}
+                  {subscription
+                    ? formatDirectMoney(
+                      nextPaymentCents !== null ? nextPaymentCents : Math.round(Number(subscription.amount || 0) * 100),
+                      nextPaymentCurrency
+                    )
+                    : '-'}
                 </Typography>
                 <Typography sx={{ color: '#b5770c', fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }} onClick={() => navigate('/pricing')}>
                   {t('subscription.managePlan')}
@@ -456,7 +483,7 @@ export default function SubscriptionPage() {
                   {isFamilyPlan ? (
                     <>
                       <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeProfiles')}: <b>{profileCount}</b></Typography>
-                      <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.availableSeats')}: <b>{seatsRemaining}</b></Typography>
+                      <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.availableProfiles')}: <b>{seatsRemaining}</b></Typography>
                     </>
                   ) : (
                     <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeDevicesCount')}: <b>{activeMembersCount}</b></Typography>
@@ -477,7 +504,7 @@ export default function SubscriptionPage() {
                     const ptLabel = {
                       subscription_initial: t('subscription.paymentTypeInitial'),
                       subscription_renewal: t('subscription.paymentTypeRenewal'),
-                      extra_seat: t('subscription.paymentTypeExtraSeat'),
+                      extra_seat: isFamilyPlan ? t('subscription.paymentTypeExtraProfile') : t('subscription.paymentTypeExtraSeat'),
                       content_unlock: t('subscription.paymentTypeContentUnlock'),
                     }[p.metadata?.payment_type] || t('subscription.paymentTypeDefault');
                     const isBusy = Boolean(invoiceBusy[p.id]);
@@ -490,7 +517,7 @@ export default function SubscriptionPage() {
                           </Typography>
                           <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: '#2d2d2d' }}>{ptLabel}</Typography>
                           <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography sx={{ fontSize: '0.9rem', color: '#3d3d3d' }}>{formatDirectMoney(p.amount, p.currency || 'USD')}</Typography>
+                            <Typography sx={{ fontSize: '0.9rem', color: '#3d3d3d' }}>{formatMajorMoney(p.amount, p.currency || 'USD')}</Typography>
                             <Button
                               size="small"
                               variant="text"
@@ -522,7 +549,7 @@ export default function SubscriptionPage() {
                     const ptLabel = {
                       subscription_initial: t('subscription.paymentTypeInitial'),
                       subscription_renewal: t('subscription.paymentTypeRenewal'),
-                      extra_seat: t('subscription.paymentTypeExtraSeat'),
+                      extra_seat: isFamilyPlan ? t('subscription.paymentTypeExtraProfile') : t('subscription.paymentTypeExtraSeat'),
                       content_unlock: t('subscription.paymentTypeContentUnlock'),
                     }[p.metadata?.payment_type] || t('subscription.paymentTypeDefault');
                     const isBusy = Boolean(invoiceBusy[p.id]);
@@ -531,7 +558,7 @@ export default function SubscriptionPage() {
                       <Box key={p.id} sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 0.6fr', px: 2.5, py: 1.5, borderTop: '1px solid #f1f1f1', alignItems: 'center' }}>
                         <Typography sx={{ color: '#565656', fontSize: '0.9rem' }}>{formatDate(p.paid_at || p.created_at, locale)}</Typography>
                         <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{ptLabel}</Typography>
-                        <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{formatDirectMoney(p.amount, p.currency || 'USD')}</Typography>
+                        <Typography sx={{ color: '#3d3d3d', fontSize: '0.9rem' }}>{formatMajorMoney(p.amount, p.currency || 'USD')}</Typography>
                         <Tooltip title={canDownload ? t('subscription.downloadInvoice') : t('subscription.paymentPending')} placement="top">
                           <Box
                             component="span"
@@ -571,9 +598,9 @@ export default function SubscriptionPage() {
                     {t('subscription.familyTitle')} · {profileCount}/{usersLimit} {t('subscription.profiles')}
                   </Typography>
                   {seatsRemaining > 0 ? (
-                    <Chip label={seatsRemaining > 1 ? t('subscription.seatsAvailablePlural', { count: seatsRemaining }) : t('subscription.seatsAvailable', { count: seatsRemaining })} size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, ml: { sm: 'auto !important' } }} />
+                    <Chip label={seatsRemaining > 1 ? t('subscription.profilesAvailablePlural', { count: seatsRemaining }) : t('subscription.profilesAvailable', { count: seatsRemaining })} size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, ml: { sm: 'auto !important' } }} />
                   ) : (
-                    <Chip label={t('subscription.seatsFull')} size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#fff3e0', color: '#e65100', fontWeight: 700, ml: { sm: 'auto !important' } }} />
+                    <Chip label={t('subscription.profilesFull')} size="small" sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#fff3e0', color: '#e65100', fontWeight: 700, ml: { sm: 'auto !important' } }} />
                   )}
                 </Stack>
 
@@ -627,11 +654,11 @@ export default function SubscriptionPage() {
         PaperProps={{ sx: { borderRadius: 4, p: 0.5, maxWidth: 420, width: '100%' } }}
       >
         <DialogTitle sx={{ fontWeight: 800, fontSize: '1.1rem', pb: 0.5, color: '#1f1f1f' }}>
-          {t('subscription.addSeatTitle')}
+          {isFamilyPlan ? t('subscription.addProfileTitle') : t('subscription.addSeatTitle')}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#888', mb: 0.5, fontSize: '0.92rem' }}>
-            {usersLimit} → <b>{usersLimit + 1} {t('subscription.seats')}</b>
+            {usersLimit} → <b>{usersLimit + 1} {isFamilyPlan ? t('subscription.profiles') : t('subscription.seats')}</b>
           </Typography>
           <Typography sx={{ color: '#b5770c', fontWeight: 700, fontSize: '1rem', mb: 2.5 }}>
             +{formatLocalPrice(extraUserPriceCents)} {t('common.per_month')}

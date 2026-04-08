@@ -19,7 +19,7 @@ function sendError(res, error, fallbackCode = 'FAMILY_OPERATION_FAILED') {
     case 'OWNER_PROFILE_CANNOT_BE_DELETED':
       return res.status(400).json({ success: false, error: message, message: 'Le profil principal ne peut pas etre supprime.' });
     case 'EMAIL_ACTION_VERIFICATION_REQUIRED':
-      return res.status(401).json({ success: false, error: message, message: 'Une verification par code email est requise pour modifier le PIN du profil principal.' });
+      return res.status(401).json({ success: false, error: message, message: 'Une verification par code email est requise pour cette action sensible.' });
     case 'USER_NOT_FOUND':
       return res.status(404).json({ success: false, error: message, message: 'Utilisateur introuvable.' });
     case 'PIN_REQUIRED':
@@ -61,7 +61,9 @@ async function updateProfile(req, res) {
 
 async function deleteProfile(req, res) {
   try {
-    const profile = await familyProfilesService.deleteProfile(req.user.id, req.params.profileId);
+    const profile = await familyProfilesService.deleteProfile(req.user.id, req.params.profileId, {
+      verificationToken: req.body?.verification_token,
+    });
     return res.status(200).json({ success: true, data: profile });
   } catch (error) {
     return sendError(res, error, 'FAILED_TO_DELETE_FAMILY_PROFILE');

@@ -37,9 +37,11 @@ export async function updateProfile(profileId, payload) {
   return data.data;
 }
 
-export async function deleteProfile(profileId) {
+export async function deleteProfile(profileId, verificationToken = '') {
   const response = await authFetch(`${API_BASE_URL}/api/family/profiles/${profileId}`, {
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verification_token: verificationToken }),
   });
   const data = await parseJson(response, 'Impossible de supprimer le profil.');
   return data.data;

@@ -106,7 +106,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
   const [activeProfileId, setActiveProfileId] = useState(getActiveProfile()?.id || null);
   const [editor, setEditor] = useState({ open: false, profile: null, name: '', avatar_key: 'gold', is_kid: false });
   const [pinDialog, setPinDialog] = useState({ open: false, profile: null, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' });
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, profile: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' });
 
   const refreshProfiles = async () => {
     setLoading(true);
@@ -247,14 +247,14 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
   };
 
   const handleDeleteProfile = async () => {
-    if (!deleteDialog.profile) return;
+    if (!deleteDialog.profile || !deleteDialog.verificationToken) return;
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      await familyService.deleteProfile(deleteDialog.profile.id);
+      await familyService.deleteProfile(deleteDialog.profile.id, deleteDialog.verificationToken);
       setMessage('Profil supprime.');
-      setDeleteDialog({ open: false, profile: null });
+      setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' });
       await refreshProfiles();
     } catch (err) {
       setError(err.message || 'Impossible de supprimer le profil.');
@@ -307,6 +307,50 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
     }
   };
 
+  const handleStartDeleteVerification = async () => {
+    if (!deleteDialog.profile) return;
+    setSaving(true);
+    setError('');
+    try {
+      const result = await authService.startProfilePinEmailVerification();
+      setDeleteDialog((prev) => ({
+        ...prev,
+        challengeId: result.challenge_id,
+        emailTarget: result.email || '',
+        verificationToken: '',
+        emailCode: '',
+        step: 'email',
+      }));
+      setMessage(`Code email envoye ${result.email ? `a ${result.email}` : ''}.`);
+    } catch (err) {
+      setError(err.message || 'Impossible d envoyer le code email.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVerifyDeleteEmailCode = async () => {
+    if (!deleteDialog.challengeId || !/^\d{6}$/.test(deleteDialog.emailCode)) {
+      setError('Le code email est requis.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const result = await authService.verifyProfilePinEmailVerification(deleteDialog.challengeId, deleteDialog.emailCode);
+      setDeleteDialog((prev) => ({
+        ...prev,
+        verificationToken: result.verification_token,
+        step: 'verified',
+      }));
+      setMessage('Verification email validee.');
+    } catch (err) {
+      setError(err.message || 'Code email invalide.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Stack spacing={2}>
       <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
@@ -330,7 +374,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         </Stack>
 
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
-          <Chip label={`${remainingSlots} place${remainingSlots > 1 ? 's' : ''} restante${remainingSlots > 1 ? 's' : ''}`} size="small" sx={{ fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }} />
+          <Chip label={`${remainingSlots} profil${remainingSlots > 1 ? 's' : ''} disponible${remainingSlots > 1 ? 's' : ''}`} size="small" sx={{ fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }} />
           {maxReached && <Chip label="Limite maximale atteinte" size="small" sx={{ fontWeight: 700, bgcolor: '#fff3e0', color: '#b25a00' }} />}
           {activeProfileId && <Chip label="Profil actif detecte" size="small" sx={{ fontWeight: 700, bgcolor: '#fff7e6', color: '#9b6a00' }} />}
         </Stack>
@@ -360,7 +404,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
               onUse={handleUseProfile}
               onEdit={openEdit}
               onPin={(target) => setPinDialog({ open: true, profile: target, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' })}
-              onDelete={(target) => setDeleteDialog({ open: true, profile: target })}
+              onDelete={(target) => setDeleteDialog({ open: true, profile: target, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })}
             />
           ))}
         </Box>
@@ -485,16 +529,43 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteDialog.open} onClose={() => !saving && setDeleteDialog({ open: false, profile: null })} fullWidth maxWidth="xs">
+      <Dialog open={deleteDialog.open} onClose={() => !saving && setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })} fullWidth maxWidth="xs">
         <DialogTitle>Supprimer ce profil ?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ color: '#6f6559' }}>
-            Le profil <b>{deleteDialog.profile?.name}</b> sera desactive. Sa place restera disponible dans votre quota de profils.
-          </Typography>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography sx={{ color: '#6f6559' }}>
+            Le profil <b>{deleteDialog.profile?.name}</b> sera desactive. Son emplacement restera disponible dans votre quota de profils.
+            </Typography>
+            {deleteDialog.step === 'confirm' && (
+              <Button variant="outlined" onClick={handleStartDeleteVerification} disabled={saving} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
+                Envoyer le code email
+              </Button>
+            )}
+            {deleteDialog.step !== 'confirm' && (
+              <>
+                <TextField
+                  fullWidth
+                  label="Code email"
+                  value={deleteDialog.emailCode}
+                  onChange={(event) => setDeleteDialog((prev) => ({ ...prev, emailCode: event.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                  helperText={deleteDialog.emailTarget ? `Code envoye a ${deleteDialog.emailTarget}.` : 'Entrez le code recu par email.'}
+                  inputProps={{ inputMode: 'numeric', maxLength: 6 }}
+                />
+                {deleteDialog.step === 'email' && (
+                  <Button variant="outlined" onClick={handleVerifyDeleteEmailCode} disabled={saving || deleteDialog.emailCode.length !== 6} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
+                    Verifier le code
+                  </Button>
+                )}
+                {deleteDialog.step === 'verified' && (
+                  <Alert severity="success">Verification email validee. Vous pouvez maintenant supprimer ce profil.</Alert>
+                )}
+              </>
+            )}
+          </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDeleteDialog({ open: false, profile: null })} disabled={saving}>Annuler</Button>
-          <Button color="error" variant="contained" onClick={handleDeleteProfile} disabled={saving}>
+          <Button onClick={() => setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })} disabled={saving}>Annuler</Button>
+          <Button color="error" variant="contained" onClick={handleDeleteProfile} disabled={saving || !deleteDialog.verificationToken}>
             {saving ? 'Suppression...' : 'Supprimer'}
           </Button>
         </DialogActions>
