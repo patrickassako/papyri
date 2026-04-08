@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const subscriptionsController = require('../controllers/subscriptions.controller');
 const { authenticate } = require('../middleware/auth');
+const { rejectKidProfile } = require('../middleware/family-access');
 
 /**
  * GET /api/subscriptions/plans
@@ -19,14 +20,14 @@ router.get('/plans', subscriptionsController.getPlans);
  * Get current user's active subscription
  * @protected
  */
-router.get('/me', authenticate, subscriptionsController.getMySubscription);
+router.get('/me', authenticate, rejectKidProfile, subscriptionsController.getMySubscription);
 
 /**
  * GET /api/subscriptions/all
  * Get all user's subscriptions (including expired/cancelled)
  * @protected
  */
-router.get('/all', authenticate, subscriptionsController.getAllMySubscriptions);
+router.get('/all', authenticate, rejectKidProfile, subscriptionsController.getAllMySubscriptions);
 
 /**
  * POST /api/subscriptions/promo/validate
@@ -34,7 +35,7 @@ router.get('/all', authenticate, subscriptionsController.getAllMySubscriptions);
  * @protected
  * @body {code: string, planId?: string, planCode?: string, usersLimit?: number}
  */
-router.post('/promo/validate', authenticate, subscriptionsController.validatePromoCode);
+router.post('/promo/validate', authenticate, rejectKidProfile, subscriptionsController.validatePromoCode);
 
 /**
  * POST /api/subscriptions/checkout
@@ -42,7 +43,7 @@ router.post('/promo/validate', authenticate, subscriptionsController.validatePro
  * @protected
  * @body {planCode?: string, planId?: string, usersLimit?: number, provider?: string, promoCode?: string}
  */
-router.post('/checkout', authenticate, subscriptionsController.initiateCheckout);
+router.post('/checkout', authenticate, rejectKidProfile, subscriptionsController.initiateCheckout);
 
 /**
  * POST /api/subscriptions/buy-extra-seat
@@ -50,7 +51,7 @@ router.post('/checkout', authenticate, subscriptionsController.initiateCheckout)
  * @protected
  * @body {provider?: 'stripe' | 'flutterwave'}
  */
-router.post('/buy-extra-seat', authenticate, subscriptionsController.buyExtraSeat);
+router.post('/buy-extra-seat', authenticate, rejectKidProfile, subscriptionsController.buyExtraSeat);
 
 /**
  * POST /api/subscriptions/cancel
@@ -58,21 +59,21 @@ router.post('/buy-extra-seat', authenticate, subscriptionsController.buyExtraSea
  * @protected
  * @body {immediately?: boolean}
  */
-router.post('/cancel', authenticate, subscriptionsController.cancelSubscription);
+router.post('/cancel', authenticate, rejectKidProfile, subscriptionsController.cancelSubscription);
 
 /**
  * POST /api/subscriptions/reactivate
  * Reactivate a Stripe subscription scheduled for cancellation (cancel_at_period_end=true)
  * @protected
  */
-router.post('/reactivate', authenticate, subscriptionsController.reactivateSubscription);
+router.post('/reactivate', authenticate, rejectKidProfile, subscriptionsController.reactivateSubscription);
 
 /**
  * GET /api/subscriptions/payment-history
  * Get current user's payment history
  * @protected
  */
-router.get('/payment-history', authenticate, subscriptionsController.getPaymentHistory);
+router.get('/payment-history', authenticate, rejectKidProfile, subscriptionsController.getPaymentHistory);
 
 /**
  * POST /api/subscriptions/verify-payment
@@ -80,7 +81,7 @@ router.get('/payment-history', authenticate, subscriptionsController.getPaymentH
  * @protected
  * @body {transactionId: string, reference: string}
  */
-router.post('/verify-payment', authenticate, subscriptionsController.verifyPayment);
+router.post('/verify-payment', authenticate, rejectKidProfile, subscriptionsController.verifyPayment);
 
 /**
  * POST /api/subscriptions/verify-stripe-session
@@ -88,21 +89,21 @@ router.post('/verify-payment', authenticate, subscriptionsController.verifyPayme
  * @protected
  * @body {sessionId: string}
  */
-router.post('/verify-stripe-session', authenticate, subscriptionsController.verifyStripeSession);
+router.post('/verify-stripe-session', authenticate, rejectKidProfile, subscriptionsController.verifyStripeSession);
 
 /**
  * POST /api/subscriptions/renew
  * Initiate manual renewal checkout for active subscription
  * @protected
  */
-router.post('/renew', authenticate, subscriptionsController.initiateRenewalCheckout);
+router.post('/renew', authenticate, rejectKidProfile, subscriptionsController.initiateRenewalCheckout);
 
 /**
  * POST /api/subscriptions/resume
  * Resume subscription cancellation (cancel_at_period_end=false)
  * @protected
  */
-router.post('/resume', authenticate, subscriptionsController.resumeSubscription);
+router.post('/resume', authenticate, rejectKidProfile, subscriptionsController.resumeSubscription);
 
 /**
  * POST /api/subscriptions/change-plan
@@ -110,35 +111,35 @@ router.post('/resume', authenticate, subscriptionsController.resumeSubscription)
  * @protected
  * @body {planId?: string, planCode?: string, usersLimit?: number}
  */
-router.post('/change-plan', authenticate, subscriptionsController.schedulePlanChange);
+router.post('/change-plan', authenticate, rejectKidProfile, subscriptionsController.schedulePlanChange);
 
 /**
  * GET /api/subscriptions/cycle/current
  * Get current cycle + member usage
  * @protected
  */
-router.get('/cycle/current', authenticate, subscriptionsController.getCurrentCycle);
+router.get('/cycle/current', authenticate, rejectKidProfile, subscriptionsController.getCurrentCycle);
 
 /**
  * GET /api/subscriptions/usage/me
  * Get usage summary for current user
  * @protected
  */
-router.get('/usage/me', authenticate, subscriptionsController.getMyUsage);
+router.get('/usage/me', authenticate, rejectKidProfile, subscriptionsController.getMyUsage);
 
 /**
  * GET /api/subscriptions/bonuses/me
  * List bonus credits for current user
  * @protected
  */
-router.get('/bonuses/me', authenticate, subscriptionsController.getMyBonuses);
+router.get('/bonuses/me', authenticate, rejectKidProfile, subscriptionsController.getMyBonuses);
 
 /**
  * GET /api/subscriptions/members
  * List members for active subscription
  * @protected
  */
-router.get('/members', authenticate, subscriptionsController.getMembers);
+router.get('/members', authenticate, rejectKidProfile, subscriptionsController.getMembers);
 
 /**
  * POST /api/subscriptions/members
@@ -146,14 +147,14 @@ router.get('/members', authenticate, subscriptionsController.getMembers);
  * @protected
  * @body {userId: string}
  */
-router.post('/members', authenticate, subscriptionsController.addMember);
+router.post('/members', authenticate, rejectKidProfile, subscriptionsController.addMember);
 
 /**
  * DELETE /api/subscriptions/members/:userId
  * Remove member from active subscription
  * @protected
  */
-router.delete('/members/:userId', authenticate, subscriptionsController.removeMember);
+router.delete('/members/:userId', authenticate, rejectKidProfile, subscriptionsController.removeMember);
 
 /**
  * PATCH /api/subscriptions/users-limit
@@ -161,13 +162,13 @@ router.delete('/members/:userId', authenticate, subscriptionsController.removeMe
  * @protected
  * @body {usersLimit: number}
  */
-router.patch('/users-limit', authenticate, subscriptionsController.updateUsersLimit);
+router.patch('/users-limit', authenticate, rejectKidProfile, subscriptionsController.updateUsersLimit);
 
 /**
  * GET /api/subscriptions/payments/:paymentId/invoice
  * Download PDF invoice for a specific payment
  * @protected — only the owner of the payment can download it
  */
-router.get('/payments/:paymentId/invoice', authenticate, subscriptionsController.downloadInvoice);
+router.get('/payments/:paymentId/invoice', authenticate, rejectKidProfile, subscriptionsController.downloadInvoice);
 
 module.exports = router;

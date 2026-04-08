@@ -29,6 +29,7 @@ import MobileBottomNav from '../components/MobileBottomNav';
 import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import { useTranslation } from 'react-i18next';
+import { getActiveProfile } from '../config/profileStorage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -280,21 +281,28 @@ export default function DashboardPage() {
   const [subscriptionInfo, setSubscriptionInfo] = useState({ type: 'none', endDate: '' });
   const [usage, setUsage] = useState(null);
   const [profileReloadKey, setProfileReloadKey] = useState(0);
+  const [activeProfile, setActiveProfile] = useState(() => getActiveProfile());
   const nouveautesRef = useRef(null);
   const populairesRef = useRef(null);
   const recommendationsRef = useRef(null);
 
   const loadDashboardData = useCallback(async (aliveRef) => {
       try {
+        if (aliveRef.current && activeProfile?.is_kid) {
+          setHasActiveSubscription(false);
+          setSubscriptionInfo({ type: 'none', endDate: '' });
+          setUsage(null);
+        }
+
         const [userData, historyRes, continueRes, subscriptionRes, nouveautesRes, populairesRes, recoRes, usageRes] = await Promise.allSettled([
           authService.getUser(),
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/reading-history/continue?limit=3`),
-          authFetch(`${API_URL}/api/subscriptions/me`),
+          activeProfile?.is_kid ? Promise.resolve({ ok: false, skipped: true }) : authFetch(`${API_URL}/api/subscriptions/me`),
           contentsService.getContents({ sort: 'newest', limit: 12 }),
           contentsService.getContents({ sort: 'popular', limit: 12 }),
           contentsService.getRecommendations(12),
-          authFetch(`${API_URL}/api/subscriptions/usage/me`),
+          activeProfile?.is_kid ? Promise.resolve({ ok: false, skipped: true }) : authFetch(`${API_URL}/api/subscriptions/usage/me`),
         ]);
 
         if (userData.status === 'fulfilled' && aliveRef.current && userData.value) {
@@ -340,7 +348,7 @@ export default function DashboardPage() {
             else if (payload?.hasSubscription) subType = 'inactive';
             setSubscriptionInfo({ type: subType, endDate });
           }
-        } else if (aliveRef.current) {
+        } else if (aliveRef.current && !activeProfile?.is_kid) {
           setHasActiveSubscription(false);
           setSubscriptionInfo({ type: 'none', endDate: '' });
         }
@@ -350,6 +358,8 @@ export default function DashboardPage() {
           if (aliveRef.current && payload?.data?.usage) {
             setUsage(payload.data.usage);
           }
+        } else if (aliveRef.current && activeProfile?.is_kid) {
+          setUsage(null);
         }
 
         if (aliveRef.current) {
@@ -368,7 +378,7 @@ export default function DashboardPage() {
         console.error('Failed to load dashboard data:', err);
         setSectionsLoading(false);
       }
-  }, []);
+  }, [activeProfile?.is_kid]);
 
   useEffect(() => {
     const aliveRef = { current: true };
@@ -377,7 +387,10 @@ export default function DashboardPage() {
   }, [loadDashboardData, profileReloadKey]);
 
   useEffect(() => {
-    const handleProfileChange = () => setProfileReloadKey((v) => v + 1);
+    const handleProfileChange = () => {
+      setActiveProfile(getActiveProfile());
+      setProfileReloadKey((v) => v + 1);
+    };
     window.addEventListener('papyri:profile-changed', handleProfileChange);
     return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
   }, []);
@@ -428,7 +441,7 @@ export default function DashboardPage() {
         </Box>
 
         {/* Bannière abonnement — visible uniquement sans abonnement actif */}
-        {!hasActiveSubscription && (
+        {!activeProfile?.is_kid && !hasActiveSubscription && (
           <Box
             sx={{
               display: 'flex',
@@ -515,7 +528,7 @@ export default function DashboardPage() {
           })}
         </Box>
 
-        {usage && (
+        {!activeProfile?.is_kid && usage && (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: 3 }}>
             {[
               {

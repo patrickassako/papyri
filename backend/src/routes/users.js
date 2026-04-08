@@ -6,6 +6,7 @@ const formidable = require('express-formidable');
 const { supabase, supabaseAdmin } = require('../config/database');
 const config = require('../config/env');
 const { verifyJWT } = require('../middleware/auth');
+const { rejectKidProfile } = require('../middleware/family-access');
 const r2Service = require('../services/r2.service');
 
 /**
@@ -14,7 +15,7 @@ const r2Service = require('../services/r2.service');
  * Retourne { id, email, full_name, avatar_url } si trouvé, 404 sinon.
  * Ne retourne pas le compte du requêtant lui-même.
  */
-router.get('/lookup', verifyJWT, async (req, res, next) => {
+router.get('/lookup', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const requesterId = req.user.id;
     const email = String(req.query.email || '').trim().toLowerCase();
@@ -124,7 +125,7 @@ router.get('/me', verifyJWT, async (req, res, next) => {
  * PATCH /users/me
  * Protected endpoint - Update current user profile
  */
-router.patch('/me', verifyJWT, async (req, res, next) => {
+router.patch('/me', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { full_name, language, avatar_url } = req.body;
@@ -198,6 +199,7 @@ router.patch('/me', verifyJWT, async (req, res, next) => {
 router.post(
   '/me/avatar',
   verifyJWT,
+  rejectKidProfile,
   formidable({ multiples: false, maxFileSize: 5 * 1024 * 1024 }),
   async (req, res, next) => {
     try {
@@ -297,7 +299,7 @@ router.post(
  * PUT /users/me/password
  * Protected endpoint - Change password
  */
-router.put('/me/password', verifyJWT, async (req, res, next) => {
+router.put('/me/password', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { current_password, new_password } = req.body;
@@ -385,7 +387,7 @@ router.put('/me/password', verifyJWT, async (req, res, next) => {
  * GET /users/me/sessions
  * Protected — Retourne les sessions actives de l'utilisateur
  */
-router.get('/me/sessions', verifyJWT, async (req, res, next) => {
+router.get('/me/sessions', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
@@ -442,7 +444,7 @@ function parseUserAgent(ua) {
  * DELETE /users/me/sessions
  * Protected — Révoque toutes les sessions (déconnexion globale)
  */
-router.delete('/me/sessions', verifyJWT, async (req, res, next) => {
+router.delete('/me/sessions', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     // Supabase admin: sign out user from all sessions
@@ -457,7 +459,7 @@ router.delete('/me/sessions', verifyJWT, async (req, res, next) => {
  * GET /users/me/data-export  (RGPD — droit d'accès & portabilité)
  * Retourne toutes les données personnelles de l'utilisateur en JSON
  */
-router.get('/me/data-export', verifyJWT, async (req, res, next) => {
+router.get('/me/data-export', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -500,7 +502,7 @@ router.get('/me/data-export', verifyJWT, async (req, res, next) => {
  * DELETE /users/me  (RGPD — droit à l'effacement)
  * Supprime le compte et toutes les données associées
  */
-router.delete('/me', verifyJWT, async (req, res, next) => {
+router.delete('/me', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -574,7 +576,7 @@ router.post('/me/onboarding-complete', verifyJWT, async (req, res, next) => {
  * POST /users/me/gdpr-request
  * RGPD — soumettre une demande (deletion | export | rectification)
  */
-router.post('/me/gdpr-request', verifyJWT, express.json(), async (req, res, next) => {
+router.post('/me/gdpr-request', verifyJWT, rejectKidProfile, express.json(), async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { request_type = 'deletion', user_message } = req.body;
@@ -614,7 +616,7 @@ router.post('/me/gdpr-request', verifyJWT, express.json(), async (req, res, next
  * GET /users/me/gdpr-requests
  * RGPD — liste des demandes de l'utilisateur connecté
  */
-router.get('/me/gdpr-requests', verifyJWT, async (req, res, next) => {
+router.get('/me/gdpr-requests', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { data, error } = await supabaseAdmin

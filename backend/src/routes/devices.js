@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../config/database');
 const { verifyJWT } = require('../middleware/auth');
+const { rejectKidProfile } = require('../middleware/family-access');
 
 const MAX_DEVICES = 3;
 const LOCK_TTL_MS = 30_000; // 30s — lock is stale if no heartbeat
@@ -15,7 +16,7 @@ function isLockFresh(heartbeatAt) {
  * POST /devices/register
  * Register or update the current device. Rejects if user already has MAX_DEVICES different devices.
  */
-router.post('/register', verifyJWT, async (req, res, next) => {
+router.post('/register', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { device_id, device_name, device_type } = req.body;
@@ -75,7 +76,7 @@ router.post('/register', verifyJWT, async (req, res, next) => {
  * GET /devices
  * List registered devices. Pass X-Device-Id header to mark current device.
  */
-router.get('/', verifyJWT, async (req, res, next) => {
+router.get('/', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -117,7 +118,7 @@ router.get('/', verifyJWT, async (req, res, next) => {
  * DELETE /devices/:deviceId
  * Remove a registered device (also releases its reading lock and revokes all sessions).
  */
-router.delete('/:deviceId', verifyJWT, async (req, res, next) => {
+router.delete('/:deviceId', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { deviceId } = req.params;
@@ -155,7 +156,7 @@ router.delete('/:deviceId', verifyJWT, async (req, res, next) => {
  * Acquire exclusive reading lock — always succeeds (Spotify-like takeover).
  * If another fresh device held the lock, it will detect the takeover via heartbeat (LOCK_LOST).
  */
-router.post('/reading-lock', verifyJWT, async (req, res, next) => {
+router.post('/reading-lock', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { device_id, content_id } = req.body;
@@ -199,7 +200,7 @@ router.post('/reading-lock', verifyJWT, async (req, res, next) => {
  * DELETE /devices/reading-lock
  * Release reading lock (only if held by the requesting device).
  */
-router.delete('/reading-lock', verifyJWT, async (req, res, next) => {
+router.delete('/reading-lock', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { device_id } = req.body;
@@ -218,7 +219,7 @@ router.delete('/reading-lock', verifyJWT, async (req, res, next) => {
  * POST /devices/reading-lock/heartbeat
  * Refresh heartbeat. Returns LOCK_LOST if another device has taken over.
  */
-router.post('/reading-lock/heartbeat', verifyJWT, async (req, res, next) => {
+router.post('/reading-lock/heartbeat', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { device_id } = req.body;

@@ -120,7 +120,7 @@ function MemberSelector({ count, min, max, onChange }) {
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.2 }}>
         <GroupIcon sx={{ fontSize: 18, color: primary }} />
         <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#5a5047', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {t('pricing.nbrMembers')}
+          {t('pricing.nbrProfiles')}
         </Typography>
       </Stack>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -138,7 +138,7 @@ function MemberSelector({ count, min, max, onChange }) {
             {count}
           </Typography>
           <Typography sx={{ fontSize: '0.72rem', color: '#8a8279', mt: 0.2 }}>
-            {count === min ? t('pricing.minimumIncluded', { min }) : t(count - min > 1 ? 'pricing.extraMembers_plural' : 'pricing.extraMembers', { n: count - min })}
+            {count === min ? t('pricing.minimumProfilesIncluded', { min }) : t(count - min > 1 ? 'pricing.extraProfiles_plural' : 'pricing.extraProfiles', { n: count - min })}
           </Typography>
         </Box>
 
@@ -225,7 +225,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
       </Typography>
       <Typography sx={{ mt: 0.5, fontSize: '1.6rem', fontWeight: 800 }}>{plan.name}</Typography>
 
-      {/* Member selector for family plans */}
+      {/* Profile selector for family plans */}
       {isFamily && membersCount !== undefined && (
         <MemberSelector
           count={membersCount}
