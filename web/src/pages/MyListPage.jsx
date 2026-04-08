@@ -27,6 +27,8 @@ import tokens from '../config/tokens';
 import * as authService from '../services/auth.service';
 import { authFetch } from '../services/auth.service';
 import { subscriptionsService } from '../services/subscriptions.service';
+import { contentsService } from '../services/contents.service';
+import { getActiveProfileId } from '../config/profileStorage';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
 
@@ -118,6 +120,7 @@ export default function MyListPage() {
   }, [subscriptionData, i18n.language]);
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [purchased, setPurchased] = useState([]);
   const [viewMode, setViewMode] = useState('grid');
   const [activeFilter, setActiveFilter] = useState('favoris');
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,10 +156,11 @@ export default function MyListPage() {
           if (alive) setSubscriptionData({ type: 'none', endDate: '' });
         }
 
-        const [historyRes, playlistRes, ebookListRes] = await Promise.allSettled([
+        const [historyRes, playlistRes, ebookListRes, paymentHistoryRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/api/reading/audio/playlist`),
           authFetch(`${API_URL}/api/reading/ebook/list`),
+          subscriptionsService.getPaymentHistory(),
         ]);
 
         let historyItems = [];
@@ -226,6 +230,54 @@ export default function MyListPage() {
           }
         }
 
+        const activeProfileId = getActiveProfileId();
+        if (paymentHistoryRes.status === 'fulfilled') {
+          const payments = Array.isArray(paymentHistoryRes.value?.payments) ? paymentHistoryRes.value.payments : [];
+          const purchasedPayments = payments.filter((payment) => {
+            const meta = payment?.metadata || {};
+            const paymentProfileId = meta.profile_id || null;
+            if (payment?.status !== 'succeeded' || meta.payment_type !== 'content_unlock' || !meta.content_id) {
+              return false;
+            }
+            return activeProfileId ? paymentProfileId === activeProfileId : !paymentProfileId;
+          });
+
+          const uniqueContentIds = Array.from(new Set(purchasedPayments.map((payment) => payment.metadata.content_id)));
+          const knownItems = new Map(
+            [...historyItems, ...combinedFavorites]
+              .filter((item) => item?.content_id || item?.id)
+              .map((item) => [String(item.content_id || item.id), item])
+          );
+
+          const missingIds = uniqueContentIds.filter((id) => !knownItems.has(String(id)));
+          let fetchedItems = [];
+
+          if (missingIds.length > 0) {
+            const fetched = await Promise.allSettled(
+              missingIds.map((id) => contentsService.getContentById(id))
+            );
+
+            fetchedItems = fetched
+              .filter((result) => result.status === 'fulfilled' && result.value?.id)
+              .map((result) => ({
+                id: result.value.id,
+                content_id: result.value.id,
+                title: result.value.title || t('common.unknownTitle'),
+                author: result.value.author || t('common.unknownAuthor'),
+                cover_url: result.value.cover_url || null,
+                content_type: result.value.content_type || null,
+                format: result.value.format || null,
+                progress_percent: 0,
+              }));
+          }
+
+          const purchasedItems = uniqueContentIds
+            .map((id) => knownItems.get(String(id)) || fetchedItems.find((item) => String(item.id) === String(id)))
+            .filter(Boolean);
+
+          if (alive) setPurchased(purchasedItems);
+        }
+
       } catch (err) {
         console.error('Failed to load My List data:', err);
       }
@@ -254,13 +306,15 @@ export default function MyListPage() {
     { key: 'favoris', label: t('myList.favorites'), icon: <FavoriteOutlined fontSize="small" /> },
     { key: 'en_cours', label: t('myList.inProgress'), icon: <PlayCircleOutlineOutlined fontSize="small" /> },
     { key: 'termines', label: t('myList.completed'), icon: <CheckCircleOutlined fontSize="small" /> },
+    { key: 'achats', label: i18n.language?.startsWith('fr') ? 'Livres achetés' : 'Purchased books', icon: <MenuBookOutlined fontSize="small" /> },
   ];
 
   const allItems = useMemo(() => {
     if (activeFilter === 'en_cours') return inProgress;
     if (activeFilter === 'termines') return completed;
+    if (activeFilter === 'achats') return purchased;
     return favorites;
-  }, [activeFilter, favorites, inProgress, completed]);
+  }, [activeFilter, favorites, inProgress, completed, purchased]);
 
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -511,7 +565,13 @@ export default function MyListPage() {
           <Box>
             <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', mb: 2, gap: 1 }}>
               <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: textMain }}>
-                {activeFilter === 'termines' ? t('myList.completed') : activeFilter === 'en_cours' ? t('myList.inProgress') : t('myList.favorites')}
+                {activeFilter === 'termines'
+                  ? t('myList.completed')
+                  : activeFilter === 'en_cours'
+                    ? t('myList.inProgress')
+                    : activeFilter === 'achats'
+                      ? (i18n.language?.startsWith('fr') ? 'Livres achetés' : 'Purchased books')
+                      : t('myList.favorites')}
               </Typography>
               <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: primary }}>
                 {visibleItems.length} {t(visibleItems.length > 1 ? 'myList.titlePlural' : 'myList.titleSingular')}

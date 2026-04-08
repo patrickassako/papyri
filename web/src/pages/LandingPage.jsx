@@ -32,6 +32,7 @@ import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
+import papyriFooterLogo from '../assets/papyri-logo-header.png';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 function shuffle(arr) {
@@ -709,9 +710,9 @@ export default function LandingPage() {
               <Box sx={{ mb: 2.5 }}>
                 <Box
                   component="img"
-                  src={papyriLogo}
+                  src={papyriFooterLogo}
                   alt="Papyri"
-                  sx={{ height: 44, objectFit: 'contain', objectPosition: 'left center', display: 'block', filter: 'brightness(0) invert(1)' }}
+                  sx={{ width: 150, maxWidth: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
                 />
               </Box>
               <Typography sx={{ lineHeight: 1.75, fontSize: '0.875rem', maxWidth: 280 }}>

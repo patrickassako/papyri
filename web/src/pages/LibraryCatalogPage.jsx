@@ -48,7 +48,12 @@ export default function LibraryCatalogPage() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [contentType, setContentType] = useState('');
+  const [language, setLanguage] = useState('');
+  const [category, setCategory] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [categories, setCategories] = useState([]);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const activeFiltersCount = [contentType, language, category].filter(Boolean).length;
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +102,23 @@ export default function LibraryCatalogPage() {
 
   useEffect(() => {
     let alive = true;
+
+    const loadCategories = async () => {
+      try {
+        const data = await contentsService.getCategories();
+        if (!alive) return;
+        setCategories(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load user catalog categories:', err);
+      }
+    };
+
+    loadCategories();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
     const loadContents = async () => {
       setLoading(true);
       setError('');
@@ -104,9 +126,11 @@ export default function LibraryCatalogPage() {
         const response = await contentsService.getContents({
           page: 1,
           limit: 60,
-          sort: 'newest',
-          order: 'desc',
+          sort: sortBy,
+          order: sortBy === 'title' ? 'asc' : 'desc',
           ...(contentType ? { content_type: contentType } : {}),
+          ...(language ? { language } : {}),
+          ...(category ? { category } : {}),
         });
         if (!alive) return;
         setItems(Array.isArray(response.data) ? response.data : []);
@@ -120,7 +144,7 @@ export default function LibraryCatalogPage() {
 
     loadContents();
     return () => { alive = false; };
-  }, [contentType]);
+  }, [category, contentType, language, sortBy, t]);
 
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -168,18 +192,66 @@ export default function LibraryCatalogPage() {
               />
             </Box>
 
-            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220 } }}>
-              <InputLabel id="user-catalog-type-label">{t('libraryCatalog.typeLabel')}</InputLabel>
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220, md: 180 } }}>
+              <InputLabel id="user-catalog-type-label">{t('catalog.format')}</InputLabel>
               <Select
                 labelId="user-catalog-type-label"
                 value={contentType}
-                label={t('libraryCatalog.typeLabel')}
+                label={t('catalog.format')}
                 onChange={(e) => setContentType(e.target.value)}
                 sx={{ borderRadius: '12px', bgcolor: '#fff' }}
               >
                 <MenuItem value="">{t('libraryCatalog.allContents')}</MenuItem>
                 <MenuItem value="ebook">{t('libraryCatalog.ebooks')}</MenuItem>
                 <MenuItem value="audiobook">{t('libraryCatalog.audiobooks')}</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220, md: 180 } }}>
+              <InputLabel id="user-catalog-language-label">{t('catalog.language')}</InputLabel>
+              <Select
+                labelId="user-catalog-language-label"
+                value={language}
+                label={t('catalog.language')}
+                onChange={(e) => setLanguage(e.target.value)}
+                sx={{ borderRadius: '12px', bgcolor: '#fff' }}
+              >
+                <MenuItem value="">{t('catalog.allLanguages')}</MenuItem>
+                <MenuItem value="fr">Français</MenuItem>
+                <MenuItem value="en">English</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220, md: 220 } }}>
+              <InputLabel id="user-catalog-category-label">{t('catalog.category')}</InputLabel>
+              <Select
+                labelId="user-catalog-category-label"
+                value={category}
+                label={t('catalog.category')}
+                onChange={(e) => setCategory(e.target.value)}
+                sx={{ borderRadius: '12px', bgcolor: '#fff' }}
+              >
+                <MenuItem value="">{t('catalog.allCategories')}</MenuItem>
+                {categories.map((cat) => (
+                  <MenuItem key={cat.id} value={cat.slug}>
+                    {cat.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220, md: 180 } }}>
+              <InputLabel id="user-catalog-sort-label">{t('catalog.sortBy')}</InputLabel>
+              <Select
+                labelId="user-catalog-sort-label"
+                value={sortBy}
+                label={t('catalog.sortBy')}
+                onChange={(e) => setSortBy(e.target.value)}
+                sx={{ borderRadius: '12px', bgcolor: '#fff' }}
+              >
+                <MenuItem value="newest">{t('catalog.sortNewest')}</MenuItem>
+                <MenuItem value="title">{t('catalog.sortAlpha')}</MenuItem>
+                <MenuItem value="popular">{t('catalog.sortPopular')}</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -216,6 +288,33 @@ export default function LibraryCatalogPage() {
               );
             })}
           </Box>
+
+          {activeFiltersCount > 0 && (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 3 }}>
+              <Typography sx={{ fontSize: '0.8rem', color: textMuted, fontWeight: 600 }}>
+                {t('catalog.filterBy')}
+              </Typography>
+              <Box
+                onClick={() => {
+                  setContentType('');
+                  setLanguage('');
+                  setCategory('');
+                }}
+                sx={{
+                  px: 1.25,
+                  py: 0.7,
+                  borderRadius: '999px',
+                  bgcolor: `${tokens.colors.primary}18`,
+                  color: tokens.colors.primary,
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {activeFiltersCount}
+              </Box>
+            </Box>
+          )}
 
           {error ? <Alert severity="warning" sx={{ mb: 3 }}>{error}</Alert> : null}
 
