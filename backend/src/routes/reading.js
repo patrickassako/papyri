@@ -931,6 +931,24 @@ router.get('/api/reading/:content_id/chapters/:chapter_id/file-url', verifyJWT, 
       });
     }
 
+    const fallbackChapterMatch = /^ch-(\d+)$/.exec(String(chapterId || ''));
+    if (chapterId === 'intro' || fallbackChapterMatch) {
+      const signedUrl = await contentsService.generateSignedUrl(
+        accessContext.content.file_key,
+        3600,
+        'audiobook',
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          chapter_id: chapterId,
+          url: signedUrl,
+          expires_in: 3600,
+        },
+      });
+    }
+
     let { data: chapter, error: chapterError } = await supabaseAdmin
       .from('audiobook_chapters')
       .select('id, parent_content_id, chapter_file_key, chapter_format')
