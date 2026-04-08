@@ -82,7 +82,22 @@ export default function UserSpaceSidebar({
     >
       {/* Logo */}
       <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Box component="img" src={papyriLogo} alt="Papyri" sx={{ height: 36, objectFit: 'contain' }} />
+        <Box
+          component="button"
+          type="button"
+          onClick={() => navigate('/')}
+          aria-label={t('sidebar.visitSite')}
+          sx={{
+            border: 0,
+            bgcolor: 'transparent',
+            p: 0,
+            m: 0,
+            lineHeight: 0,
+            cursor: 'pointer',
+          }}
+        >
+          <Box component="img" src={papyriLogo} alt="Papyri" sx={{ height: 36, objectFit: 'contain' }} />
+        </Box>
       </Box>
 
       <Box sx={{ p: 3, textAlign: 'center', borderBottom: `1px solid ${tokens.colors.surfaces.light.variant}`, position: 'relative' }}>

@@ -1010,9 +1010,6 @@ export default function EReaderPage() {
     if (mobileHideTimerRef.current) {
       clearTimeout(mobileHideTimerRef.current);
     }
-    mobileHideTimerRef.current = window.setTimeout(() => {
-      setMobileChromeVisible(false);
-    }, 2600);
   }, []);
 
   useEffect(() => {
@@ -1022,13 +1019,8 @@ export default function EReaderPage() {
     const apply = () => {
       isMobileViewportRef.current = mq.matches;
       isCoarsePointerRef.current = coarseMq.matches;
-      const shouldAutoHideChrome = mq.matches && coarseMq.matches;
-      if (!shouldAutoHideChrome) {
-        setMobileChromeVisible(true);
-        if (mobileHideTimerRef.current) clearTimeout(mobileHideTimerRef.current);
-      } else {
-        bumpMobileChromeVisibility();
-      }
+      setMobileChromeVisible(true);
+      if (mobileHideTimerRef.current) clearTimeout(mobileHideTimerRef.current);
     };
     apply();
     mq.addEventListener?.('change', apply);
@@ -2477,63 +2469,66 @@ export default function EReaderPage() {
         height: 44,
         transition: 'opacity 0.18s ease, visibility 0.18s ease',
       }}>
-        <Button
-          onClick={goPrev}
-          disabled={!canNavigateEpub}
-          startIcon={<ChevronLeft size={14} />}
-          size="small"
-          sx={{
-            flexShrink: 0,
-            color: t.text,
-            bgcolor: 'rgba(255,255,255,0.07)',
-            borderRadius: '6px',
-            px: 1.2,
-            py: 0.4,
-            minWidth: 90,
-            fontWeight: 600,
-            fontSize: '0.75rem',
-            textTransform: 'none',
-            border: '1px solid rgba(255,255,255,0.1)',
-            '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
-            '&.Mui-disabled': { opacity: 0.25, color: t.text },
-          }}
-        >
-          Précédent
-        </Button>
         <Slider
           value={sliderValue}
           onChange={handleProgressChange}
           onChangeCommitted={handleProgressCommit}
           sx={{
+            flex: 1,
             color: primary,
             mx: 0.5,
             '& .MuiSlider-thumb': { width: 12, height: 12 },
             '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.12)' },
           }}
         />
-        <Button
-          onClick={goNext}
-          disabled={!canNavigateEpub}
-          endIcon={<ChevronRight size={14} />}
-          size="small"
-          sx={{
-            flexShrink: 0,
-            color: t.text,
-            bgcolor: 'rgba(255,255,255,0.07)',
-            borderRadius: '6px',
-            px: 1.2,
-            py: 0.4,
-            minWidth: 90,
-            fontWeight: 600,
-            fontSize: '0.75rem',
-            textTransform: 'none',
-            border: '1px solid rgba(255,255,255,0.1)',
-            '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
-            '&.Mui-disabled': { opacity: 0.25, color: t.text },
-          }}
-        >
-          Suivant
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+          <Button
+            onClick={goPrev}
+            disabled={!canNavigateEpub}
+            startIcon={<ChevronLeft size={14} />}
+            size="small"
+            sx={{
+              flexShrink: 0,
+              color: t.text,
+              bgcolor: 'rgba(255,255,255,0.07)',
+              borderRadius: '6px',
+              px: 1.2,
+              py: 0.4,
+              minWidth: 90,
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              border: '1px solid rgba(255,255,255,0.1)',
+              '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+              '&.Mui-disabled': { opacity: 0.25, color: t.text },
+            }}
+          >
+            Précédent
+          </Button>
+          <Button
+            onClick={goNext}
+            disabled={!canNavigateEpub}
+            endIcon={<ChevronRight size={14} />}
+            size="small"
+            sx={{
+              flexShrink: 0,
+              color: t.text,
+              bgcolor: 'rgba(255,255,255,0.07)',
+              borderRadius: '6px',
+              px: 1.2,
+              py: 0.4,
+              minWidth: 90,
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              border: '1px solid rgba(255,255,255,0.1)',
+              '&:hover': { bgcolor: `${primary}28`, borderColor: primary, color: primary },
+              '&.Mui-disabled': { opacity: 0.25, color: t.text },
+            }}
+          >
+            Suivant
+          </Button>
+        </Box>
       </Box>
     </Box>
   );

@@ -573,7 +573,7 @@ export default function ContentDetailPage() {
   }
 
   return (
-    <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh', color: '#1c160d' }}>
+    <Box sx={{ bgcolor: '#fcfaf8', minHeight: '100vh', color: '#1c160d', overflowX: 'hidden' }}>
       <CurrencyFloatingSelector />
       <Snackbar
         open={lockLostNoticeOpen}
@@ -596,7 +596,7 @@ export default function ContentDetailPage() {
         : <PublicHeader activeKey="catalogue" isAuthenticated={false} background="#fcfaf8" />
       }
 
-      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 5 } }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 5 }, overflowX: 'hidden' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#9c7e49', fontSize: { xs: '0.82rem', md: '0.95rem' }, mb: { xs: 2, md: 4 }, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: 'inherit', cursor: 'pointer' }} onClick={() => navigate('/catalogue')}>
             Bibliotheque
@@ -723,7 +723,7 @@ export default function ContentDetailPage() {
             </Box>
           </Box>
 
-          <Box>
+          <Box sx={{ minWidth: 0, overflowX: 'hidden' }}>
             <Typography
               sx={{
                 fontFamily: 'Newsreader, Playfair Display, Georgia, serif',
@@ -731,13 +731,15 @@ export default function ContentDetailPage() {
                 fontSize: { xs: '1.8rem', sm: '2.25rem', md: '4rem' },
                 letterSpacing: '-0.02em',
                 lineHeight: 1.05,
-                maxWidth: '100%'
+                maxWidth: '100%',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
               }}
             >
               {content.title}
             </Typography>
 
-            <Typography sx={{ mt: 1.6, color: '#e6970c', fontSize: { xs: '1.1rem', md: '1.45rem' }, fontFamily: 'Newsreader, serif', fontWeight: 500 }}>
+            <Typography sx={{ mt: 1.6, color: '#e6970c', fontSize: { xs: '1.1rem', md: '1.45rem' }, fontFamily: 'Newsreader, serif', fontWeight: 500, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
               Par {content.author}
             </Typography>
 
@@ -819,7 +821,7 @@ export default function ContentDetailPage() {
                     return (
                       <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
+                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                           {isSubscriptionBook ? t('content.orBuyIt') : t('content.subscriberPrice')}:{' '}
                           <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
                           {'  '}
@@ -917,7 +919,7 @@ export default function ContentDetailPage() {
 
             <Box sx={{ mt: 3.3 }}>
               <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 0.95 }}>Synopsis</Typography>
-              <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740, whiteSpace: 'pre-line' }}>
+              <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740, whiteSpace: 'pre-line', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                 {content.description || 'Aucune description disponible pour ce livre.'}
               </Typography>
             </Box>
@@ -938,7 +940,7 @@ export default function ContentDetailPage() {
                 <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#e2d6c2', border: '2px solid #f29e0d' }} />
                 <Box>
                   <Typography sx={{ fontSize: '0.62rem', letterSpacing: '0.12em', color: '#9c7e49', fontWeight: 700 }}>VERSION AUDIO</Typography>
-                  <Typography sx={{ fontSize: '1.14rem', fontWeight: 700 }}>
+                  <Typography sx={{ fontSize: '1.14rem', fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                     Narrateur: {content.narrator || 'Non renseigne'}
                   </Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49' }}>Duree: {formatDuration(content.duration_seconds)}</Typography>
@@ -947,7 +949,7 @@ export default function ContentDetailPage() {
             )}
 
             <Box sx={{ mt: 3, maxWidth: 740 }}>
-              <Typography sx={{ color: '#9c7e49', fontSize: '0.84rem' }}>
+              <Typography sx={{ color: '#9c7e49', fontSize: '0.84rem', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                 Publication: {formatDate(content.published_at)}
                 {content.rights_holder?.name ? ` - Editeur: ${content.rights_holder.name}` : ''}
               </Typography>

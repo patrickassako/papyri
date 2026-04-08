@@ -300,7 +300,6 @@ export default function PdfReaderPage() {
   function revealHeader() {
     setHeaderVisible(true);
     clearTimeout(headerTimerRef.current);
-    headerTimerRef.current = setTimeout(() => setHeaderVisible(false), 3000);
   }
 
   useEffect(() => {

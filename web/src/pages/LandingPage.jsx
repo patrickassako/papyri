@@ -310,14 +310,46 @@ export default function LandingPage() {
                 <Typography sx={{ fontSize: '1.1rem', lineHeight: 1.75, color: 'rgba(29,22,12,0.72)', mb: 4, maxWidth: 520 }}>
                   {t('landing.heroDesc')}
                 </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, minWidth: 0 }}>
                   <Button variant="contained" size="large" endIcon={<ArrowRight />}
-                    sx={{ bgcolor: tokens.colors.primary, px: 3.5, py: 1.5, fontSize: '1rem', fontWeight: 700, textTransform: 'none', boxShadow: '0 8px 24px rgba(181,101,29,0.3)', borderRadius: 2, '&:hover': { bgcolor: '#9a5418', transform: 'translateY(-2px)', boxShadow: '0 12px 32px rgba(181,101,29,0.35)' }, transition: 'all 0.25s' }}
+                    sx={{
+                      bgcolor: tokens.colors.primary,
+                      px: { xs: 2, sm: 3.5 },
+                      py: { xs: 1.2, sm: 1.5 },
+                      fontSize: { xs: '0.9rem', sm: '1rem' },
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      boxShadow: '0 8px 24px rgba(181,101,29,0.3)',
+                      borderRadius: 2,
+                      minWidth: { xs: 'calc(50% - 6px)', sm: 'auto' },
+                      maxWidth: '100%',
+                      lineHeight: 1.2,
+                      whiteSpace: 'normal',
+                      textAlign: 'center',
+                      '&:hover': { bgcolor: '#9a5418', transform: 'translateY(-2px)', boxShadow: '0 12px 32px rgba(181,101,29,0.35)' },
+                      transition: 'all 0.25s'
+                    }}
                     onClick={() => navigate('/register')}>
                     {t('landing.heroCta')}
                   </Button>
                   <Button variant="outlined" size="large"
-                    sx={{ px: 3.5, py: 1.5, fontSize: '1rem', fontWeight: 700, textTransform: 'none', color: '#1d160c', borderColor: 'rgba(29,22,12,0.25)', borderRadius: 2, bgcolor: 'rgba(255,255,255,0.6)', '&:hover': { bgcolor: 'white', borderColor: 'rgba(29,22,12,0.4)' } }}
+                    sx={{
+                      px: { xs: 2, sm: 3.5 },
+                      py: { xs: 1.2, sm: 1.5 },
+                      fontSize: { xs: '0.9rem', sm: '1rem' },
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      color: '#1d160c',
+                      borderColor: 'rgba(29,22,12,0.25)',
+                      borderRadius: 2,
+                      bgcolor: 'rgba(255,255,255,0.6)',
+                      minWidth: { xs: 'calc(50% - 6px)', sm: 'auto' },
+                      maxWidth: '100%',
+                      lineHeight: 1.2,
+                      whiteSpace: 'normal',
+                      textAlign: 'center',
+                      '&:hover': { bgcolor: 'white', borderColor: 'rgba(29,22,12,0.4)' }
+                    }}
                     onClick={() => navigate('/catalogue')}>
                     {t('landing.heroCta2')}
                   </Button>
@@ -642,7 +674,24 @@ export default function LandingPage() {
                   </Box>
                 </Box>
                 <Button variant="contained" size="large"
-                  sx={{ bgcolor: tokens.colors.secondary, color: '#1d160c', px: 5, py: 1.8, fontSize: '1.05rem', fontWeight: 800, textTransform: 'none', borderRadius: 2.5, boxShadow: '0 8px 32px rgba(212,160,23,0.4)', '&:hover': { bgcolor: '#c49014', transform: 'translateY(-2px)' }, transition: 'all 0.25s' }}
+                  sx={{
+                    bgcolor: tokens.colors.secondary,
+                    color: '#1d160c',
+                    px: { xs: 2.4, sm: 5 },
+                    py: { xs: 1.3, sm: 1.8 },
+                    fontSize: { xs: '0.95rem', sm: '1.05rem' },
+                    fontWeight: 800,
+                    textTransform: 'none',
+                    borderRadius: 2.5,
+                    boxShadow: '0 8px 32px rgba(212,160,23,0.4)',
+                    minWidth: { xs: '100%', sm: 'auto' },
+                    maxWidth: '100%',
+                    lineHeight: 1.2,
+                    whiteSpace: 'normal',
+                    textAlign: 'center',
+                    '&:hover': { bgcolor: '#c49014', transform: 'translateY(-2px)' },
+                    transition: 'all 0.25s'
+                  }}
                   onClick={() => navigate('/register')}>
                   {t('landing.heroCta3')}
                 </Button>

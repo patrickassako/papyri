@@ -27,6 +27,15 @@ export default function PublicHeader({
     cursor: isActive ? 'default' : 'pointer',
     color: isActive ? primary : '#1c160d',
     fontWeight: isActive ? 700 : 400,
+    px: 1.25,
+    py: 0.7,
+    borderRadius: '999px',
+    transition: 'color 0.18s ease, background-color 0.18s ease, transform 0.18s ease',
+    '&:hover': isActive ? undefined : {
+      color: primary,
+      bgcolor: 'rgba(244,168,37,0.10)',
+      transform: 'translateY(-1px)',
+    },
   });
 
   return (
@@ -39,13 +48,13 @@ export default function PublicHeader({
         zIndex: 30,
       }}
     >
-      <Container maxWidth="lg" sx={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Container maxWidth="lg" sx={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.2, minWidth: 0 }}>
         <Box
           component="img"
           src={papyriWordmark}
           alt="Papyri"
           onClick={() => navigate('/')}
-          sx={{ width: '150px', height: '50px', objectFit: 'contain', objectPosition: 'left center', display: 'block', cursor: 'pointer' }}
+          sx={{ width: { xs: 118, sm: 136, md: 150 }, height: { xs: 40, md: 50 }, objectFit: 'contain', objectPosition: 'left center', display: 'block', cursor: 'pointer', flexShrink: 1, minWidth: 0 }}
         />
 
         <Stack direction="row" spacing={3} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' } }}>
@@ -64,12 +73,25 @@ export default function PublicHeader({
           <LanguageToggle variant="icon" />
         </Stack>
 
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flexShrink: 0 }}>
           <Box sx={{ display: { xs: 'block', md: 'none' } }}>
             <LanguageToggle variant="icon" />
           </Box>
           <Button
-            sx={{ bgcolor: primary, color: '#111', borderRadius: '9px', fontWeight: 800, '&:hover': { bgcolor: '#e29d22' } }}
+            sx={{
+              bgcolor: primary,
+              color: '#111',
+              borderRadius: '9px',
+              fontWeight: 800,
+              minWidth: 0,
+              px: { xs: 1.35, sm: 1.8 },
+              py: { xs: 0.7, sm: 0.9 },
+              fontSize: { xs: '0.78rem', sm: '0.86rem' },
+              lineHeight: 1.15,
+              whiteSpace: 'normal',
+              textAlign: 'center',
+              '&:hover': { bgcolor: '#e29d22' },
+            }}
             onClick={() => navigate(isAuthenticated ? authenticatedCtaPath : '/register')}
           >
             {isAuthenticated ? t('publicNav.mySpace') : t('publicNav.register')}
