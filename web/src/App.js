@@ -56,6 +56,7 @@ const AdminBookDetailPage = lazy(() => import('./pages/admin/AdminBookDetailPage
 const AdminContentValidationPage = lazy(() => import('./pages/admin/AdminContentValidationPage'));
 const AdminPayoutsPage = lazy(() => import('./pages/admin/AdminPayoutsPage'));
 const AdminCreateContentPage = lazy(() => import('./pages/admin/AdminCreateContentPage'));
+const AdminEditContentPage = lazy(() => import('./pages/admin/AdminEditContentPage'));
 const AdminBooksModulePage = lazy(() => import('./pages/admin/AdminBooksModulePage'));
 const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptionsPage'));
 const AdminPublisherBooksListPage = lazy(() => import('./pages/admin/AdminPublisherBooksListPage'));
@@ -510,6 +511,14 @@ function App() {
               element={
                 <ProtectedAdminRoute>
                   <AdminPublisherLayout><AdminBookContentDetailPage /></AdminPublisherLayout>
+                </ProtectedAdminRoute>
+              }
+            />
+            <Route
+              path="/admin/books/content/:contentId/edit"
+              element={
+                <ProtectedAdminRoute>
+                  <AdminPublisherLayout><AdminEditContentPage /></AdminPublisherLayout>
                 </ProtectedAdminRoute>
               }
             />

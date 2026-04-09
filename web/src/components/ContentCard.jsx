@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Headphones, Book } from 'lucide-react';
 import { useCurrency } from '../hooks/useCurrency';
+import { stripRichText } from '../utils/richText';
 
 /**
  * Carte de contenu pour le catalogue
@@ -18,6 +19,7 @@ import { useCurrency } from '../hooks/useCurrency';
 export default function ContentCard({ content, hasActiveSubscription = false }) {
   const navigate = useNavigate();
   const { formatFrom } = useCurrency();
+  const plainDescription = stripRichText(content.description);
 
   const handleClick = () => {
     navigate(`/catalogue/${content.id}`);
@@ -122,7 +124,7 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
               mb: 1
             }}
           >
-            {content.description}
+            {plainDescription}
           </Typography>
 
           {content.content_type === 'audiobook' && content.duration_seconds && (

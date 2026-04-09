@@ -33,6 +33,7 @@ import {
   DialogContentText,
   DialogActions,
   CircularProgress,
+  TextField,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
@@ -53,8 +54,16 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import BusinessIcon from '@mui/icons-material/Business';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import PublicIcon from '@mui/icons-material/Public';
+import PublishIcon from '@mui/icons-material/Publish';
+import UnpublishedIcon from '@mui/icons-material/Unpublished';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
+import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
+import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import { stripRichText } from '../../utils/richText';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -101,6 +110,7 @@ const ACCESS_MAP = {
   free:         { label: 'Gratuit',     icon: <LockOpenIcon /> },
   subscription: { label: 'Abonnement', icon: <LockIcon /> },
   paid:         { label: 'Payant',      icon: <AttachMoneyIcon /> },
+  subscription_or_paid: { label: 'Abonnement ou achat', icon: <AttachMoneyIcon /> },
 };
 
 // ── Meta Tag ─────────────────────────────────────────────────
@@ -195,6 +205,20 @@ export default function AdminBookContentDetailPage() {
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [moderating, setModerating] = useState(false);
+  const [moderationDialog, setModerationDialog] = useState({ open: false, action: null });
+  const [moderationReason, setModerationReason] = useState('');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    author: '',
+    language: 'fr',
+    access_type: 'subscription',
+    price_cents: '',
+    description: '',
+  });
 
   // ── Fetch content (single optimized endpoint) ─────────────
   useEffect(() => {
@@ -287,6 +311,100 @@ export default function AdminBookContentDetailPage() {
     }
   }
 
+  async function handleTogglePublish() {
+    setPublishing(true);
+    setActionError(null);
+    try {
+      const res = await authFetch(`${API}/api/admin/books-overview/content/${contentId}/publish`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Erreur');
+      setContent(prev => prev ? ({ ...prev, ...data.content }) : prev);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  function openModeration(action) {
+    setModerationReason('');
+    setModerationDialog({ open: true, action });
+  }
+
+  async function handleModeration() {
+    const action = moderationDialog.action;
+    setModerating(true);
+    setActionError(null);
+    try {
+      const res = await authFetch(`${API}/api/admin/books-overview/content/${contentId}/validation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason: moderationReason }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Erreur');
+      setContent(prev => prev ? ({
+        ...prev,
+        ...data.content,
+        publisher_book: prev.publisher_book ? { ...prev.publisher_book, ...data.publisher_book } : data.publisher_book,
+      }) : prev);
+      setModerationDialog({ open: false, action: null });
+      setModerationReason('');
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setModerating(false);
+    }
+  }
+
+  function openEditDialog() {
+    setEditForm({
+      title: content?.title || '',
+      author: content?.author || '',
+      language: content?.language || 'fr',
+      access_type: content?.access_type || 'subscription',
+      price_cents: content?.price_cents ? String(content.price_cents / 100) : '',
+      description: content?.description || '',
+    });
+    setEditDialogOpen(true);
+  }
+
+  async function handleSaveEdit() {
+    setSavingEdit(true);
+    setActionError(null);
+    try {
+      const needsPrice = editForm.access_type === 'paid' || editForm.access_type === 'subscription_or_paid';
+      const normalizedPriceCents = needsPrice ? Math.round(Number(editForm.price_cents || 0) * 100) : 0;
+
+      if (!editForm.title.trim()) throw new Error('Le titre est requis.');
+      if (needsPrice && normalizedPriceCents <= 0) throw new Error('Un prix supérieur à 0 est requis.');
+
+      const res = await authFetch(`${API}/api/contents/${contentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editForm.title.trim(),
+          author: editForm.author.trim() || null,
+          language: editForm.language || 'fr',
+          access_type: editForm.access_type,
+          is_purchasable: needsPrice,
+          price_cents: normalizedPriceCents,
+          price_currency: needsPrice ? (content?.price_currency || 'EUR') : (content?.price_currency || 'EUR'),
+          description: editForm.description || null,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data?.error?.message || data?.error || 'Erreur');
+
+      setContent(prev => prev ? { ...prev, ...data.data } : prev);
+      setEditDialogOpen(false);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   // ── Derived ───────────────────────────────────────────────
   const title = content?.title || '';
   const author = content?.author || '';
@@ -298,6 +416,19 @@ export default function AdminBookContentDetailPage() {
   const typeIcon = contentType === 'audiobook' ? <HeadphonesIcon /> : contentType === 'both' ? <AutoStoriesIcon /> : <MenuBookIcon />;
   const validCfg = VALIDATION_MAP[validationStatus] || null;
   const accessCfg = ACCESS_MAP[content?.access_type] || null;
+  const needsReason = moderationDialog.action === 'reject' || moderationDialog.action === 'pause';
+  const moderationTitles = {
+    approve: 'Approuver ce contenu',
+    reject: 'Rejeter ce contenu',
+    pause: 'Mettre ce contenu en pause',
+    pending: 'Remettre ce contenu en attente',
+  };
+  const moderationDescriptions = {
+    approve: 'Le contenu sera approuvé et publié immédiatement.',
+    reject: 'Le contenu sera rejeté. Le motif sera enregistré pour le suivi éditeur.',
+    pause: 'Le contenu sera dépublié et passé en pause. Un motif est requis.',
+    pending: 'Le contenu repassera dans la file de validation.',
+  };
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
@@ -376,6 +507,23 @@ export default function AdminBookContentDetailPage() {
             >
               <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Ouvrir dans l'éditeur</Box>
               <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Éditeur</Box>
+              </Button>
+          )}
+
+          {!loadingContent && content && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={openEditDialog}
+              sx={{
+                borderRadius: '10px',
+                textTransform: 'none',
+                fontWeight: 700,
+                px: 2,
+                ml: 0.5,
+              }}
+            >
+              Modification rapide
             </Button>
           )}
 
@@ -503,6 +651,122 @@ export default function AdminBookContentDetailPage() {
         </DialogActions>
       </Dialog>
 
+      <Dialog
+        open={moderationDialog.open}
+        onClose={() => setModerationDialog({ open: false, action: null })}
+        PaperProps={{ sx: { borderRadius: '16px', p: 1, width: '100%', maxWidth: 520 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {moderationTitles[moderationDialog.action] || 'Action de modération'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: needsReason ? 2 : 0 }}>
+            {moderationDescriptions[moderationDialog.action] || 'Confirme cette action.'}
+          </DialogContentText>
+          {needsReason && (
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="Motif"
+              value={moderationReason}
+              onChange={(e) => setModerationReason(e.target.value)}
+            />
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setModerationDialog({ open: false, action: null })} sx={{ textTransform: 'none', color: C.textSecondary }}>
+            Annuler
+          </Button>
+          <Button
+            onClick={handleModeration}
+            disabled={moderating || (needsReason && !moderationReason.trim())}
+            variant="contained"
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '10px', bgcolor: C.indigo, '&:hover': { bgcolor: '#1a2d47' } }}
+          >
+            {moderating ? 'En cours…' : 'Confirmer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        PaperProps={{ sx: { borderRadius: '16px', p: 1, width: '100%', maxWidth: 720 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Modification rapide
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mt: 1 }}>
+            <TextField
+              label="Titre"
+              value={editForm.title}
+              onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+              fullWidth
+              required
+            />
+            <TextField
+              label="Auteur"
+              value={editForm.author}
+              onChange={(e) => setEditForm(prev => ({ ...prev, author: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="Langue"
+              value={editForm.language}
+              onChange={(e) => setEditForm(prev => ({ ...prev, language: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              select
+              SelectProps={{ native: true }}
+              label="Accès"
+              value={editForm.access_type}
+              onChange={(e) => setEditForm(prev => ({ ...prev, access_type: e.target.value }))}
+              fullWidth
+            >
+              <option value="free">Gratuit</option>
+              <option value="subscription">Abonnement</option>
+              <option value="paid">Payant</option>
+              <option value="subscription_or_paid">Abonnement ou achat</option>
+            </TextField>
+            <TextField
+              label="Prix"
+              type="number"
+              inputProps={{ min: 0, step: '0.01' }}
+              value={editForm.price_cents}
+              onChange={(e) => setEditForm(prev => ({ ...prev, price_cents: e.target.value }))}
+              fullWidth
+              disabled={!(editForm.access_type === 'paid' || editForm.access_type === 'subscription_or_paid')}
+              helperText="Montant en unité monétaire, ex: 4.99"
+            />
+          </Box>
+          <TextField
+            sx={{ mt: 2 }}
+            label="Description"
+            value={editForm.description}
+            onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+            fullWidth
+            multiline
+            minRows={5}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditDialogOpen(false)} sx={{ textTransform: 'none', color: C.textSecondary }}>
+            Annuler
+          </Button>
+          <Button
+            onClick={handleSaveEdit}
+            disabled={savingEdit}
+            variant="contained"
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '10px', bgcolor: C.indigo, '&:hover': { bgcolor: '#1a2d47' } }}
+          >
+            {savingEdit ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {errorContent && (
         <Alert severity="error" sx={{ m: 2, borderRadius: '12px' }}>{errorContent}</Alert>
       )}
@@ -594,7 +858,7 @@ export default function AdminBookContentDetailPage() {
                     </>
                   ) : (
                     <Typography variant="body2" color={C.textSecondary} sx={{ lineHeight: 1.75, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {content.description}
+                      {stripRichText(content.description)}
                     </Typography>
                   )}
                 </Box>
@@ -627,6 +891,105 @@ export default function AdminBookContentDetailPage() {
               </Box>
             </Box>
           </Box>
+        </Card>
+
+        <Card sx={{ borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.07)', mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+              <Box>
+                <Typography variant="h6" fontWeight={800} color={C.textPrimary}>
+                  Outils de gestion
+                </Typography>
+                <Typography variant="body2" color={C.textSecondary}>
+                  Pilotage rapide du contenu, de sa publication et de son statut de validation.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(`/admin/books/content/${contentId}/edit`)}
+                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+                >
+                  Modification complète
+                </Button>
+                <Button
+                  component="a"
+                  href={`/catalogue/${contentId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="outlined"
+                  startIcon={<PublicIcon />}
+                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+                >
+                  Voir côté public
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={content?.is_published ? <UnpublishedIcon /> : <PublishIcon />}
+                  disabled={publishing || isArchived || (!!content?.publisher_book && validationStatus !== 'approved' && !content?.is_published)}
+                  onClick={handleTogglePublish}
+                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.green, '&:hover': { bgcolor: '#1e8449' } }}
+                >
+                  {publishing ? 'En cours…' : content?.is_published ? 'Dépublier' : 'Publier'}
+                </Button>
+              </Box>
+            </Box>
+
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Card variant="outlined" sx={{ borderRadius: '16px', borderColor: '#ece7dd', height: '100%' }}>
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Typography variant="subtitle1" fontWeight={700} color={C.textPrimary} sx={{ mb: 0.5 }}>
+                      Publication
+                    </Typography>
+                    <Typography variant="body2" color={C.textSecondary} sx={{ mb: 2 }}>
+                      Statut actuel: {content?.is_published ? 'Publié' : isArchived ? 'Archivé' : 'Non publié'}.
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Chip label={content?.is_published ? 'Publié' : 'Non publié'} size="small" sx={{ bgcolor: `${content?.is_published ? C.green : C.grey}18`, color: content?.is_published ? C.green : C.grey, fontWeight: 700 }} />
+                      {isArchived && <Chip label="Archivé" size="small" sx={{ bgcolor: `${C.orange}18`, color: C.orange, fontWeight: 700 }} />}
+                      {accessCfg && <Chip label={accessCfg.label} size="small" sx={{ bgcolor: `${C.indigo}12`, color: C.indigo, fontWeight: 700 }} />}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Card variant="outlined" sx={{ borderRadius: '16px', borderColor: '#ece7dd', height: '100%' }}>
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Typography variant="subtitle1" fontWeight={700} color={C.textPrimary} sx={{ mb: 0.5 }}>
+                      Validation éditeur
+                    </Typography>
+                    <Typography variant="body2" color={C.textSecondary} sx={{ mb: 2 }}>
+                      {content?.publisher_book
+                        ? `Statut actuel: ${validCfg?.label || validationStatus || '—'}.`
+                        : 'Ce contenu n’est pas rattaché à un workflow éditeur.'}
+                    </Typography>
+                    {content?.publisher_book ? (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        <Button variant="outlined" startIcon={<ThumbUpAltOutlinedIcon />} onClick={() => openModeration('approve')} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}>
+                          Approuver
+                        </Button>
+                        <Button variant="outlined" color="warning" startIcon={<PauseCircleOutlineIcon />} onClick={() => openModeration('pause')} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}>
+                          Mettre en pause
+                        </Button>
+                        <Button variant="outlined" color="error" startIcon={<BlockOutlinedIcon />} onClick={() => openModeration('reject')} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}>
+                          Rejeter
+                        </Button>
+                        <Button variant="outlined" startIcon={<PendingActionsIcon />} onClick={() => openModeration('pending')} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}>
+                          Remettre en attente
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Alert severity="info" sx={{ borderRadius: '12px' }}>
+                        Outils de validation non applicables sur un contenu orphelin.
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </CardContent>
         </Card>
 
         {/* ── Stats Row ──────────────────────────────────────── */}

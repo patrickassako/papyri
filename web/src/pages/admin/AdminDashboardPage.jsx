@@ -89,29 +89,36 @@ export default function AdminDashboardPage() {
   }, []);
 
   const s = stats;
+  const totalRevenue = s?.subscriptions?.totalRevenue ?? 0;
+  const currency = s?.subscriptions?.currency ?? 'XAF';
+  const publishedContents = s?.contents?.published ?? 0;
+  const newUsersThisMonth = s?.newUsersThisMonth ?? s?.users?.newThisMonth ?? 0;
+  const blockedUsers = s?.users?.blocked ?? 0;
+  const expiredSubscriptions = s?.subscriptions?.expired ?? 0;
+  const contentsWithoutRightsHolder = s?.contents?.noRightsHolder ?? 0;
   const attentionItems = s ? [
     {
       key: 'blocked-users',
       title: 'Comptes bloqués',
-      value: s.users.blocked,
-      tone: s.users.blocked > 0 ? C.red : '#9e9e9e',
-      description: s.users.blocked > 0 ? 'Des utilisateurs nécessitent une revue d’accès.' : 'Aucun blocage utilisateur actuellement.',
+      value: blockedUsers,
+      tone: blockedUsers > 0 ? C.red : '#9e9e9e',
+      description: blockedUsers > 0 ? 'Des utilisateurs nécessitent une revue d’accès.' : 'Aucun blocage utilisateur actuellement.',
       cta: { label: 'Voir les utilisateurs', onClick: () => navigate('/admin/users') },
     },
     {
       key: 'expired-subs',
       title: 'Abonnements expirés',
-      value: s.subscriptions.expired,
-      tone: s.subscriptions.expired > 0 ? C.or : '#9e9e9e',
-      description: s.subscriptions.expired > 0 ? 'Des comptes à relancer ou analyser côté churn.' : 'Aucun abonnement expiré à surveiller.',
+      value: expiredSubscriptions,
+      tone: expiredSubscriptions > 0 ? C.or : '#9e9e9e',
+      description: expiredSubscriptions > 0 ? 'Des comptes à relancer ou analyser côté churn.' : 'Aucun abonnement expiré à surveiller.',
       cta: { label: 'Voir les abonnements', onClick: () => navigate('/admin/subscriptions') },
     },
     {
       key: 'content-without-rights',
       title: 'Contenus sans ayant droit',
-      value: s.contents.noRightsHolder,
-      tone: s.contents.noRightsHolder > 0 ? C.red : '#9e9e9e',
-      description: s.contents.noRightsHolder > 0 ? 'Des contenus publiés manquent d’information contractuelle.' : 'Aucun contenu orphelin détecté.',
+      value: contentsWithoutRightsHolder,
+      tone: contentsWithoutRightsHolder > 0 ? C.red : '#9e9e9e',
+      description: contentsWithoutRightsHolder > 0 ? 'Des contenus publiés manquent d’information contractuelle.' : 'Aucun contenu orphelin détecté.',
       cta: { label: 'Voir le catalogue', onClick: () => navigate('/admin/books') },
     },
   ] : [];
@@ -145,9 +152,9 @@ export default function AdminDashboardPage() {
           ) : (
             <Grid container spacing={2}>
               {[
-                { label: 'Revenus agrégés', value: `${s.subscriptions.totalRevenue.toLocaleString('fr-FR')} ${s.subscriptions.currency}`, icon: <MonetizationOnOutlinedIcon sx={{ color: C.or }} /> },
-                { label: 'Catalogue publié', value: `${s.contents.published.toLocaleString('fr-FR')} contenus`, icon: <LibraryBooksOutlinedIcon sx={{ color: C.primary }} /> },
-                { label: 'Nouveaux utilisateurs', value: `+${s.users.newThisMonth.toLocaleString('fr-FR')} ce mois`, icon: <PersonAddOutlinedIcon sx={{ color: C.green }} /> },
+                { label: 'Revenus agrégés', value: `${totalRevenue.toLocaleString('fr-FR')} ${currency}`, icon: <MonetizationOnOutlinedIcon sx={{ color: C.or }} /> },
+                { label: 'Catalogue publié', value: `${publishedContents.toLocaleString('fr-FR')} contenus`, icon: <LibraryBooksOutlinedIcon sx={{ color: C.primary }} /> },
+                { label: 'Nouveaux utilisateurs', value: `+${newUsersThisMonth.toLocaleString('fr-FR')} ce mois`, icon: <PersonAddOutlinedIcon sx={{ color: C.green }} /> },
               ].map((item) => (
                 <Grid key={item.label} size={{ xs: 12, md: 4 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: '14px', bgcolor: '#fff', border: '1px solid #efe7da' }}>
@@ -274,7 +281,7 @@ export default function AdminDashboardPage() {
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <AdminStatCard loading={loading} icon={<PersonAddOutlinedIcon />} label="Nouveaux ce mois"
-            value={s?.users.newThisMonth} color={C.green} />
+            value={newUsersThisMonth} color={C.green} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <AdminStatCard loading={loading} icon={<BlockOutlinedIcon />} label="Comptes bloqués"
@@ -283,7 +290,7 @@ export default function AdminDashboardPage() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <AdminStatCard loading={loading} icon={<CreditCardOutlinedIcon />} label="Abonnements actifs"
             value={s?.subscriptions.active}
-            sub={s ? `${s.subscriptions.totalRevenue.toLocaleString('fr-FR')} ${s.subscriptions.currency} total` : undefined}
+            sub={s ? `${totalRevenue.toLocaleString('fr-FR')} ${currency} total` : undefined}
             color={C.or} />
         </Grid>
       </Grid>
@@ -334,7 +341,7 @@ export default function AdminDashboardPage() {
                   </Box>
                   <Box sx={{ textAlign: 'right' }}>
                     <Typography variant="h5" sx={{ fontWeight: 800, color: C.green }}>
-                      +{s.users.newThisMonth}
+                      +{newUsersThisMonth}
                     </Typography>
                     <Typography variant="caption" sx={{ color: '#999' }}>ce mois</Typography>
                   </Box>

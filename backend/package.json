@@ -44,6 +44,8 @@
     "music-metadata": "^11.12.3",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.3",
+    "pdf-parse": "^2.4.5",
+    "pdf-parse-v1": "npm:pdf-parse@^1.1.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.18.0",
     "session-file-store": "^1.5.0",

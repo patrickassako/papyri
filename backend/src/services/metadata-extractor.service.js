@@ -6,6 +6,18 @@
 const JSZip = require('jszip');
 const xml2js = require('xml2js');
 const mm = require('music-metadata');
+const pdfParseV1 = require('pdf-parse-v1');
+
+function ensureBuffer(input) {
+  if (Buffer.isBuffer(input)) return input;
+  if (ArrayBuffer.isView(input)) {
+    return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  }
+  if (input instanceof ArrayBuffer) {
+    return Buffer.from(input);
+  }
+  return Buffer.from(input || []);
+}
 
 // ─── EPUB ─────────────────────────────────────────────────────────────────────
 
@@ -15,6 +27,7 @@ const mm = require('music-metadata');
  * @returns {Promise<EpubMeta>}
  */
 async function extractEpubMetadata(buffer) {
+  buffer = ensureBuffer(buffer);
   const zip = await JSZip.loadAsync(buffer);
 
   // 1. Find OPF path via META-INF/container.xml
@@ -161,6 +174,7 @@ async function extractEpubMetadata(buffer) {
  * @returns {Promise<AudioMeta>}
  */
 async function extractAudioMetadata(buffer, mimeType) {
+  buffer = ensureBuffer(buffer);
   const metadata = await mm.parseBuffer(buffer, { mimeType, duration: true });
   const { common, format } = metadata;
 
@@ -190,6 +204,39 @@ async function extractAudioMetadata(buffer, mimeType) {
   };
 }
 
+async function extractPdfMetadata(buffer) {
+  buffer = ensureBuffer(buffer);
+  const parsed = await pdfParseV1(buffer);
+  const info = parsed?.info || {};
+  const metadata = parsed?.metadata?._metadata || {};
+  const rawText = String(parsed?.text || '').replace(/\s+/g, ' ').trim();
+
+  const title = info.Title || metadata['dc:title'] || metadata.title || null;
+  const author = info.Author || metadata['dc:creator'] || metadata.author || null;
+  const subject = info.Subject || metadata['dc:subject'] || null;
+  const description = rawText ? rawText.slice(0, 1200) : (subject || null);
+
+  let year = null;
+  const creationDate = info.CreationDate || metadata['xmp:createdate'] || metadata['dc:date'] || null;
+  if (creationDate) {
+    const match = String(creationDate).match(/(19|20)\d{2}/);
+    if (match) year = match[0];
+  }
+
+  return {
+    title,
+    author,
+    description,
+    language: null,
+    year,
+    pageCount: parsed?.numpages || null,
+    contentType: 'ebook',
+    format: 'pdf',
+    coverBuffer: null,
+    coverMime: null,
+  };
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
 /**
@@ -199,10 +246,15 @@ async function extractAudioMetadata(buffer, mimeType) {
  * @param {string} mimeType
  */
 async function extractMetadata(buffer, originalName, mimeType) {
+  buffer = ensureBuffer(buffer);
   const ext = originalName.split('.').pop().toLowerCase();
 
   if (mimeType === 'application/epub+zip' || ext === 'epub') {
     return extractEpubMetadata(buffer);
+  }
+
+  if (mimeType === 'application/pdf' || ext === 'pdf') {
+    return extractPdfMetadata(buffer);
   }
 
   const audioMimes = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/mp3', 'audio/x-mp3'];
@@ -214,4 +266,4 @@ async function extractMetadata(buffer, originalName, mimeType) {
   return { error: `Format non supporté: ${ext || mimeType}` };
 }
 
-module.exports = { extractMetadata, extractEpubMetadata, extractAudioMetadata };
+module.exports = { extractMetadata, extractEpubMetadata, extractAudioMetadata, extractPdfMetadata };

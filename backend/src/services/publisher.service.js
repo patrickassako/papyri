@@ -307,11 +307,14 @@ async function submitBook(publisherId, {
   accessType, priceCents,
   isDraft = false,
 }) {
+  const needsPrice = accessType === 'paid' || accessType === 'subscription_or_paid';
+  const normalizedPriceCents = needsPrice ? (Number(priceCents) || 0) : 0;
+  const ebookFormat = String(fileKey || '').toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub';
   // 'both' → crée deux entrées séparées (ebook + audiobook)
   const jobs = [];
 
   if (contentType === 'ebook' || contentType === 'both') {
-    jobs.push({ content_type: 'ebook', format: 'epub', file_key: fileKey || '', duration_seconds: null, hasChapters: false });
+    jobs.push({ content_type: 'ebook', format: ebookFormat, file_key: fileKey || '', duration_seconds: null, hasChapters: false });
   }
   if (contentType === 'audiobook' || contentType === 'both') {
     const hasChapters = Array.isArray(chapters) && chapters.length > 0;
@@ -347,7 +350,9 @@ async function submitBook(publisherId, {
         is_published:     false,
         publisher_id:     (publisherId && publisherId !== 'orphan') ? publisherId : null,
         access_type:      accessType  || 'subscription',
-        price_cents:      (accessType === 'paid' || accessType === 'subscription_or_paid') ? (Number(priceCents) || 0) : 0,
+        is_purchasable:   needsPrice,
+        price_cents:      normalizedPriceCents,
+        price_currency:   'EUR',
       })
       .select()
       .single();

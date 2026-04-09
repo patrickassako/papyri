@@ -12,6 +12,8 @@ import ArrowBackIcon          from '@mui/icons-material/ArrowBack';
 import AutoFixHighIcon        from '@mui/icons-material/AutoFixHigh';
 import InfoOutlinedIcon       from '@mui/icons-material/InfoOutlined';
 import tokens from '../../config/tokens';
+import RichTextEditor from '../../components/RichTextEditor';
+import { stripRichText } from '../../utils/richText';
 import {
   uploadCover, uploadContent, extractMetadata,
   submitBook, saveDraft, submitDraft,
@@ -480,11 +482,12 @@ export default function PublisherAddBookPage() {
               </MetaField>
 
               <MetaField extracted={autoExtracted.description}>
-                <TextField
-                  label="Description / Synopsis" value={meta.description}
-                  onChange={handleMetaChange('description')} fullWidth multiline rows={4}
+                <RichTextEditor
+                  value={meta.description}
+                  onChange={(nextValue) => setMeta((m) => ({ ...m, description: nextValue }))}
                   placeholder="Résumé du livre visible dans le catalogue…"
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  helperText="Mise en forme disponible: titres, gras, italique, listes et citation."
+                  minHeight={220}
                 />
               </MetaField>
 
@@ -601,7 +604,10 @@ export default function PublisherAddBookPage() {
                 <Typography variant="body2" sx={{ color: '#757575', mb: 1.5 }}>par {meta.author}</Typography>
                 {meta.description && (
                   <Typography variant="caption" sx={{ color: '#9E9E9E', display: 'block', mb: 1.5, lineHeight: 1.5 }}>
-                    {meta.description.substring(0, 180)}{meta.description.length > 180 ? '…' : ''}
+                    {(() => {
+                      const plainDescription = stripRichText(meta.description);
+                      return `${plainDescription.substring(0, 180)}${plainDescription.length > 180 ? '…' : ''}`;
+                    })()}
                   </Typography>
                 )}
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

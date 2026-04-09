@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyJWT, requireRole } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
+const publisherService = require('../services/publisher.service');
 
 const isAdmin = [verifyJWT, requireRole('admin')];
 
@@ -541,6 +542,103 @@ router.patch('/content/:contentId/archive', isAdmin, async (req, res) => {
   } catch (err) {
     console.error('[admin.books] PATCH /content/:id/archive error:', err);
     return res.status(500).json({ error: 'Erreur lors de l\'archivage.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /content/:contentId/publish
+// Toggle publication status. Archived contents cannot be published.
+// For publisher-managed books, publish requires approved validation.
+// ─────────────────────────────────────────────────────────────
+router.patch('/content/:contentId/publish', isAdmin, async (req, res) => {
+  try {
+    const { contentId } = req.params;
+
+    const { data: content, error: contentErr } = await supabaseAdmin
+      .from('contents')
+      .select('id, is_published, is_archived')
+      .eq('id', contentId)
+      .single();
+    if (contentErr || !content) return res.status(404).json({ error: 'Contenu introuvable.' });
+
+    const { data: pubBook, error: pubBookErr } = await supabaseAdmin
+      .from('publisher_books')
+      .select('id, validation_status')
+      .eq('content_id', contentId)
+      .maybeSingle();
+    if (pubBookErr) throw pubBookErr;
+
+    const nextPublished = !content.is_published;
+    if (nextPublished && content.is_archived) {
+      return res.status(400).json({ error: 'Un contenu archivé doit être désarchivé avant publication.' });
+    }
+    if (nextPublished && pubBook && pubBook.validation_status !== 'approved') {
+      return res.status(400).json({ error: 'Le contenu doit être approuvé avant publication.' });
+    }
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('contents')
+      .update({ is_published: nextPublished })
+      .eq('id', contentId)
+      .select('id, is_published, is_archived')
+      .single();
+    if (updateErr) throw updateErr;
+
+    return res.json({ success: true, content: updated });
+  } catch (err) {
+    console.error('[admin.books] PATCH /content/:id/publish error:', err);
+    return res.status(500).json({ error: 'Erreur lors de la mise à jour de la publication.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PATCH /content/:contentId/validation
+// Manage moderation state for publisher-managed content.
+// action: approve | reject | pause | pending
+// ─────────────────────────────────────────────────────────────
+router.patch('/content/:contentId/validation', isAdmin, express.json(), async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const { action, reason } = req.body || {};
+
+    if (!['approve', 'reject', 'pause', 'pending'].includes(action)) {
+      return res.status(400).json({ error: 'Action de validation invalide.' });
+    }
+
+    const { data: pubBook, error: pubBookErr } = await supabaseAdmin
+      .from('publisher_books')
+      .select('id')
+      .eq('content_id', contentId)
+      .maybeSingle();
+    if (pubBookErr) throw pubBookErr;
+    if (!pubBook) {
+      return res.status(400).json({ error: 'Ce contenu n’a pas de workflow éditeur à modérer.' });
+    }
+
+    if ((action === 'reject' || action === 'pause') && !String(reason || '').trim()) {
+      return res.status(400).json({ error: 'Un motif est requis pour cette action.' });
+    }
+
+    let result;
+    if (action === 'approve') result = await publisherService.approveContent(pubBook.id, req.user.id);
+    if (action === 'reject') result = await publisherService.rejectContent(pubBook.id, req.user.id, String(reason).trim());
+    if (action === 'pause') result = await publisherService.pauseContent(pubBook.id, req.user.id, String(reason).trim());
+    if (action === 'pending') result = await publisherService.setPendingContent(pubBook.id, req.user.id);
+
+    const { data: content } = await supabaseAdmin
+      .from('contents')
+      .select('id, is_published, is_archived')
+      .eq('id', contentId)
+      .single();
+
+    return res.json({
+      success: true,
+      publisher_book: result,
+      content: content || null,
+    });
+  } catch (err) {
+    console.error('[admin.books] PATCH /content/:id/validation error:', err);
+    return res.status(500).json({ error: err.message || 'Erreur lors de la modération.' });
   }
 });
 

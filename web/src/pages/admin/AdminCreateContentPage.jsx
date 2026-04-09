@@ -4,6 +4,7 @@ import { Box, Typography, CircularProgress } from '@mui/material';
 import { authFetch } from '../../services/auth.service';
 import { adminGetPublisher } from '../../services/publisher.service';
 import tokens from '../../config/tokens';
+import RichTextEditor from '../../components/RichTextEditor';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -92,6 +93,7 @@ export default function AdminCreateContentPage() {
   // Uploaded keys / URLs
   const [fileKey,  setFileKey]  = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [fileFormat, setFileFormat] = useState('');
 
   // Chapitres audio : [{ _id, title, file, fileKey, uploading, duration }]
   const [chapters, setChapters] = useState([]);
@@ -148,13 +150,10 @@ export default function AdminCreateContentPage() {
     finally { setExtracting(false); }
 
     // Upload automatique vers R2 après extraction
-    const isAudioFile = file.type.startsWith('audio/') || /\.(mp3|m4a)$/i.test(file.name);
-    if (isAudioFile) {
-      const k = await uploadFileFn(file, setUploadingAudio);
-      if (k) setAudioFileKey(k);
-    } else {
-      const k = await uploadFileFn(file, setUploadingFile);
-      if (k) setFileKey(k);
+    const k = await uploadFileFn(file, setUploadingFile);
+    if (k) {
+      setFileKey(k);
+      setFileFormat(String(file.name || '').toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub');
     }
   }
 
@@ -236,6 +235,12 @@ export default function AdminCreateContentPage() {
     const isAudioType = form.contentType === 'audiobook';
     const isBothType  = form.contentType === 'both';
     const needsChapters = isAudioType || isBothType;
+    const normalizedPriceCents = needsPrice ? Number(form.priceCents) || 0 : 0;
+
+    if (needsPrice && normalizedPriceCents <= 0) {
+      setError(`Le type d'accès "${form.accessType}" exige un prix > 0 en centimes.`);
+      return;
+    }
 
     // Vérification chapitres
     if (needsChapters) {
@@ -267,7 +272,7 @@ export default function AdminCreateContentPage() {
         fileKey:         effectiveFileKey  || null,
         durationSeconds: form._duration    || null,
         accessType:      form.accessType   || 'subscription',
-        priceCents:      needsPrice ? (Number(form.priceCents) || 0) : 0,
+        priceCents:      normalizedPriceCents,
       };
 
       if (needsChapters) {
@@ -293,7 +298,7 @@ export default function AdminCreateContentPage() {
 
   function resetForm() {
     setSuccess(false); setMainFile(null); setCoverFile(null);
-    setFileKey(''); setCoverUrl(''); setAutoFilled({}); setError(null);
+    setFileKey(''); setFileFormat(''); setCoverUrl(''); setAutoFilled({}); setError(null);
     setChapters([]);
     setForm({ title: '', author: '', description: '', language: 'fr', year: '', contentType: 'ebook', accessType: 'subscription', priceCents: '', categoryId: '' });
   }
@@ -382,15 +387,16 @@ export default function AdminCreateContentPage() {
           <div style={{ marginBottom: isBoth ? 20 : 0 }}>
             <Lbl autoFilled={autoFilled.title}>Fichier ebook</Lbl>
             <DropZone
-              accept=".epub,application/epub+zip"
-              label="Déposer le fichier EPUB"
-              sublabel="EPUB — max 500 Mo"
+              accept=".epub,.pdf,application/epub+zip,application/pdf"
+              label="Déposer le fichier EPUB ou PDF"
+              sublabel="EPUB, PDF — max 500 Mo"
               icon="file"
               file={mainFile} loading={extracting}
               onFile={handleMainFile}
             />
             {uploadingFile && <div style={{ marginTop: 8, fontSize: 12, color: C.textSecondary }}>⏳ Upload en cours…</div>}
             {fileKey && <div style={{ marginTop: 8, fontSize: 12, color: C.green }}>✓ Fichier uploadé</div>}
+            {fileFormat && <div style={{ marginTop: 4, fontSize: 12, color: C.textSecondary }}>Format détecté: {fileFormat.toUpperCase()}</div>}
           </div>
         )}
 
@@ -504,9 +510,13 @@ export default function AdminCreateContentPage() {
 
         <div style={{ marginBottom: 14 }}>
           <Lbl autoFilled={autoFilled.description}>Description / Synopsis</Lbl>
-          <textarea style={{ ...S.input, minHeight: 90, resize: 'vertical' }}
-            value={form.description} onChange={e => set('description', e.target.value)}
-            placeholder="Résumé du contenu…" />
+          <RichTextEditor
+            value={form.description}
+            onChange={(nextValue) => set('description', nextValue)}
+            placeholder="Résumé du contenu…"
+            helperText="Mise en forme disponible: titres, gras, italique, listes et citation."
+            minHeight={220}
+          />
         </div>
 
         {form._duration && (

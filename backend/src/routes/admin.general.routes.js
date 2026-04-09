@@ -694,8 +694,8 @@ const uploadExtract = multer({
   limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (_, file, cb) => {
     const ext = file.originalname.split('.').pop().toLowerCase();
-    const ok = ['application/epub+zip','audio/mpeg','audio/mp4','audio/x-m4a','audio/mp3'].includes(file.mimetype) || ['epub','mp3','m4a'].includes(ext);
-    cb(ok ? null : new Error('Format non supporté. Acceptés: EPUB, MP3, M4A'), ok);
+    const ok = ['application/epub+zip','application/pdf','audio/mpeg','audio/mp4','audio/x-m4a','audio/mp3'].includes(file.mimetype) || ['epub','pdf','mp3','m4a'].includes(ext);
+    cb(ok ? null : new Error('Format non supporté. Acceptés: EPUB, PDF, MP3, M4A'), ok);
   },
 });
 

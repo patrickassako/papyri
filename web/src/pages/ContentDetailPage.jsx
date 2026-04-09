@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { contentsService } from '../services/contents.service';
 import tokens from '../config/tokens';
+import { sanitizeRichTextHtml } from '../utils/richText';
 import * as authService from '../services/auth.service';
 import { readingService } from '../services/reading.service';
 import { subscriptionsService } from '../services/subscriptions.service';
@@ -919,9 +920,29 @@ export default function ContentDetailPage() {
 
             <Box sx={{ mt: 3.3 }}>
               <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 0.95 }}>Synopsis</Typography>
-              <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740, whiteSpace: 'pre-line', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                {content.description || 'Aucune description disponible pour ce livre.'}
-              </Typography>
+              {content.description ? (
+                <Box
+                  sx={{
+                    mt: 1.3,
+                    color: '#4d3f2b',
+                    fontSize: { xs: '0.98rem', md: '1.08rem' },
+                    lineHeight: 1.7,
+                    maxWidth: 740,
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                    '& p': { my: 0, mb: 1.4 },
+                    '& h2': { fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.15rem', md: '1.35rem' }, mb: 1.2 },
+                    '& h3': { fontWeight: 700, fontSize: { xs: '1.02rem', md: '1.15rem' }, mb: 1 },
+                    '& ul, & ol': { pl: 3, mb: 1.4 },
+                    '& blockquote': { m: 0, pl: 2, borderLeft: '3px solid #d6c5b0', color: '#7a6240', fontStyle: 'italic' },
+                  }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(content.description) }}
+                />
+              ) : (
+                <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740 }}>
+                  Aucune description disponible pour ce livre.
+                </Typography>
+              )}
             </Box>
 
             {isAudiobook && (
