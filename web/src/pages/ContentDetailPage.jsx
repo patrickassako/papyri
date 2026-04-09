@@ -472,7 +472,8 @@ export default function ContentDetailPage() {
       return;
     }
 
-    const needsProviderChoice = ['paid', 'subscription_or_paid'].includes(accessType);
+    const needsProviderChoice = accessType === 'paid'
+      || (accessType === 'subscription_or_paid' && !hasActiveSubscription);
     if (needsProviderChoice) {
       setPaymentDialog({ open: true, providerBusy: '' });
       return;

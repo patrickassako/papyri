@@ -443,6 +443,17 @@ async function unlockContent(req, res) {
       }
     }
 
+    const subscriptionOnlyPathForHybrid = hasActiveSubscription && content.access_type === 'subscription_or_paid';
+    if (subscriptionOnlyPathForHybrid) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'SUBSCRIPTION_QUOTA_REQUIRED',
+          message: 'Votre abonnement actif doit etre utilise pour debloquer ce contenu via quota ou bonus.',
+        },
+      });
+    }
+
     // Paid fallback path
     const canPay = !!content.is_purchasable || ['paid', 'subscription_or_paid'].includes(content.access_type);
     if (!canPay || !content.price_cents) {

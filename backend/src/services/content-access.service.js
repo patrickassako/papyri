@@ -174,7 +174,9 @@ async function resolveContentAccess({ userId, contentId, zone = null, profileId 
 
   const accessType = content.access_type || 'subscription';
   const pricing = computePricing(content, hasActiveSubscription, planDiscountPercent);
-  const isPurchasable = Boolean(content.is_purchasable) || ['paid', 'subscription_or_paid'].includes(accessType);
+  const isPurchasable = accessType === 'paid'
+    || (!hasActiveSubscription && accessType === 'subscription_or_paid')
+    || Boolean(content.is_purchasable && accessType === 'paid');
 
   const canReadByUnlock = Boolean(unlock);
   // Access requires an explicit unlock (quota consumption). Merely having an active
