@@ -30,6 +30,9 @@ import {
   adminUpdatePublisherPromoLimit,
 } from '../../services/publisher.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -748,21 +751,19 @@ export default function AdminPromoCodesPage() {
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
-
-      {/* Header */}
       <Box sx={{ bgcolor: '#fff', borderBottom: '1px solid #e5e0d8', position: 'sticky', top: 0, zIndex: 10 }}>
-        <Box sx={{ height: 60, display: 'flex', alignItems: 'center', px: 3, gap: 1 }}>
-          <LocalOfferOutlinedIcon sx={{ color: C.indigo, mr: 1 }} />
-          <Typography variant="h6" fontWeight={700} color={C.textPrimary} sx={{ flex: 1 }}>
-            Codes promo
-          </Typography>
-          {tab === 0 && (
-            <Button variant="contained" size="small" startIcon={<AddIcon />}
-              onClick={() => { setEditing(null); setDialog(true); }}
-              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
-              Nouveau code
-            </Button>
-          )}
+        <Box sx={{ px: 3, pt: 2 }}>
+          <AdminPageHeader
+            title="Codes promo"
+            subtitle={`${promos.length} code${promos.length > 1 ? 's' : ''} · ${activeCount} actif${activeCount > 1 ? 's' : ''}`}
+            actions={tab === 0 ? (
+              <Button variant="contained" size="small" startIcon={<AddIcon />}
+                onClick={() => { setEditing(null); setDialog(true); }}
+                sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
+                Nouveau code
+              </Button>
+            ) : null}
+          />
         </Box>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}
           sx={{
@@ -858,8 +859,10 @@ export default function AdminPromoCodesPage() {
                 ) : promos.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} sx={{ textAlign: 'center', py: 7, color: C.textSecondary }}>
-                      <LocalOfferOutlinedIcon sx={{ fontSize: 40, opacity: 0.2, display: 'block', mx: 'auto', mb: 1 }} />
-                      Aucun code promo
+                      <AdminEmptyState
+                        title="Aucun code promo"
+                        description="Créez un premier code pour lancer une campagne ou tester une offre."
+                      />
                     </TableCell>
                   </TableRow>
                 ) : promos.map(promo => {
@@ -987,28 +990,19 @@ export default function AdminPromoCodesPage() {
       <UsageDrawer open={!!detailPromo} promo={detailPromo}
         onClose={() => { setDetailPromo(null); }} />
 
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '18px' } }}>
-        <DialogTitle sx={{ fontWeight: 700, color: C.red }}>Supprimer le code</DialogTitle>
-        <DialogContent>
-          {deleteError
-            ? <Alert severity="error" sx={{ borderRadius: '10px' }}>{deleteError}</Alert>
-            : <Typography variant="body2" color={C.textSecondary}>
-                Supprimer le code <strong style={{ fontFamily: 'monospace', letterSpacing: 1.5 }}>{deleteTarget?.code}</strong> ?
-                Cette action est irréversible.
-              </Typography>
-          }
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setDeleteTarget(null)} sx={{ textTransform: 'none', color: C.grey }}>Annuler</Button>
-          {!deleteError && (
-            <Button variant="contained" onClick={handleDelete} disabled={deleting}
-              startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : null}
-              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '10px', bgcolor: C.red, '&:hover': { bgcolor: '#c0392b' } }}>
-              {deleting ? 'Suppression…' : 'Supprimer'}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+      <AdminConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Supprimer le code"
+        body={
+          deleteError
+            ? deleteError
+            : `Supprimer le code ${deleteTarget?.code || ''} ? Cette action est irréversible.`
+        }
+        confirmLabel={deleting ? 'Suppression…' : 'Supprimer'}
+        confirmColor="error"
+        onCancel={() => { setDeleteTarget(null); setDeleteError(null); }}
+        onConfirm={handleDelete}
+      />
 
       <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack(s => ({ ...s, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

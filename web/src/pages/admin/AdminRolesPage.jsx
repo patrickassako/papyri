@@ -12,6 +12,9 @@ import PeopleOutlinedIcon      from '@mui/icons-material/PeopleOutlined';
 import SecurityOutlinedIcon    from '@mui/icons-material/SecurityOutlined';
 import tokens from '../../config/tokens';
 import * as adminService from '../../services/admin.service';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 
 const C = {
   primary: tokens.colors.primary,
@@ -210,45 +213,6 @@ function RoleDialog({ open, role, grouped, allPermissions, onClose, onSaved }) {
   );
 }
 
-// ── Dialog : confirmation suppression ────────────────────────────────────────
-function DeleteConfirmDialog({ open, role, onClose, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError]       = useState(null);
-
-  async function doDelete() {
-    setDeleting(true); setError(null);
-    try {
-      await adminService.deleteRole(role.id);
-      onDeleted(role.id);
-      onClose();
-    } catch (e) { setError(e.message); }
-    finally { setDeleting(false); }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} PaperProps={{ sx: { borderRadius: '16px', p: 1 } }}>
-      <DialogTitle sx={{ fontWeight: 800, fontSize: '1rem' }}>Supprimer le rôle ?</DialogTitle>
-      <DialogContent>
-        {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>{error}</Alert>}
-        <Typography sx={{ fontSize: '0.875rem', color: '#555' }}>
-          Le rôle <strong>{role?.display_name}</strong> sera supprimé définitivement.
-          Cette action est irréversible.
-        </Typography>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-        <Button onClick={onClose} sx={{ borderRadius: '10px', textTransform: 'none', color: '#666' }}>
-          Annuler
-        </Button>
-        <Button onClick={doDelete} variant="contained" disabled={deleting}
-          startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : null}
-          sx={{ borderRadius: '10px', textTransform: 'none', bgcolor: C.red, '&:hover': { bgcolor: '#c0392b' } }}>
-          Supprimer
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AdminRolesPage() {
   const [roles, setRoles]               = useState([]);
@@ -259,6 +223,8 @@ export default function AdminRolesPage() {
   const [dialogOpen, setDialogOpen]     = useState(false);
   const [editRole, setEditRole]         = useState(null);
   const [deleteRole, setDeleteRoleItem] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -283,25 +249,33 @@ export default function AdminRolesPage() {
     setRoles(prev => prev.filter(r => r.id !== id));
   }
 
+  async function handleDeleteRole() {
+    if (!deleteRole) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await adminService.deleteRole(deleteRole.id);
+      handleDeleted(deleteRole.id);
+      setDeleteRoleItem(null);
+    } catch (e) {
+      setDeleteError(e.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   return (
     <Box sx={{ p: 4 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: C.indigo,
-            fontFamily: 'Playfair Display, serif', mb: 0.5 }}>
-            Rôles & Permissions
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#888' }}>
-            {roles.length} rôle{roles.length > 1 ? 's' : ''} — dont {roles.filter(r => r.is_system).length} système
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}
-          sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700,
-            bgcolor: C.primary, '&:hover': { bgcolor: '#9a4f15' } }}>
-          Nouveau rôle
-        </Button>
-      </Box>
+      <AdminPageHeader
+        title="Rôles & Permissions"
+        subtitle={`${roles.length} rôle${roles.length > 1 ? 's' : ''} — dont ${roles.filter(r => r.is_system).length} système`}
+        actions={(
+          <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}
+            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700, bgcolor: C.primary, '&:hover': { bgcolor: '#9a4f15' } }}>
+            Nouveau rôle
+          </Button>
+        )}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>{error}</Alert>}
 
@@ -309,6 +283,8 @@ export default function AdminRolesPage() {
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 2 }}>
         {loading
           ? [...Array(4)].map((_, i) => <Skeleton key={i} variant="rounded" height={160} sx={{ borderRadius: '16px' }} />)
+          : roles.length === 0
+            ? <AdminEmptyState title="Aucun rôle" description="Créez un premier rôle pour structurer les accès du back-office." />
           : roles.map(role => {
               const { color, bg } = roleColor(role.name);
               return (
@@ -384,14 +360,19 @@ export default function AdminRolesPage() {
       />
 
       {/* Delete confirmation */}
-      {deleteRole && (
-        <DeleteConfirmDialog
-          open={Boolean(deleteRole)}
-          role={deleteRole}
-          onClose={() => setDeleteRoleItem(null)}
-          onDeleted={handleDeleted}
-        />
-      )}
+      <AdminConfirmDialog
+        open={Boolean(deleteRole)}
+        title="Supprimer le rôle ?"
+        body={
+          deleteError
+            ? deleteError
+            : `Le rôle ${deleteRole?.display_name || ''} sera supprimé définitivement. Cette action est irréversible.`
+        }
+        confirmLabel={deleteLoading ? 'Suppression…' : 'Supprimer'}
+        confirmColor="error"
+        onCancel={() => { setDeleteRoleItem(null); setDeleteError(null); }}
+        onConfirm={handleDeleteRole}
+      />
     </Box>
   );
 }

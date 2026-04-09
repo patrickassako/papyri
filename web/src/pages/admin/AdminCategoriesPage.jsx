@@ -17,6 +17,9 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
+import AdminConfirmDialog from '../../components/admin/AdminConfirmDialog';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -107,52 +110,6 @@ function CategoryDialog({ open, category, onClose, onSaved }) {
   );
 }
 
-// ── Delete Confirm Dialog ──────────────────────────────────────
-function DeleteDialog({ open, category, onClose, onDeleted }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-
-  async function handleDelete() {
-    setLoading(true); setError(null);
-    try {
-      const res  = await authFetch(`${API}/api/admin/categories/${category.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur');
-      onDeleted(category.id);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '18px' } }}>
-      <DialogTitle sx={{ fontWeight: 700, color: C.red }}>Supprimer la catégorie</DialogTitle>
-      <DialogContent>
-        {error
-          ? <Alert severity="error" sx={{ borderRadius: '10px' }}>{error}</Alert>
-          : <Typography variant="body2" color={C.textSecondary}>
-              Voulez-vous supprimer <strong>«&nbsp;{category?.name}&nbsp;»</strong> ? Cette action est irréversible.
-              {category?.book_count > 0 && (
-                <Box component="span" sx={{ display: 'block', mt: 1, color: C.red }}>
-                  ⚠️ {category.book_count} livre(s) utilisent cette catégorie.
-                </Box>
-              )}
-            </Typography>
-        }
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none', color: C.grey }}>Annuler</Button>
-        {!error && (
-          <Button variant="contained" onClick={handleDelete} disabled={loading}
-            startIcon={loading ? <CircularProgress size={14} color="inherit" /> : null}
-            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '10px', bgcolor: C.red, '&:hover': { bgcolor: '#c0392b' } }}>
-            {loading ? 'Suppression…' : 'Supprimer'}
-          </Button>
-        )}
-      </DialogActions>
-    </Dialog>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -161,6 +118,8 @@ export default function AdminCategoriesPage() {
   const [dialog, setDialog]         = useState(false);
   const [editing, setEditing]       = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -192,25 +151,38 @@ export default function AdminCategoriesPage() {
     setDeleteTarget(null);
   }
 
+  async function handleDeleteCategory() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const res  = await authFetch(`${API}/api/admin/categories/${deleteTarget.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      handleDeleted(deleteTarget.id);
+    } catch (e) {
+      setDeleteError(e.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   const totalBooks = categories.reduce((s, c) => s + (c.book_count || 0), 0);
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
-
-      {/* Header */}
-      <Box sx={{ bgcolor: '#fff', height: 60, display: 'flex', alignItems: 'center', px: 3, borderBottom: '1px solid #e5e0d8', position: 'sticky', top: 0, zIndex: 10, gap: 1 }}>
-        <CategoryOutlinedIcon sx={{ color: C.indigo, mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} color={C.textPrimary} sx={{ flex: 1 }}>
-          Catégories
-        </Typography>
-        <Button variant="contained" size="small" startIcon={<AddIcon />}
-          onClick={() => { setEditing(null); setDialog(true); }}
-          sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
-          Nouvelle catégorie
-        </Button>
-      </Box>
-
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900, mx: 'auto' }}>
+        <AdminPageHeader
+          title="Catégories"
+          subtitle={`${categories.length} catégorie${categories.length > 1 ? 's' : ''} · ${totalBooks} livre${totalBooks > 1 ? 's' : ''} associé${totalBooks > 1 ? 's' : ''}`}
+          actions={(
+            <Button variant="contained" size="small" startIcon={<AddIcon />}
+              onClick={() => { setEditing(null); setDialog(true); }}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
+              Nouvelle catégorie
+            </Button>
+          )}
+        />
 
         {/* Stats row */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
@@ -255,8 +227,10 @@ export default function AdminCategoriesPage() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} sx={{ textAlign: 'center', py: 8, color: C.textSecondary }}>
-                    <CategoryOutlinedIcon sx={{ fontSize: 40, mb: 1, opacity: 0.2, display: 'block', mx: 'auto' }} />
-                    {search ? 'Aucun résultat' : 'Aucune catégorie créée'}
+                    <AdminEmptyState
+                      title={search ? 'Aucun résultat' : 'Aucune catégorie créée'}
+                      description={search ? 'Affinez la recherche ou créez une nouvelle catégorie.' : 'Créez une première catégorie pour organiser le catalogue.'}
+                    />
                   </TableCell>
                 </TableRow>
               ) : filtered.map(cat => (
@@ -315,11 +289,18 @@ export default function AdminCategoriesPage() {
         onClose={() => { setDialog(false); setEditing(null); }}
         onSaved={handleSaved}
       />
-      <DeleteDialog
-        open={!!deleteTarget}
-        category={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onDeleted={handleDeleted}
+      <AdminConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Supprimer la catégorie"
+        body={
+          deleteError
+            ? deleteError
+            : `Voulez-vous supprimer « ${deleteTarget?.name || ''} » ? Cette action est irréversible.${deleteTarget?.book_count > 0 ? ` ${deleteTarget.book_count} livre(s) utilisent encore cette catégorie.` : ''}`
+        }
+        confirmLabel={deleteLoading ? 'Suppression…' : 'Supprimer'}
+        confirmColor="error"
+        onCancel={() => { setDeleteTarget(null); setDeleteError(null); }}
+        onConfirm={handleDeleteCategory}
       />
     </Box>
   );

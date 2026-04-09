@@ -7,7 +7,6 @@ import {
   Box, Card, Typography, Button,
   TextField, CircularProgress, Alert, Snackbar, Tooltip, IconButton,
 } from '@mui/material';
-import SettingsOutlinedIcon  from '@mui/icons-material/SettingsOutlined';
 import BusinessOutlinedIcon  from '@mui/icons-material/BusinessOutlined';
 import ReceiptOutlinedIcon   from '@mui/icons-material/ReceiptOutlined';
 import PaletteOutlinedIcon   from '@mui/icons-material/PaletteOutlined';
@@ -16,6 +15,7 @@ import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import DeleteOutlineIcon     from '@mui/icons-material/DeleteOutline';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -226,24 +226,21 @@ export default function AdminSettingsPage() {
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
-
-      {/* Header sticky */}
-      <Box sx={{ bgcolor: '#fff', height: 60, display: 'flex', alignItems: 'center', px: 3, borderBottom: '1px solid #e5e0d8', position: 'sticky', top: 0, zIndex: 10, gap: 1 }}>
-        <SettingsOutlinedIcon sx={{ color: C.indigo, mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} color={C.textPrimary} sx={{ flex: 1 }}>
-          Paramètres
-        </Typography>
-        <Button
-          variant="contained" size="small"
-          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon />}
-          onClick={handleSave} disabled={saving}
-          sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}
-        >
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
-        </Button>
-      </Box>
-
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <AdminPageHeader
+          title="Paramètres"
+          subtitle="Paramètres globaux de la plateforme, facturation et identité"
+          actions={(
+            <Button
+              variant="contained" size="small"
+              startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon />}
+              onClick={handleSave} disabled={saving}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}
+            >
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          )}
+        />
 
         {error && <Alert severity="error" sx={{ borderRadius: '12px' }}>{error}</Alert>}
 

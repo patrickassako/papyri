@@ -21,6 +21,8 @@ import SearchIcon             from '@mui/icons-material/Search';
 import MenuBookOutlinedIcon   from '@mui/icons-material/MenuBookOutlined';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -446,21 +448,18 @@ export default function AdminGeoPricingPage() {
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
-
-      {/* Header */}
-      <Box sx={{ bgcolor: '#fff', height: 60, display: 'flex', alignItems: 'center', px: 3, borderBottom: '1px solid #e5e0d8', position: 'sticky', top: 0, zIndex: 10, gap: 1 }}>
-        <PublicOutlinedIcon sx={{ color: C.indigo, mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} color={C.textPrimary} sx={{ flex: 1 }}>
-          Tarification géographique
-        </Typography>
-        <Button variant="contained" size="small" startIcon={<AddIcon />}
-          onClick={() => setAddDialog(true)}
-          sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
-          Ajouter un contenu
-        </Button>
-      </Box>
-
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto' }}>
+        <AdminPageHeader
+          title="Tarification géographique"
+          subtitle={`${items.length} contenu${items.length > 1 ? 's' : ''} configuré${items.length > 1 ? 's' : ''} · ${totalZones} zone${totalZones > 1 ? 's' : ''}`}
+          actions={(
+            <Button variant="contained" size="small" startIcon={<AddIcon />}
+              onClick={() => setAddDialog(true)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, boxShadow: 'none', '&:hover': { bgcolor: '#1a2d47' } }}>
+              Ajouter un contenu
+            </Button>
+          )}
+        />
 
         {/* Stats */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
@@ -513,8 +512,10 @@ export default function AdminGeoPricingPage() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} sx={{ textAlign: 'center', py: 8, color: C.textSecondary }}>
-                    <PublicOutlinedIcon sx={{ fontSize: 40, mb: 1, opacity: 0.2, display: 'block', mx: 'auto' }} />
-                    {search ? 'Aucun résultat' : 'Aucun contenu avec tarification géographique'}
+                    <AdminEmptyState
+                      title={search ? 'Aucun résultat' : 'Aucun contenu avec tarification géographique'}
+                      description={search ? 'Ajustez la recherche pour trouver un contenu existant.' : 'Ajoutez un contenu pour commencer à définir des prix par zone.'}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (

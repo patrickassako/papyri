@@ -32,6 +32,9 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminSection from '../../components/admin/AdminSection';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -661,10 +664,36 @@ export default function AdminSubscriptionsPage() {
       </Box>
 
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1300, mx: 'auto' }}>
+        <AdminPageHeader
+          title="Gestion des abonnements"
+          subtitle="Plans, métriques et abonnés."
+          actions={
+            tab === 1 ? (
+              <Button variant="contained" size="small" startIcon={<AddIcon />}
+                onClick={() => { setEditingPlan(null); setPlanDialog(true); }}
+                sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: C.indigo, '&:hover': { bgcolor: '#1a2d47' } }}>
+                Nouveau plan
+              </Button>
+            ) : tab === 2 ? (
+              <>
+                <Button variant="outlined" size="small" startIcon={exporting ? <CircularProgress size={14} /> : <DownloadIcon />}
+                  onClick={() => handleExport('csv')} disabled={exporting}
+                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: C.green, color: C.green }}>
+                  CSV
+                </Button>
+                <Button variant="outlined" size="small" startIcon={exporting ? <CircularProgress size={14} /> : <DownloadIcon />}
+                  onClick={() => handleExport('pdf')} disabled={exporting}
+                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: C.red, color: C.red }}>
+                  PDF
+                </Button>
+              </>
+            ) : null
+          }
+        />
 
         {/* ══════════════ TAB 0 : MÉTRIQUES ══════════════════ */}
         {tab === 0 && (
-          <Box>
+          <AdminSection title="Métriques">
             {/* KPI cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
               {[
@@ -717,7 +746,7 @@ export default function AdminSubscriptionsPage() {
                       </Box>
                     ))
                   ) : (
-                    <Typography variant="body2" color={C.textSecondary}>Aucune donnée</Typography>
+                    <AdminEmptyState title="Aucune donnée" subtitle="Aucun provider actif à afficher." />
                   )}
                 </Card>
               </Grid>
@@ -770,24 +799,25 @@ export default function AdminSubscriptionsPage() {
                 </Table>
               </CardContent>
             </Card>
-          </Box>
+          </AdminSection>
         )}
 
         {/* ══════════════ TAB 1 : PLANS ══════════════════════ */}
         {tab === 1 && (
-          <Box>
+          <AdminSection title="Plans">
             {loadingPlans ? (
               <Grid container spacing={2}>
                 {[1,2,3].map(i => <Grid size={{ xs: 12, sm: 6, md: 4 }} key={i}><Skeleton variant="rounded" height={280} sx={{ borderRadius: '16px' }} /></Grid>)}
               </Grid>
             ) : plans.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <CreditCardOutlinedIcon sx={{ fontSize: 56, color: '#ccc', mb: 1 }} />
-                <Typography variant="h6" color={C.textSecondary}>Aucun plan créé</Typography>
-                <Button variant="contained" startIcon={<AddIcon />} sx={{ mt: 2, borderRadius: '10px', textTransform: 'none', bgcolor: C.indigo }}
-                  onClick={() => { setEditingPlan(null); setPlanDialog(true); }}>
-                  Créer le premier plan
-                </Button>
+              <Box sx={{ py: 4 }}>
+                <AdminEmptyState title="Aucun plan créé" subtitle="Crée un premier plan pour démarrer le module abonnements." />
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                  <Button variant="contained" startIcon={<AddIcon />} sx={{ borderRadius: '10px', textTransform: 'none', bgcolor: C.indigo }}
+                    onClick={() => { setEditingPlan(null); setPlanDialog(true); }}>
+                    Créer le premier plan
+                  </Button>
+                </Box>
               </Box>
             ) : (
               <Grid container spacing={2}>
@@ -802,12 +832,12 @@ export default function AdminSubscriptionsPage() {
                 ))}
               </Grid>
             )}
-          </Box>
+          </AdminSection>
         )}
 
         {/* ══════════════ TAB 2 : ABONNÉS ════════════════════ */}
         {tab === 2 && (
-          <Box>
+          <AdminSection title="Abonnés">
             {/* Toolbar row 1 */}
             <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField
@@ -896,9 +926,8 @@ export default function AdminSubscriptionsPage() {
                         <TableRow key={i}>{[1,2,3,4,5,6,7].map(j => <TableCell key={j} sx={{ py: 1.5 }}><Skeleton height={20} /></TableCell>)}</TableRow>
                       )) : subscribers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} sx={{ textAlign: 'center', py: 6, color: C.textSecondary }}>
-                            <PeopleIcon sx={{ fontSize: 40, mb: 1, opacity: 0.2, display: 'block', mx: 'auto' }} />
-                            Aucun abonné trouvé
+                          <TableCell colSpan={7} sx={{ py: 3 }}>
+                            <AdminEmptyState title="Aucun abonné trouvé" subtitle="Aucun résultat avec les filtres actuels." />
                           </TableCell>
                         </TableRow>
                       ) : subscribers.map((s, i) => {
@@ -956,7 +985,7 @@ export default function AdminSubscriptionsPage() {
                 )}
               </CardContent>
             </Card>
-          </Box>
+          </AdminSection>
         )}
       </Box>
 

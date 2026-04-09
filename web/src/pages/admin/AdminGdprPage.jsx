@@ -8,9 +8,10 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
-import GppMaybeOutlinedIcon from '@mui/icons-material/GppMaybeOutlined';
 import { getGdprRequests, processGdprRequest } from '../../services/admin.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
 
 const P = tokens.colors.primary;
 
@@ -116,18 +117,10 @@ export default function AdminGdprPage() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1100 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <GppMaybeOutlinedIcon sx={{ color: P, fontSize: 28 }} />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: '#1A1A2E', fontFamily: 'Playfair Display, serif' }}>
-            Demandes RGPD
-          </Typography>
-          <Typography variant="caption" sx={{ color: '#666' }}>
-            Traçabilité des demandes de suppression, export et rectification (délai légal 30 jours)
-          </Typography>
-        </Box>
-      </Box>
+      <AdminPageHeader
+        title="Demandes RGPD"
+        subtitle="Traçabilité des demandes de suppression, export et rectification avec suivi du délai légal de 30 jours"
+      />
 
       {/* KPI chips */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
@@ -180,10 +173,10 @@ export default function AdminGdprPage() {
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : requests.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6, color: '#9E9E9E' }}>
-          <GppMaybeOutlinedIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
-          <Typography>Aucune demande RGPD trouvée</Typography>
-        </Box>
+        <AdminEmptyState
+          title="Aucune demande RGPD trouvée"
+          description="Les demandes de suppression, export ou rectification apparaîtront ici."
+        />
       ) : (
         <Box sx={{ border: '1px solid #f0ebe3', borderRadius: '12px', overflow: 'hidden' }}>
           <Table size="small">

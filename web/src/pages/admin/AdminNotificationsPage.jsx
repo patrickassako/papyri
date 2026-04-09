@@ -17,6 +17,8 @@ import CheckCircleOutlineIcon    from '@mui/icons-material/CheckCircleOutline';
 import PhoneAndroidOutlinedIcon  from '@mui/icons-material/PhoneAndroidOutlined';
 import { authFetch } from '../../services/auth.service';
 import tokens from '../../config/tokens';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import AdminEmptyState from '../../components/admin/AdminEmptyState';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -105,14 +107,11 @@ export default function AdminNotificationsPage() {
 
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '100vh' }}>
-
-      {/* Header */}
-      <Box sx={{ bgcolor: '#fff', height: 60, display: 'flex', alignItems: 'center', px: 3, borderBottom: '1px solid #e5e0d8', position: 'sticky', top: 0, zIndex: 10 }}>
-        <NotificationsOutlinedIcon sx={{ color: C.indigo, mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} color={C.textPrimary}>Notifications push</Typography>
-      </Box>
-
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <AdminPageHeader
+          title="Notifications push"
+          subtitle={`${stats?.total ?? 0} notification${(stats?.total ?? 0) > 1 ? 's' : ''} envoyée${(stats?.total ?? 0) > 1 ? 's' : ''}`}
+        />
 
         {/* KPIs */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -227,8 +226,10 @@ export default function AdminNotificationsPage() {
               </Box>
             ) : recent.length === 0 ? (
               <Box sx={{ py: 8, textAlign: 'center' }}>
-                <NotificationsOutlinedIcon sx={{ fontSize: 40, opacity: 0.15, display: 'block', mx: 'auto', mb: 1 }} />
-                <Typography variant="body2" color={C.textSecondary}>Aucune notification envoyée</Typography>
+                <AdminEmptyState
+                  title="Aucune notification envoyée"
+                  description="L’historique s’affichera ici après le premier envoi."
+                />
               </Box>
             ) : (
               <Box sx={{ maxHeight: 480, overflow: 'auto' }}>
