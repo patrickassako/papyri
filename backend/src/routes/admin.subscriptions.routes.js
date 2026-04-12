@@ -6,10 +6,11 @@
 
 const express = require('express');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermissionForMethod } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+// Admin bypass automatique. Rôles custom: GET→subscriptions.read, mutate→subscriptions.write.
+const isAdmin = [verifyJWT, requirePermissionForMethod({ read: 'subscriptions.read', write: 'subscriptions.write' })];
 
 // ─────────────────────────────────────────────────────────────
 // GET /stats  — global KPIs

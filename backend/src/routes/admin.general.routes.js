@@ -8,7 +8,7 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermission } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 const publisherService  = require('../services/publisher.service');
 const r2Service         = require('../services/r2.service');
@@ -16,11 +16,26 @@ const config            = require('../config/env');
 const { extractMetadata } = require('../services/metadata-extractor.service');
 const { logResourceUpdated } = require('../services/audit.service');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+// Helpers par domaine de permission (admin bypass automatique dans requirePermission)
+const dashRead    = [verifyJWT, requirePermission('dashboard.read')];
+const usersRead   = [verifyJWT, requirePermission('users.read')];
+const usersWrite  = [verifyJWT, requirePermission('users.write')];
+const subsRead    = [verifyJWT, requirePermission('subscriptions.read')];
+const subsWrite   = [verifyJWT, requirePermission('subscriptions.write')];
+const subsExtend  = [verifyJWT, requirePermission('subscriptions.extend')];
+const subsCancel  = [verifyJWT, requirePermission('subscriptions.cancel')];
+const contentRead = [verifyJWT, requirePermission('content.read')];
+const contentWrite= [verifyJWT, requirePermission('content.write')];
+const contentDel  = [verifyJWT, requirePermission('content.delete')];
+const geoRead     = [verifyJWT, requirePermission('geo_pricing.read')];
+const geoWrite    = [verifyJWT, requirePermission('geo_pricing.write')];
+const catRead     = [verifyJWT, requirePermission('categories.read')];
+const gdprRead    = [verifyJWT, requirePermission('gdpr.read')];
+const gdprWrite   = [verifyJWT, requirePermission('gdpr.write')];
 
 // ── Global Dashboard Stats ────────────────────────────────────────────────────
 
-router.get('/stats', ...isAdmin, async (req, res) => {
+router.get('/stats', ...dashRead, async (req, res) => {
   try {
     const [
       usersTotal, usersActive, usersBlocked, newUsersMonth,
@@ -152,7 +167,7 @@ router.get('/stats', ...isAdmin, async (req, res) => {
 // ── User Management ───────────────────────────────────────────────────────────
 
 /** GET /api/admin/users?q=&page=&limit=&role=&is_active= */
-router.get('/users', ...isAdmin, async (req, res) => {
+router.get('/users', ...usersRead, async (req, res) => {
   try {
     const { q = '', page = 1, limit = 20, role, is_active } = req.query;
     const from = (Number(page) - 1) * Number(limit);
@@ -196,7 +211,7 @@ router.get('/users', ...isAdmin, async (req, res) => {
 });
 
 /** GET /api/admin/users/search?q= */
-router.get('/users/search', ...isAdmin, async (req, res) => {
+router.get('/users/search', ...usersRead, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json({ users: [] });
@@ -212,7 +227,7 @@ router.get('/users/search', ...isAdmin, async (req, res) => {
 });
 
 /** GET /api/admin/users/:id */
-router.get('/users/:id', ...isAdmin, async (req, res) => {
+router.get('/users/:id', ...usersRead, async (req, res) => {
   try {
     const { id } = req.params;
     const [profileRes, subRes, unlocksRes, historyRes] = await Promise.all([
@@ -231,7 +246,7 @@ router.get('/users/:id', ...isAdmin, async (req, res) => {
 });
 
 /** PATCH /api/admin/users/:id */
-router.patch('/users/:id', ...isAdmin, express.json(), async (req, res) => {
+router.patch('/users/:id', ...usersWrite, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const adminId = req.user.id;
@@ -303,7 +318,7 @@ router.patch('/users/:id', ...isAdmin, express.json(), async (req, res) => {
 });
 
 /** POST /api/admin/users/:id/grant-book */
-router.post('/users/:id/grant-book', ...isAdmin, express.json(), async (req, res) => {
+router.post('/users/:id/grant-book', ...usersWrite, express.json(), async (req, res) => {
   try {
     const { contentId } = req.body;
     const userId = req.params.id;
@@ -317,7 +332,7 @@ router.post('/users/:id/grant-book', ...isAdmin, express.json(), async (req, res
 });
 
 /** DELETE /api/admin/users/unlocks/:unlockId */
-router.delete('/users/unlocks/:unlockId', ...isAdmin, async (req, res) => {
+router.delete('/users/unlocks/:unlockId', ...usersWrite, async (req, res) => {
   try {
     const { error } = await supabaseAdmin.from('content_unlocks').delete().eq('id', req.params.unlockId);
     if (error) throw error;
@@ -326,7 +341,7 @@ router.delete('/users/unlocks/:unlockId', ...isAdmin, async (req, res) => {
 });
 
 /** POST /api/admin/subscriptions/extend */
-router.post('/subscriptions/extend', ...isAdmin, express.json(), async (req, res) => {
+router.post('/subscriptions/extend', ...subsExtend, express.json(), async (req, res) => {
   try {
     const { userId, months } = req.body;
     if (!userId || !months) return res.status(400).json({ error: 'userId et months requis.' });
@@ -345,7 +360,7 @@ router.post('/subscriptions/extend', ...isAdmin, express.json(), async (req, res
 });
 
 /** POST /api/admin/subscriptions/cancel/:userId */
-router.post('/subscriptions/cancel/:userId', ...isAdmin, async (req, res) => {
+router.post('/subscriptions/cancel/:userId', ...subsCancel, async (req, res) => {
   try {
     const { data: sub, error: subErr } = await supabaseAdmin
       .from('subscriptions').select('id').eq('user_id', req.params.userId).eq('status', 'ACTIVE').maybeSingle();
@@ -359,7 +374,7 @@ router.post('/subscriptions/cancel/:userId', ...isAdmin, async (req, res) => {
 });
 
 /** GET /api/admin/plans — liste des forfaits actifs */
-router.get('/plans', ...isAdmin, async (req, res) => {
+router.get('/plans', ...subsRead, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('subscription_plans')
@@ -372,7 +387,7 @@ router.get('/plans', ...isAdmin, async (req, res) => {
 });
 
 /** PATCH /api/admin/subscriptions/:subId — modifier plan, dates, montant, statut */
-router.patch('/subscriptions/:subId', ...isAdmin, express.json(), async (req, res) => {
+router.patch('/subscriptions/:subId', ...subsWrite, express.json(), async (req, res) => {
   try {
     const { plan_type, current_period_end, current_period_start, amount, currency, status } = req.body;
     const updates = {};
@@ -399,7 +414,7 @@ router.patch('/subscriptions/:subId', ...isAdmin, express.json(), async (req, re
 });
 
 /** DELETE /api/admin/subscriptions/:subId — supprimer définitivement */
-router.delete('/subscriptions/:subId', ...isAdmin, async (req, res) => {
+router.delete('/subscriptions/:subId', ...subsWrite, async (req, res) => {
   try {
     const { error } = await supabaseAdmin.from('subscriptions').delete().eq('id', req.params.subId);
     if (error) throw error;
@@ -408,7 +423,7 @@ router.delete('/subscriptions/:subId', ...isAdmin, async (req, res) => {
 });
 
 /** POST /api/admin/subscriptions/create — créer un abonnement manuel */
-router.post('/subscriptions/create', ...isAdmin, express.json(), async (req, res) => {
+router.post('/subscriptions/create', ...subsWrite, express.json(), async (req, res) => {
   try {
     console.log('[admin] create subscription body:', JSON.stringify(req.body));
     const { userId, plan_type, current_period_start, current_period_end, amount, currency } = req.body;
@@ -447,7 +462,7 @@ router.post('/subscriptions/create', ...isAdmin, express.json(), async (req, res
 });
 
 /** GET /api/admin/books/:bookId — détails complets d'un livre (publisher_book + content) */
-router.get('/books/:bookId', ...isAdmin, async (req, res) => {
+router.get('/books/:bookId', ...contentRead, async (req, res) => {
   try {
     const { bookId } = req.params;
     const { data: pb, error: pbErr } = await supabaseAdmin
@@ -466,7 +481,7 @@ router.get('/books/:bookId', ...isAdmin, async (req, res) => {
 });
 
 /** GET /api/admin/books/:bookId/file — stream du fichier R2 (admin bypass, pas de vérification d'abonnement) */
-router.get('/books/:bookId/file', ...isAdmin, async (req, res) => {
+router.get('/books/:bookId/file', ...contentRead, async (req, res) => {
   try {
     const r2Service = require('../services/r2.service');
     const { bookId } = req.params;
@@ -487,7 +502,7 @@ router.get('/books/:bookId/file', ...isAdmin, async (req, res) => {
 });
 
 /** PUT /api/admin/books/:bookId/metadata — mise à jour des métadonnées du livre */
-router.put('/books/:bookId/metadata', ...isAdmin, express.json(), async (req, res) => {
+router.put('/books/:bookId/metadata', ...contentWrite, express.json(), async (req, res) => {
   try {
     const { bookId } = req.params;
     // Récupérer le content_id lié au publisher_book
@@ -514,7 +529,7 @@ router.put('/books/:bookId/metadata', ...isAdmin, express.json(), async (req, re
 
 // ── Prix géographiques (JWT admin) ────────────────────────────────────────────
 
-router.get('/content/:contentId/geo-pricing', ...isAdmin, async (req, res) => {
+router.get('/content/:contentId/geo-pricing', ...geoRead, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin.from('content_geographic_pricing')
       .select('*').eq('content_id', req.params.contentId).order('zone');
@@ -523,7 +538,7 @@ router.get('/content/:contentId/geo-pricing', ...isAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/content/:contentId/geo-pricing', ...isAdmin, express.json(), async (req, res) => {
+router.post('/content/:contentId/geo-pricing', ...geoWrite, express.json(), async (req, res) => {
   try {
     const { zone, zone_label, price_cents, currency, notes, is_active } = req.body;
     if (!zone || price_cents == null) return res.status(400).json({ error: 'zone et price_cents requis' });
@@ -535,7 +550,7 @@ router.post('/content/:contentId/geo-pricing', ...isAdmin, express.json(), async
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/content/geo-pricing/:id', ...isAdmin, async (req, res) => {
+router.delete('/content/geo-pricing/:id', ...geoWrite, async (req, res) => {
   try {
     const { error } = await supabaseAdmin.from('content_geographic_pricing').delete().eq('id', req.params.id);
     if (error) throw error;
@@ -545,7 +560,7 @@ router.delete('/content/geo-pricing/:id', ...isAdmin, async (req, res) => {
 
 // ── Restrictions géographiques (JWT admin) ────────────────────────────────────
 
-router.get('/content/:contentId/geo-restrictions', ...isAdmin, async (req, res) => {
+router.get('/content/:contentId/geo-restrictions', ...geoRead, async (req, res) => {
   try {
     const [cfgRes, zonesRes] = await Promise.all([
       supabaseAdmin.from('content_geo_restriction_config').select('*').eq('content_id', req.params.contentId).maybeSingle(),
@@ -555,7 +570,7 @@ router.get('/content/:contentId/geo-restrictions', ...isAdmin, async (req, res) 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/content/:contentId/geo-restrictions/config', ...isAdmin, express.json(), async (req, res) => {
+router.post('/content/:contentId/geo-restrictions/config', ...geoWrite, express.json(), async (req, res) => {
   try {
     const { mode } = req.body;
     if (!['blacklist', 'whitelist'].includes(mode)) return res.status(400).json({ error: 'mode invalide' });
@@ -567,7 +582,7 @@ router.post('/content/:contentId/geo-restrictions/config', ...isAdmin, express.j
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/content/:contentId/geo-restrictions', ...isAdmin, async (req, res) => {
+router.delete('/content/:contentId/geo-restrictions', ...geoWrite, async (req, res) => {
   try {
     await Promise.all([
       supabaseAdmin.from('content_geo_restriction_config').delete().eq('content_id', req.params.contentId),
@@ -577,7 +592,7 @@ router.delete('/content/:contentId/geo-restrictions', ...isAdmin, async (req, re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/content/:contentId/geo-restrictions/zones', ...isAdmin, express.json(), async (req, res) => {
+router.post('/content/:contentId/geo-restrictions/zones', ...geoWrite, express.json(), async (req, res) => {
   try {
     const { zone, zone_label, reason, is_active } = req.body;
     if (!zone) return res.status(400).json({ error: 'zone requis' });
@@ -589,7 +604,7 @@ router.post('/content/:contentId/geo-restrictions/zones', ...isAdmin, express.js
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/content/geo-restrictions/zones/:id', ...isAdmin, express.json(), async (req, res) => {
+router.put('/content/geo-restrictions/zones/:id', ...geoWrite, express.json(), async (req, res) => {
   try {
     const { is_active, reason } = req.body;
     const update = {};
@@ -602,7 +617,7 @@ router.put('/content/geo-restrictions/zones/:id', ...isAdmin, express.json(), as
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/content/geo-restrictions/zones/:id', ...isAdmin, async (req, res) => {
+router.delete('/content/geo-restrictions/zones/:id', ...geoWrite, async (req, res) => {
   try {
     const { error } = await supabaseAdmin.from('content_geo_restrictions').delete().eq('id', req.params.id);
     if (error) throw error;
@@ -611,7 +626,7 @@ router.delete('/content/geo-restrictions/zones/:id', ...isAdmin, async (req, res
 });
 
 /** GET /api/admin/contents/search?q= */
-router.get('/contents/search', ...isAdmin, async (req, res) => {
+router.get('/contents/search', ...contentRead, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json({ contents: [] });
@@ -625,7 +640,7 @@ router.get('/contents/search', ...isAdmin, async (req, res) => {
 
 // ── Catégories ────────────────────────────────────────────────────────────────
 
-router.get('/categories', ...isAdmin, async (req, res) => {
+router.get('/categories', ...catRead, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin.from('categories').select('id, name, slug').order('name');
     if (error) throw error;
@@ -644,7 +659,7 @@ const uploadCover = multer({
   },
 });
 
-router.post('/upload-cover', ...isAdmin, uploadCover.single('cover'), async (req, res) => {
+router.post('/upload-cover', ...contentWrite, uploadCover.single('cover'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier envoyé' });
     if (!r2Service.isConfigured()) return res.status(503).json({ error: 'R2 non configuré' });
@@ -671,7 +686,7 @@ const uploadContent = multer({
   },
 });
 
-router.post('/upload-content', ...isAdmin, uploadContent.single('file'), async (req, res) => {
+router.post('/upload-content', ...contentWrite, uploadContent.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier envoyé' });
     if (!r2Service.isConfigured()) return res.status(503).json({ error: 'R2 non configuré' });
@@ -699,7 +714,7 @@ const uploadExtract = multer({
   },
 });
 
-router.post('/extract-metadata', ...isAdmin, uploadExtract.single('file'), async (req, res) => {
+router.post('/extract-metadata', ...contentWrite, uploadExtract.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
     const meta = await extractMetadata(req.file.buffer, req.file.originalname, req.file.mimetype);
@@ -719,7 +734,7 @@ router.post('/extract-metadata', ...isAdmin, uploadExtract.single('file'), async
 
 // ── Chapitres audio ──────────────────────────────────────────────────────────
 
-router.get('/content/:contentId/chapters', ...isAdmin, async (req, res) => {
+router.get('/content/:contentId/chapters', ...contentRead, async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('audio_chapters')
@@ -731,7 +746,7 @@ router.get('/content/:contentId/chapters', ...isAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/content/:contentId/chapters', ...isAdmin, express.json(), async (req, res) => {
+router.post('/content/:contentId/chapters', ...contentWrite, express.json(), async (req, res) => {
   try {
     const { title, fileKey, durationSeconds, position } = req.body;
     if (!fileKey) return res.status(400).json({ error: 'fileKey requis' });
@@ -744,7 +759,7 @@ router.post('/content/:contentId/chapters', ...isAdmin, express.json(), async (r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/content/chapters/:id', ...isAdmin, express.json(), async (req, res) => {
+router.put('/content/chapters/:id', ...contentWrite, express.json(), async (req, res) => {
   try {
     const { title, position } = req.body;
     const updates = {};
@@ -757,7 +772,7 @@ router.put('/content/chapters/:id', ...isAdmin, express.json(), async (req, res)
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/content/chapters/:id', ...isAdmin, async (req, res) => {
+router.delete('/content/chapters/:id', ...contentDel, async (req, res) => {
   try {
     const { error } = await supabaseAdmin.from('audio_chapters').delete().eq('id', req.params.id);
     if (error) throw error;
@@ -767,7 +782,7 @@ router.delete('/content/chapters/:id', ...isAdmin, async (req, res) => {
 
 // ── Créer contenu éditeur (JWT) ───────────────────────────────────────────────
 
-router.post('/publisher-content', ...isAdmin, express.json(), async (req, res) => {
+router.post('/publisher-content', ...contentWrite, express.json(), async (req, res) => {
   try {
     const { publisherId, title, author, description, language, contentType, coverUrl, fileKey, audioFileKey, durationSeconds, chapters, accessType, priceCents } = req.body;
     if (!title) return res.status(400).json({ error: 'title requis' });
@@ -793,7 +808,7 @@ router.post('/publisher-content', ...isAdmin, express.json(), async (req, res) =
  * GET /admin/gdpr-requests
  * Liste toutes les demandes RGPD avec infos utilisateur
  */
-router.get('/gdpr-requests', ...isAdmin, async (req, res) => {
+router.get('/gdpr-requests', ...gdprRead, async (req, res) => {
   try {
     const { status, type, page = 1, limit = 50 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
@@ -833,7 +848,7 @@ router.get('/gdpr-requests', ...isAdmin, async (req, res) => {
  * Traiter une demande RGPD (status: processing | completed | rejected)
  * Si completed + deletion → suppression du compte
  */
-router.patch('/gdpr-requests/:id', ...isAdmin, express.json(), async (req, res) => {
+router.patch('/gdpr-requests/:id', ...gdprWrite, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const adminId = req.user?.id;
@@ -895,6 +910,43 @@ router.patch('/gdpr-requests/:id', ...isAdmin, express.json(), async (req, res) 
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/admin/me/permissions ─────────────────────────────────────────────
+// Retourne la liste des clés de permissions du user connecté.
+// Admin → toutes les permissions. Autre rôle → via role_permissions.
+router.get('/me/permissions', verifyJWT, async (req, res) => {
+  try {
+    const role = req.user.role;
+
+    if (role === 'admin') {
+      const { data, error } = await supabaseAdmin
+        .from('permissions')
+        .select('key');
+      if (error) throw error;
+      return res.json({ success: true, permissions: (data || []).map(p => p.key), is_admin: true });
+    }
+
+    const { data: roleRow } = await supabaseAdmin
+      .from('roles')
+      .select('id')
+      .eq('name', role)
+      .maybeSingle();
+
+    if (!roleRow) {
+      return res.json({ success: true, permissions: [], is_admin: false });
+    }
+
+    const { data: rp } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permissions(key)')
+      .eq('role_id', roleRow.id);
+
+    const keys = (rp || []).map(r => r.permissions?.key).filter(Boolean);
+    return res.json({ success: true, permissions: keys, is_admin: false });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 

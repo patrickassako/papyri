@@ -6,7 +6,7 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermissionForMethod } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 const { clearCache, SETTINGS_ROW_ID, getDefaultSettings } = require('../services/settings.service');
 const r2Service = require('../services/r2.service');
@@ -21,7 +21,7 @@ const uploadLogo = multer({
   },
 });
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+const isAdmin = [verifyJWT, requirePermissionForMethod({ read: 'settings.read', write: 'settings.write' })];
 
 const ALLOWED_FIELDS = [
   'company_name', 'company_tagline', 'company_address',

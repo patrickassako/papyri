@@ -7,14 +7,13 @@
 
 const express = require('express');
 const notificationsController = require('../controllers/notifications.controller');
-const { authenticate, requireRole } = require('../middleware/auth');
-const requireAdmin = requireRole('admin');
+const { authenticate, requirePermission } = require('../middleware/auth');
 
 // ── Router JWT (Bearer token) — usage API externe ──────────────────────────
 const router = express.Router();
-router.get('/stats',      authenticate, requireAdmin, notificationsController.adminGetStats);
-router.post('/send',      authenticate, requireAdmin, notificationsController.adminSendNotification);
-router.post('/send-promo',authenticate, requireAdmin, notificationsController.adminSendPromo);
+router.get('/stats',      authenticate, requirePermission('notifications.read'),  notificationsController.adminGetStats);
+router.post('/send',      authenticate, requirePermission('notifications.send'),  notificationsController.adminSendNotification);
+router.post('/send-promo',authenticate, requirePermission('notifications.send'),  notificationsController.adminSendPromo);
 module.exports = router;
 
 // ── Router session (cookie adminjs) — usage AdminJS panel ──────────────────

@@ -22,56 +22,58 @@ import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import GppMaybeOutlinedIcon from '@mui/icons-material/GppMaybeOutlined';
 import tokens from '../config/tokens';
 import papyriLogo from '../assets/papyri-logo-gold.png';
+import { useAdminPermissions } from '../hooks/useAdminPermissions';
 
 const P = tokens.colors.primary;
 
+// `permission` : clé requise pour voir l'item. Absent = visible par tous.
 const SECTIONS = [
   {
     title: 'Vue générale',
     items: [
-      { label: 'Tableau de bord', icon: DashboardOutlinedIcon, route: '/admin/dashboard' },
-      { label: 'Utilisateurs', icon: PeopleOutlinedIcon, route: '/admin/users' },
+      { label: 'Tableau de bord', icon: DashboardOutlinedIcon, route: '/admin/dashboard', permission: 'dashboard.read' },
+      { label: 'Utilisateurs',   icon: PeopleOutlinedIcon,    route: '/admin/users',      permission: 'users.read' },
     ],
   },
   {
     title: 'Contenu',
     items: [
-      { label: 'Bibliothèque', icon: MenuBookOutlinedIcon, route: '/admin/books' },
-      { label: 'Validation contenu', icon: FactCheckOutlinedIcon, route: '/admin/content-validation' },
-      { label: 'Catégories', icon: CategoryOutlinedIcon, route: '/admin/categories' },
-      { label: 'Tarifs géographiques', icon: PublicOutlinedIcon, route: '/admin/geo-pricing' },
+      { label: 'Bibliothèque',        icon: MenuBookOutlinedIcon,  route: '/admin/books',              permission: 'content.read' },
+      { label: 'Validation contenu',  icon: FactCheckOutlinedIcon, route: '/admin/content-validation', permission: 'content.validate' },
+      { label: 'Catégories',          icon: CategoryOutlinedIcon,  route: '/admin/categories',         permission: 'categories.read' },
+      { label: 'Tarifs géographiques',icon: PublicOutlinedIcon,    route: '/admin/geo-pricing',        permission: 'geo_pricing.read' },
     ],
   },
   {
     title: 'Éditeurs',
     items: [
-      { label: 'Aperçu éditeurs', icon: BarChartOutlinedIcon, route: '/admin/publisher-dashboard' },
-      { label: 'Éditeurs', icon: BusinessOutlinedIcon, route: '/admin/publishers' },
-      { label: 'Versements', icon: AccountBalanceOutlinedIcon, route: '/admin/payouts' },
-      { label: 'Réclamations', icon: SupportAgentOutlinedIcon, route: '/admin/publisher-claims' },
+      { label: 'Aperçu éditeurs', icon: BarChartOutlinedIcon,        route: '/admin/publisher-dashboard', permission: 'publishers.read' },
+      { label: 'Éditeurs',        icon: BusinessOutlinedIcon,         route: '/admin/publishers',          permission: 'publishers.read' },
+      { label: 'Versements',      icon: AccountBalanceOutlinedIcon,   route: '/admin/payouts',             permission: 'payouts.read' },
+      { label: 'Réclamations',    icon: SupportAgentOutlinedIcon,     route: '/admin/publisher-claims',    permission: 'publishers.read' },
     ],
   },
   {
     title: 'Monétisation',
     items: [
-      { label: 'Abonnements', icon: CreditCardOutlinedIcon, route: '/admin/subscriptions' },
-      { label: 'Codes promo', icon: LocalOfferOutlinedIcon, route: '/admin/promo-codes' },
-      { label: 'Revenus', icon: TrendingUpIcon, route: '/admin/analytics/revenue' },
+      { label: 'Abonnements', icon: CreditCardOutlinedIcon, route: '/admin/subscriptions',      permission: 'subscriptions.read' },
+      { label: 'Codes promo', icon: LocalOfferOutlinedIcon, route: '/admin/promo-codes',        permission: 'promo_codes.read' },
+      { label: 'Revenus',     icon: TrendingUpIcon,         route: '/admin/analytics/revenue',  permission: 'analytics.read' },
     ],
   },
   {
     title: 'Pilotage',
     items: [
-      { label: 'Lecture', icon: AutoStoriesOutlinedIcon, route: '/admin/analytics/reading' },
-      { label: 'Notifications', icon: NotificationsOutlinedIcon, route: '/admin/notifications' },
-      { label: 'RGPD', icon: GppMaybeOutlinedIcon, route: '/admin/gdpr' },
+      { label: 'Lecture',        icon: AutoStoriesOutlinedIcon,    route: '/admin/analytics/reading', permission: 'analytics.read' },
+      { label: 'Notifications',  icon: NotificationsOutlinedIcon,  route: '/admin/notifications',     permission: 'notifications.read' },
+      { label: 'RGPD',           icon: GppMaybeOutlinedIcon,       route: '/admin/gdpr',              permission: 'gdpr.read' },
     ],
   },
   {
     title: 'Système',
     items: [
-      { label: 'Rôles & Permissions', icon: SecurityOutlinedIcon, route: '/admin/roles' },
-      { label: 'Paramètres', icon: SettingsOutlinedIcon, route: '/admin/settings' },
+      { label: 'Rôles & Permissions', icon: SecurityOutlinedIcon, route: '/admin/roles',    permission: 'roles.read' },
+      { label: 'Paramètres',          icon: SettingsOutlinedIcon,  route: '/admin/settings', permission: 'settings.read' },
     ],
   },
 ];
@@ -79,9 +81,16 @@ const SECTIONS = [
 export default function AdminSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { permissions, isAdmin } = useAdminPermissions();
 
   function isActive(route) {
     return location.pathname === route || location.pathname.startsWith(route + '/');
+  }
+
+  function canSee(item) {
+    if (isAdmin) return true;             // admin voit tout
+    if (!item.permission) return true;    // pas de contrainte
+    return permissions.has(item.permission);
   }
 
   return (
@@ -103,7 +112,11 @@ export default function AdminSidebar() {
       </Box>
 
       <Box sx={{ px: 1.5, pt: 2, flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        {SECTIONS.map((section, index) => (
+        {SECTIONS.map((section, index) => {
+          const visibleItems = section.items.filter(canSee);
+          if (visibleItems.length === 0) return null;
+
+          return (
           <Box key={section.title}>
             <Typography
               variant="caption"
@@ -123,7 +136,7 @@ export default function AdminSidebar() {
             </Typography>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-              {section.items.map((item) => {
+              {visibleItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.route);
                 return (
@@ -161,7 +174,8 @@ export default function AdminSidebar() {
               <Divider sx={{ borderColor: 'rgba(255,255,255,0.05)', mt: 1.5 }} />
             )}
           </Box>
-        ))}
+          );
+        })}
       </Box>
 
       <Box sx={{ px: 1.5, pb: 2.5, borderTop: '1px solid rgba(255,255,255,0.06)', pt: 1.5 }}>

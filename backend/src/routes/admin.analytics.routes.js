@@ -6,11 +6,13 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermission } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 const { getSettings }   = require('../services/settings.service');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+// Admin bypass automatique dans requirePermission.
+// Rôles custom: analytics.read requis pour toutes les routes (consultation uniquement).
+const isAdmin = [verifyJWT, requirePermission('analytics.read')];
 
 // ─── PDF helpers ───────────────────────────────────────────────
 function fetchImageBuffer(url) {

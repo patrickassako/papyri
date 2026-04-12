@@ -94,17 +94,17 @@ export default function DevicesPage() {
     try {
       const result = await deviceService.remove(removeTarget.deviceId);
       if (result?.sessions_revoked) {
-        setSnack({ open: true, message: 'Appareil supprimé. Toutes les sessions ont été révoquées. Reconnexion requise…', severity: 'success' });
+        setSnack({ open: true, message: t('devices.deviceRemovedWithSessions'), severity: 'success' });
         setTimeout(async () => {
           await authService.logout();
           navigate('/login');
         }, 2500);
       } else {
-        setSnack({ open: true, message: 'Appareil supprimé.', severity: 'success' });
+        setSnack({ open: true, message: t('devices.deviceRemoved'), severity: 'success' });
         await loadData();
       }
     } catch {
-      setSnack({ open: true, message: 'Erreur lors de la suppression.', severity: 'error' });
+      setSnack({ open: true, message: t('devices.removeError'), severity: 'error' });
     } finally {
       setRemovingId(null);
     }
@@ -115,13 +115,13 @@ export default function DevicesPage() {
     setRevoking(true);
     try {
       await authFetch(`${API_URL}/users/me/sessions`, { method: 'DELETE' });
-      setSnack({ open: true, message: 'Toutes les sessions ont été révoquées. Reconnexion requise.', severity: 'success' });
+      setSnack({ open: true, message: t('devices.allSessionsRevoked'), severity: 'success' });
       setTimeout(async () => {
         await authService.logout();
         navigate('/login');
       }, 2000);
     } catch {
-      setSnack({ open: true, message: 'Erreur lors de la révocation des sessions.', severity: 'error' });
+      setSnack({ open: true, message: t('devices.revokeError'), severity: 'error' });
     } finally {
       setRevoking(false);
     }

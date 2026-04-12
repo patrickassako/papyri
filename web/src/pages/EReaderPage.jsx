@@ -1930,7 +1930,7 @@ export default function EReaderPage() {
         <Box sx={{ fontSize: 64, mb: 2 }}>🔒</Box>
         <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{tl('reader_ui.deviceLimit')}</Typography>
         <Typography sx={{ color: '#9c7e49', mb: 3 }}>
-          Votre compte est associé à 3 appareils. Supprimez un appareil depuis votre espace personnel pour continuer.
+          {tl('reader_ui.deviceLimitDesc')}
         </Typography>
         <Button variant="contained" onClick={() => navigate('/devices')} sx={{ mr: 1 }}>{tl('reader_ui.manageDevices')}</Button>
         <Button variant="outlined" onClick={() => navigate(-1)}>{tl('reader_ui.back')}</Button>

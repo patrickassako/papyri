@@ -4,10 +4,10 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermissionForMethod } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+const isAdmin = [verifyJWT, requirePermissionForMethod({ read: 'promo_codes.read', write: 'promo_codes.write', delete: 'promo_codes.delete' })];
 
 // ─── GET /  — list all with usage count + filters ─────────────
 router.get('/', isAdmin, async (req, res) => {

@@ -6,11 +6,11 @@
 
 const express = require('express');
 const router  = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermissionForMethod } = require('../middleware/auth');
 const { supabaseAdmin }          = require('../config/database');
 const { logResourceCreated, logResourceDeleted } = require('../services/audit.service');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+const isAdmin = [verifyJWT, requirePermissionForMethod({ read: 'users.read', write: 'users.write', delete: 'users.write' })];
 
 // ── GET /api/admin/invitations — liste invitations en attente ─────────────────
 router.get('/', ...isAdmin, async (req, res) => {

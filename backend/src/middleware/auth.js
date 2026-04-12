@@ -174,10 +174,54 @@ function requirePermission(permissionKey) {
   };
 }
 
+/**
+ * Middleware qui vérifie la permission selon la méthode HTTP.
+ * Admin = bypass automatique. Les rôles custom passent si la permission correspondante est accordée.
+ *
+ * @param {{ read?: string, write?: string, delete?: string }} permMap
+ *   - read   : permission pour GET
+ *   - write  : permission pour POST / PUT / PATCH
+ *   - delete : permission pour DELETE (fallback sur write si absent)
+ */
+function requirePermissionForMethod(permMap = {}) {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Non authentifié.' } });
+    }
+    // Admin bypass
+    if (req.user.role === 'admin') return next();
+
+    const methodPermMap = {
+      GET:    permMap.read,
+      POST:   permMap.write,
+      PUT:    permMap.write,
+      PATCH:  permMap.write,
+      DELETE: permMap.delete || permMap.write,
+    };
+    const permKey = methodPermMap[req.method];
+    if (!permKey) return next(); // pas de contrainte définie pour cette méthode
+
+    try {
+      const permissions = await getRolePermissions(req.user.role);
+      if (!permissions.has(permKey)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: `Permission requise : ${permKey}` },
+        });
+      }
+      next();
+    } catch (err) {
+      console.error('requirePermissionForMethod error:', err);
+      return res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Erreur vérification permissions.' } });
+    }
+  };
+}
+
 module.exports = {
   verifyJWT,
   authenticate: verifyJWT,
   requireRole,
   requirePermission,
+  requirePermissionForMethod,
   clearPermissionsCache,
 };

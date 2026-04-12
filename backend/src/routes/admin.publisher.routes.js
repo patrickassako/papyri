@@ -5,37 +5,46 @@
 
 const express = require('express');
 const router = express.Router();
-const { verifyJWT, requireRole } = require('../middleware/auth');
+const { verifyJWT, requirePermission } = require('../middleware/auth');
 const ctrl = require('../controllers/publisher.controller');
 const claimsService = require('../services/publisher-claims.service');
 const publisherService = require('../services/publisher.service');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+// Helpers par domaine de permission
+const pubRead     = [verifyJWT, requirePermission('publishers.read')];
+const pubWrite    = [verifyJWT, requirePermission('publishers.write')];
+const pubApprove  = [verifyJWT, requirePermission('publishers.approve')];
+const payRead     = [verifyJWT, requirePermission('payouts.read')];
+const payWrite    = [verifyJWT, requirePermission('payouts.write')];
+const contentVal  = [verifyJWT, requirePermission('content.validate')];
+const contentRead = [verifyJWT, requirePermission('content.read')];
+const promoRead   = [verifyJWT, requirePermission('promo_codes.read')];
+const promoWrite  = [verifyJWT, requirePermission('promo_codes.write')];
 
 // ── Routes fixes AVANT les routes paramétriques /:id ─────────
-router.post('/invite', ...isAdmin, ctrl.adminInvitePublisher);
+router.post('/invite', ...pubWrite, ctrl.adminInvitePublisher);
 
 // ── Validation de contenu ─────────────────────────────────────
-router.get('/content/pending', ...isAdmin, ctrl.adminGetPendingContent);
-router.put('/content/:id/approve', ...isAdmin, ctrl.adminApproveContent);
-router.put('/content/:id/reject',  ...isAdmin, ctrl.adminRejectContent);
-router.put('/content/:id/pause',   ...isAdmin, express.json(), ctrl.adminPauseContent);
-router.put('/content/:id/pending', ...isAdmin, ctrl.adminResetContent);
+router.get('/content/pending',       ...contentRead,  ctrl.adminGetPendingContent);
+router.put('/content/:id/approve',   ...contentVal,   ctrl.adminApproveContent);
+router.put('/content/:id/reject',    ...contentVal,   ctrl.adminRejectContent);
+router.put('/content/:id/pause',     ...contentVal,   express.json(), ctrl.adminPauseContent);
+router.put('/content/:id/pending',   ...contentVal,   ctrl.adminResetContent);
 
 // ── Versements ────────────────────────────────────────────────
-router.get('/payouts/overview',        ...isAdmin, ctrl.adminGetPayoutsOverview);
-router.get('/payouts/history',         ...isAdmin, ctrl.adminGetPayoutsHistory);
-router.get('/payouts/scheduled',       ...isAdmin, ctrl.adminGetScheduledPayouts);
-router.get('/payouts/schedule-config', ...isAdmin, ctrl.adminGetScheduleConfig);
-router.get('/payouts/schedule-preview',...isAdmin, ctrl.adminGetSchedulePreview);
-router.put('/payouts/schedule-config', ...isAdmin, ctrl.adminUpdateScheduleConfig);
-router.post('/payouts/schedule-now',   ...isAdmin, ctrl.adminScheduleNow);
-router.post('/payouts/all',            ...isAdmin, ctrl.adminCreateAllPayouts);
-router.post('/payouts',                ...isAdmin, ctrl.adminCreatePayout);
-router.put('/payouts/:id/status',      ...isAdmin, ctrl.adminUpdatePayoutStatus);
+router.get('/payouts/overview',        ...payRead,  ctrl.adminGetPayoutsOverview);
+router.get('/payouts/history',         ...payRead,  ctrl.adminGetPayoutsHistory);
+router.get('/payouts/scheduled',       ...payRead,  ctrl.adminGetScheduledPayouts);
+router.get('/payouts/schedule-config', ...payRead,  ctrl.adminGetScheduleConfig);
+router.get('/payouts/schedule-preview',...payRead,  ctrl.adminGetSchedulePreview);
+router.put('/payouts/schedule-config', ...payWrite, ctrl.adminUpdateScheduleConfig);
+router.post('/payouts/schedule-now',   ...payWrite, ctrl.adminScheduleNow);
+router.post('/payouts/all',            ...payWrite, ctrl.adminCreateAllPayouts);
+router.post('/payouts',                ...payWrite, ctrl.adminCreatePayout);
+router.put('/payouts/:id/status',      ...payWrite, ctrl.adminUpdatePayoutStatus);
 
 // ── Réclamations éditeurs ─────────────────────────────────────
-router.get('/claims', ...isAdmin, async (req, res) => {
+router.get('/claims', ...pubRead, async (req, res) => {
   try {
     const { page, limit, status, publisherId } = req.query;
     const result = await claimsService.adminGetClaims({ page: +page || 1, limit: +limit || 30, status, publisherId });
@@ -45,7 +54,7 @@ router.get('/claims', ...isAdmin, async (req, res) => {
   }
 });
 
-router.put('/claims/:id/reply', ...isAdmin, express.json(), async (req, res) => {
+router.put('/claims/:id/reply', ...pubWrite, express.json(), async (req, res) => {
   try {
     const claim = await claimsService.adminReplyClaim(req.params.id, req.user.id, req.body);
     res.json({ success: true, claim });
@@ -54,7 +63,7 @@ router.put('/claims/:id/reply', ...isAdmin, express.json(), async (req, res) => 
   }
 });
 
-router.put('/claims/:id/status', ...isAdmin, express.json(), async (req, res) => {
+router.put('/claims/:id/status', ...pubWrite, express.json(), async (req, res) => {
   try {
     const claim = await claimsService.adminUpdateClaimStatus(req.params.id, req.body.status);
     res.json({ success: true, claim });
@@ -64,7 +73,7 @@ router.put('/claims/:id/status', ...isAdmin, express.json(), async (req, res) =>
 });
 
 // ── Codes promo éditeurs (admin) ──────────────────────────────
-router.get('/publisher-promo-codes', ...isAdmin, async (req, res) => {
+router.get('/publisher-promo-codes', ...promoRead, async (req, res) => {
   try {
     const { publisherId, status, page, limit } = req.query;
     const codes = await publisherService.adminGetPublisherPromoCodes({
@@ -76,7 +85,7 @@ router.get('/publisher-promo-codes', ...isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id/promo-limit', ...isAdmin, express.json(), async (req, res) => {
+router.put('/:id/promo-limit', ...promoWrite, express.json(), async (req, res) => {
   try {
     const limit = parseInt(req.body.limit);
     if (isNaN(limit)) return res.status(400).json({ success: false, message: 'limit requis (entier).' });
@@ -87,7 +96,7 @@ router.put('/:id/promo-limit', ...isAdmin, express.json(), async (req, res) => {
   }
 });
 
-router.patch('/publisher-promo-codes/:codeId/toggle', ...isAdmin, async (req, res) => {
+router.patch('/publisher-promo-codes/:codeId/toggle', ...promoWrite, async (req, res) => {
   try {
     const { supabaseAdmin } = require('../config/database');
     const { data: current, error: fe } = await supabaseAdmin
@@ -104,7 +113,7 @@ router.patch('/publisher-promo-codes/:codeId/toggle', ...isAdmin, async (req, re
   }
 });
 
-router.get('/publisher-promo-codes/:codeId/usages', ...isAdmin, async (req, res) => {
+router.get('/publisher-promo-codes/:codeId/usages', ...promoRead, async (req, res) => {
   try {
     const { supabaseAdmin } = require('../config/database');
     const { data, error } = await supabaseAdmin
@@ -120,12 +129,12 @@ router.get('/publisher-promo-codes/:codeId/usages', ...isAdmin, async (req, res)
 });
 
 // ── Gestion des éditeurs (routes paramétriques en dernier) ────
-router.get('/stats/dashboard', ...isAdmin, ctrl.adminGetDashboardStats);
-router.get('/', ...isAdmin, ctrl.adminGetPublishers);
-router.get('/:id/export', ...isAdmin, ctrl.adminExportPublisher);
-router.get('/:id', ...isAdmin, ctrl.adminGetPublisher);
-router.put('/:id/status', ...isAdmin, ctrl.adminUpdateStatus);
-router.put('/:id/revenue-grid', ...isAdmin, ctrl.adminUpdateRevenueGrid);
-router.delete('/:id', ...isAdmin, ctrl.adminDeletePublisher);
+router.get('/stats/dashboard', ...pubRead,  ctrl.adminGetDashboardStats);
+router.get('/',               ...pubRead,  ctrl.adminGetPublishers);
+router.get('/:id/export',     ...pubRead,  ctrl.adminExportPublisher);
+router.get('/:id',            ...pubRead,  ctrl.adminGetPublisher);
+router.put('/:id/status',     ...pubWrite, ctrl.adminUpdateStatus);
+router.put('/:id/revenue-grid',...pubWrite,ctrl.adminUpdateRevenueGrid);
+router.delete('/:id',         ...pubWrite, ctrl.adminDeletePublisher);
 
 module.exports = router;

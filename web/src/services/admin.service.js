@@ -98,6 +98,9 @@ export const setRolePermissions = (id, permission_ids) => call(`/roles/${id}/per
 });
 export const deleteRole = (id) => call(`/roles/${id}`, { method: 'DELETE' });
 
+// ── Permissions du user connecté ─────────────────────────────────────────────
+export const getMyPermissions = () => call('/me/permissions');
+
 // ── Contents ─────────────────────────────────────────────────────────────────
 export const searchContents = (q) => call(`/contents/search?q=${encodeURIComponent(q)}`);
 

@@ -5,7 +5,7 @@ const { verifyJWT } = require('../middleware/auth');
 const { rejectKidProfile } = require('../middleware/family-access');
 
 const MAX_DEVICES = 3;
-const LOCK_TTL_MS = 30_000; // 30s — lock is stale if no heartbeat
+const LOCK_TTL_MS = 15_000; // 15s — lock is stale if no heartbeat
 
 function isLockFresh(heartbeatAt) {
   if (!heartbeatAt) return false;
@@ -153,8 +153,9 @@ router.delete('/:deviceId', verifyJWT, rejectKidProfile, async (req, res, next) 
 
 /**
  * POST /devices/reading-lock
- * Acquire exclusive reading lock — always succeeds (Spotify-like takeover).
- * If another fresh device held the lock, it will detect the takeover via heartbeat (LOCK_LOST).
+ * Acquire exclusive reading lock. Fails with DEVICE_LIMIT_REACHED if the device is not registered.
+ * If another fresh registered device held the lock, it is displaced (Spotify-style takeover)
+ * and will detect the change via its next heartbeat (LOCK_LOST).
  */
 router.post('/reading-lock', verifyJWT, rejectKidProfile, async (req, res, next) => {
   try {
@@ -163,6 +164,31 @@ router.post('/reading-lock', verifyJWT, rejectKidProfile, async (req, res, next)
 
     if (!device_id) {
       return res.status(400).json({ success: false, error: { code: 'MISSING_DEVICE_ID', message: 'device_id requis.' } });
+    }
+
+    // Verify the device is registered for this user (enforces the 3-device limit on reading too)
+    const { data: registeredDevice } = await supabaseAdmin
+      .from('user_devices')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('device_id', device_id)
+      .maybeSingle();
+
+    if (!registeredDevice) {
+      const { count } = await supabaseAdmin
+        .from('user_devices')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'DEVICE_LIMIT_REACHED',
+          message: `Limite de ${MAX_DEVICES} appareils atteinte. Supprimez un appareil pour continuer.`,
+          limit: MAX_DEVICES,
+          registered: count || 0,
+        },
+      });
     }
 
     // Check if a different device currently holds a fresh lock (to report takeover info)

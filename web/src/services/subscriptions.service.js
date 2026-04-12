@@ -104,6 +104,8 @@ export const subscriptionsService = {
 
   async getMySubscription() {
     const response = await authFetch(`${API_BASE_URL}/api/subscriptions/me`);
+    // Kid profiles are blocked by rejectKidProfile middleware — return null silently
+    if (response.status === 403) return null;
     const data = await response.json();
     if (!response.ok || !data?.success) {
       throw new Error(data?.message || 'Failed to get subscription status');
@@ -137,6 +139,8 @@ export const subscriptionsService = {
 
   async getMyUsage() {
     const response = await authFetch(`${API_BASE_URL}/api/subscriptions/usage/me`);
+    // Kid profiles are blocked by rejectKidProfile middleware — return null silently
+    if (response.status === 403) return null;
     const data = await response.json();
     if (!response.ok || !data?.success) {
       throw new Error(data?.message || 'Failed to get usage');

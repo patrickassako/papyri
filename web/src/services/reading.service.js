@@ -11,6 +11,15 @@ const getCacheRequestUrl = (contentId, cacheKey) => {
 };
 
 export const readingService = {
+  async getLastPosition(contentId) {
+    try {
+      const session = await this.getSession(contentId);
+      return session?.last_position || null;
+    } catch (_) {
+      return null;
+    }
+  },
+
   async getSession(contentId) {
     const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/session`);
     const data = await response.json();
@@ -50,15 +59,18 @@ export const readingService = {
   },
 
   async saveProgress(contentId, { progressPercent, lastPosition, totalTimeSeconds }) {
+    const normalizedProgress = progressPercent ?? arguments[1]?.progress ?? 0;
+    const normalizedPosition = lastPosition ?? arguments[1]?.last_position ?? null;
+    const normalizedTime = totalTimeSeconds ?? arguments[1]?.total_time_seconds ?? 0;
     const response = await authFetch(`${API_BASE_URL}/api/reading/${contentId}/progress`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        progress_percent: progressPercent,
-        last_position: lastPosition ?? null,
-        total_time_seconds: totalTimeSeconds ?? 0,
+        progress_percent: normalizedProgress,
+        last_position: normalizedPosition,
+        total_time_seconds: normalizedTime,
       }),
     });
     const data = await response.json();

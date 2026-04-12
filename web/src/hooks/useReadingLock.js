@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deviceService } from '../services/device.service';
 
-const HEARTBEAT_INTERVAL = 30_000; // 30s
+const HEARTBEAT_INTERVAL = 10_000; // 10s
 
 /**
  * Gère le verrou de lecture exclusif (style Spotify).

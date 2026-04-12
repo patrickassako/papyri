@@ -6,11 +6,11 @@
 
 const express = require('express');
 const router  = express.Router();
-const { verifyJWT, requireRole, clearPermissionsCache } = require('../middleware/auth');
+const { verifyJWT, requirePermissionForMethod, clearPermissionsCache } = require('../middleware/auth');
 const { supabaseAdmin } = require('../config/database');
 const { logResourceCreated, logResourceUpdated, logResourceDeleted } = require('../services/audit.service');
 
-const isAdmin = [verifyJWT, requireRole('admin')];
+const isAdmin = [verifyJWT, requirePermissionForMethod({ read: 'roles.read', write: 'roles.write', delete: 'roles.delete' })];
 
 // ── GET /api/admin/roles — liste tous les rôles avec nb d'utilisateurs ────────
 router.get('/', ...isAdmin, async (req, res) => {
@@ -22,18 +22,32 @@ router.get('/', ...isAdmin, async (req, res) => {
       .order('created_at', { ascending: true });
     if (error) throw error;
 
-    // Enrichir avec le nb d'utilisateurs par rôle
+    // Enrichir avec le nb d'utilisateurs et de permissions par rôle
     const roleNames = roles.map(r => r.name);
     const userCounts = {};
-    await Promise.all(roleNames.map(async (name) => {
-      const { count } = await supabaseAdmin
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', name);
-      userCounts[name] = count || 0;
-    }));
+    const permCounts = {};
+    await Promise.all([
+      ...roleNames.map(async (name) => {
+        const { count } = await supabaseAdmin
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', name);
+        userCounts[name] = count || 0;
+      }),
+      ...roles.map(async (role) => {
+        const { count } = await supabaseAdmin
+          .from('role_permissions')
+          .select('permission_id', { count: 'exact', head: true })
+          .eq('role_id', role.id);
+        permCounts[role.id] = count || 0;
+      }),
+    ]);
 
-    const result = roles.map(r => ({ ...r, user_count: userCounts[r.name] || 0 }));
+    const result = roles.map(r => ({
+      ...r,
+      user_count: userCounts[r.name] || 0,
+      permission_count: permCounts[r.id] || 0,
+    }));
     res.json({ roles: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
