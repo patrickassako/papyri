@@ -127,8 +127,7 @@ export default function LibraryCatalogPage() {
           page: 1,
           limit: 60,
           sort: sortBy,
-          order: sortBy === 'title' ? 'asc' : 'desc',
-          ...(contentType ? { content_type: contentType } : {}),
+          ...(contentType ? { type: contentType } : {}),
           ...(language ? { language } : {}),
           ...(category ? { category } : {}),
         });
