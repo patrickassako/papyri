@@ -352,19 +352,19 @@ export default function ProfilePage() {
   const memberSinceLabel = useMemo(() => formatMemberSince(user?.created_at, t, locale), [user?.created_at, i18n.language, t, locale]);
 
   const handleShareSuccesses = async () => {
-    const name = user?.full_name?.split(' ')[0] || 'Un lecteur Papyri';
+    const name = user?.full_name?.split(' ')[0] || t('profile.shareDefaultName');
     const text = [
-      `📚 ${name} sur Papyri :`,
-      `• ${stats.completedBooks} livre${stats.completedBooks > 1 ? 's' : ''} terminé${stats.completedBooks > 1 ? 's' : ''}`,
-      `• ${stats.totalHours}h de lecture`,
-      stats.streakDays > 0 ? `• ${stats.streakDays} jours de série en cours 🔥` : null,
-      ``,
-      `Rejoins-moi sur Papyri — la bibliothèque numérique 📖`,
-    ].filter(Boolean).join('\n');
+      t('profile.shareTextIntro', { name }),
+      t('profile.shareTextBooks', { count: stats.completedBooks }),
+      t('profile.shareTextHours', { hours: stats.totalHours }),
+      stats.streakDays > 0 ? t('profile.shareTextStreak', { days: stats.streakDays }) : null,
+      '',
+      t('profile.shareTextFooter'),
+    ].filter((v) => v !== null).join('\n');
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Mes succès Papyri', text });
+        await navigator.share({ title: t('profile.shareTitle'), text });
       } catch (_) {
         // user cancelled — do nothing
       }
@@ -384,45 +384,53 @@ export default function ProfilePage() {
   const badges = useMemo(() => ([
     {
       id: 1,
-      name: 'Dévoreur de classiques',
+      name: t('profile.badge1Name'),
       icon: LocalLibraryOutlined,
       unlocked: stats.completedBooks >= 10,
-      date: stats.completedBooks >= 10 ? 'Objectif atteint' : `${stats.completedBooks}/10 livres`,
+      date: stats.completedBooks >= 10
+        ? t('profile.badge1Achieved')
+        : t('profile.badge1Progress', { count: stats.completedBooks }),
       gradient: ['#FEF3C7', '#FDE68A'],
       borderColor: '#F59E0B',
       iconColor: '#92400E',
     },
     {
       id: 2,
-      name: 'Série de lecture',
+      name: t('profile.badge2Name'),
       icon: CalendarMonthOutlined,
       unlocked: stats.streakDays >= 7,
-      date: stats.streakDays >= 7 ? `${stats.streakDays} jours de suite` : `${stats.streakDays}/7 jours`,
+      date: stats.streakDays >= 7
+        ? t('profile.badge2Achieved', { days: stats.streakDays })
+        : t('profile.badge2Progress', { count: stats.streakDays }),
       gradient: ['#FFEDD5', '#FEE2E2'],
       borderColor: '#FB923C',
       iconColor: '#9A3412',
     },
     {
       id: 3,
-      name: 'Auditeur fidèle',
+      name: t('profile.badge3Name'),
       icon: RecordVoiceOverOutlined,
       unlocked: stats.audioHours >= 10,
-      date: stats.audioHours >= 10 ? `${stats.audioHours}h audio` : `${stats.audioHours}/10h audio`,
+      date: stats.audioHours >= 10
+        ? t('profile.badge3Achieved', { hours: stats.audioHours })
+        : t('profile.badge3Progress', { hours: stats.audioHours }),
       gradient: ['#DBEAFE', '#E0E7FF'],
       borderColor: '#60A5FA',
       iconColor: '#1E3A5F',
     },
     {
       id: 4,
-      name: 'Bibliophile Expert',
+      name: t('profile.badge4Name'),
       icon: WorkspacePremiumOutlined,
       unlocked: stats.completedBooks >= 50,
-      date: stats.completedBooks >= 50 ? 'Niveau légendaire' : `${stats.completedBooks}/50 livres`,
+      date: stats.completedBooks >= 50
+        ? t('profile.badge4Achieved')
+        : t('profile.badge4Progress', { count: stats.completedBooks }),
       gradient: ['#E5E7EB', '#E5E7EB'],
       borderColor: '#9CA3AF',
       iconColor: '#6B7280',
     },
-  ]), [stats.audioHours, stats.completedBooks, stats.streakDays]);
+  ]), [stats.audioHours, stats.completedBooks, stats.streakDays, t]);
 
   const handleDataExport = async () => {
     setExportLoading(true);
@@ -1056,7 +1064,7 @@ export default function ProfilePage() {
                       mb: 0.5,
                     }}
                   >
-                    Prochain Badge : Bibliophile Expert
+                    {t('profile.nextBadgeTitle')}
                   </Typography>
                   <Typography
                     sx={{
@@ -1064,7 +1072,7 @@ export default function ProfilePage() {
                       fontSize: '0.85rem',
                     }}
                   >
-                    Lisez 50 livres pour d&eacute;bloquer ce badge l&eacute;gendaire.
+                    {t('profile.nextBadgeDesc')}
                   </Typography>
                 </Box>
                 <Typography
@@ -1102,7 +1110,9 @@ export default function ProfilePage() {
                   fontWeight: 500,
                 }}
               >
-                {remainingForNextBadge > 0 ? `Plus que ${remainingForNextBadge} livres !` : 'Objectif atteint !'}
+                {remainingForNextBadge > 0
+                  ? t('profile.nextBadgeRemaining', { count: remainingForNextBadge })
+                  : t('profile.nextBadgeAchieved')}
               </Typography>
             </Paper>
 
@@ -1116,7 +1126,7 @@ export default function ProfilePage() {
                     fontSize: '1.1rem',
                   }}
                 >
-                  Badges &amp; Accomplissements
+                  {t('profile.badgesTitle')}
                 </Typography>
                 <Typography
                   component="a"
@@ -1131,7 +1141,7 @@ export default function ProfilePage() {
                     '&:hover': { textDecoration: 'underline' },
                   }}
                 >
-                  Voir tout
+                  {t('common.seeAll')}
                 </Typography>
               </Box>
 
@@ -1232,7 +1242,7 @@ export default function ProfilePage() {
                   },
                 }}
               >
-                Partager mes succ&egrave;s
+                {t('profile.shareButton')}
               </Button>
             </Box>
           </Grid>
@@ -1241,15 +1251,15 @@ export default function ProfilePage() {
       </Box>
 
       <Dialog open={avatarDialogOpen} onClose={() => setAvatarDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Modifier la photo de profil</DialogTitle>
+        <DialogTitle>{t('profile.avatarDialogTitle')}</DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 1, mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Avatar src={avatarPreview || user?.avatar_url} alt={user?.full_name || 'Photo de profil'} sx={{ width: 84, height: 84, bgcolor: primary }}>
+            <Avatar src={avatarPreview || user?.avatar_url} alt={user?.full_name || t('profile.uploadAvatar')} sx={{ width: 84, height: 84, bgcolor: primary }}>
               {user?.full_name?.[0]?.toUpperCase() || 'U'}
             </Avatar>
             <Box>
               <Button component="label" variant="outlined" sx={{ textTransform: 'none', mb: 1 }}>
-                Choisir une image
+                {t('profile.avatarChooseImage')}
                 <input hidden type="file" accept="image/*" onChange={handleAvatarFileChange} />
               </Button>
               <Typography sx={{ fontSize: '0.82rem', color: textMuted }}>
@@ -1265,10 +1275,10 @@ export default function ProfilePage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAvatarDialogOpen(false)} sx={{ textTransform: 'none' }}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSaveAvatar} disabled={saving} variant="contained" sx={{ textTransform: 'none', bgcolor: primary, '&:hover': { bgcolor: primaryDark } }}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? t('profile.avatarSaving') : t('profile.avatarSave')}
           </Button>
         </DialogActions>
       </Dialog>
