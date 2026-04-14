@@ -19,7 +19,15 @@ const CORS_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
   : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3001'];
 app.use(cors({
-  origin: CORS_ORIGINS,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl) and listed origins.
+    // Also allow 'null' origin sent by Android/iOS WebViews (mobile app readers).
+    if (!origin || origin === 'null' || CORS_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 

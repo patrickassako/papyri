@@ -39,10 +39,17 @@ function clearPermissionsCache(roleName) {
  */
 async function verifyJWT(req, res, next) {
   try {
-    // Get token from Authorization header
+    // Get token from Authorization header OR ?token= query param (used by WebView file streaming)
     const authHeader = req.headers.authorization;
+    let token = null;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (req.query.token && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         error: {
@@ -51,8 +58,6 @@ async function verifyJWT(req, res, next) {
         }
       });
     }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     // Verify token with Supabase Auth using admin client
     const { data, error } = await supabaseAdmin.auth.getUser(token);
