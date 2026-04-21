@@ -25,6 +25,50 @@ router.post('/register', verifyJWT, rejectKidProfile, async (req, res, next) => 
       return res.status(400).json({ success: false, error: { code: 'MISSING_DEVICE_ID', message: 'device_id requis.' } });
     }
 
+    // Deduplication: if another entry exists with the same device_name + device_type,
+    // it's the same physical device with a different UUID (e.g. after reinstall).
+    // Replace it with the new device_id instead of creating a duplicate.
+    if (device_name && device_type) {
+      const { data: sameNameDevices } = await supabaseAdmin
+        .from('user_devices')
+        .select('id, device_id')
+        .eq('user_id', userId)
+        .eq('device_name', device_name)
+        .eq('device_type', device_type)
+        .neq('device_id', device_id);
+
+      if (sameNameDevices && sameNameDevices.length > 0) {
+        // Delete the stale duplicate entries
+        const staleIds = sameNameDevices.map((d) => d.device_id);
+        await supabaseAdmin
+          .from('user_devices')
+          .delete()
+          .eq('user_id', userId)
+          .in('device_id', staleIds);
+      }
+    }
+
+    // If device_id starts with 'hw-' (stable hardware ID), also purge old random UUIDs
+    if (device_id.startsWith('hw-')) {
+      const { data: allDevices } = await supabaseAdmin
+        .from('user_devices')
+        .select('id, device_id, device_type')
+        .eq('user_id', userId)
+        .neq('device_id', device_id);
+
+      const staleIds = (allDevices || [])
+        .filter((d) => d.device_type === (device_type || 'mobile') && !d.device_id.startsWith('hw-'))
+        .map((d) => d.device_id);
+
+      if (staleIds.length > 0) {
+        await supabaseAdmin
+          .from('user_devices')
+          .delete()
+          .eq('user_id', userId)
+          .in('device_id', staleIds);
+      }
+    }
+
     // Check if already registered → upsert
     const { data: existing } = await supabaseAdmin
       .from('user_devices')
@@ -136,16 +180,20 @@ router.delete('/:deviceId', verifyJWT, rejectKidProfile, async (req, res, next) 
       .eq('user_id', userId)
       .eq('device_id', deviceId);
 
-    // Revoke ALL sessions for this user so the removed device is truly disconnected.
-    // This also signs out the current device — the frontend will redirect to login.
-    try {
-      await supabaseAdmin.auth.admin.signOut(userId);
-    } catch (signOutErr) {
-      console.error('[devices] signOut after delete error:', signOutErr.message);
-      // Non-blocking — device is already removed from DB
+    // Only revoke sessions if the user is removing the CURRENT device (self-removal).
+    // Removing another device should not sign out the current session.
+    const currentDeviceId = req.headers['x-device-id'] || null;
+    const isSelfRemoval = currentDeviceId && currentDeviceId === deviceId;
+
+    if (isSelfRemoval) {
+      try {
+        await supabaseAdmin.auth.admin.signOut(userId);
+      } catch (signOutErr) {
+        console.error('[devices] signOut after delete error:', signOutErr.message);
+      }
     }
 
-    return res.status(200).json({ success: true, message: 'Appareil supprimé.', sessions_revoked: true });
+    return res.status(200).json({ success: true, message: 'Appareil supprimé.', sessions_revoked: isSelfRemoval });
   } catch (error) {
     next(error);
   }
