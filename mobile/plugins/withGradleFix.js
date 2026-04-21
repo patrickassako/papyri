@@ -1,30 +1,40 @@
 /**
  * Config plugin to fix "Could not get unknown property 'release'"
- * in expo-modules-core with AGP 8.3+
+ * in expo-modules-core with AGP 8.x
  *
- * Root cause: ExpoModulesCorePlugin.gradle calls `components.release`
- * before AGP registers the software component in AGP 8.3+.
+ * Root cause: AGP 8.x no longer auto-creates software components (release/debug).
+ * ExpoModulesCorePlugin.gradle accesses `components.release` before it's registered.
  *
- * Fix: force resolution of AGP to 8.1.4 (compatible with Expo SDK 50)
- * and add singleVariant("release") to all android library subprojects.
+ * Fix 1: gradle.properties — android.disableAutomaticComponentCreation=false
+ *   → restores old AGP 7.x behavior where components.release auto-exists
+ *
+ * Fix 2: root build.gradle — add singleVariant("release") to all android lib subprojects
+ *   → ensures each library subproject explicitly declares the release variant
  */
 
-const { withAndroidBuildGradle } = require('@expo/config-plugins');
+const { withGradleProperties, withProjectBuildGradle } = require('@expo/config-plugins');
 
-// Patch appended to the END of android/build.gradle (root)
-const PATCH = `
+// gradle.properties fix — re-enable automatic component creation (AGP 7.x behavior)
+function addGradleProperty(config) {
+  return withGradleProperties(config, (config) => {
+    const props = config.modResults;
 
-// ─── Papyri build fix: expo-modules-core + AGP 8.3 compatibility ───────────
-// Force AGP 8.1.4 which is stable with Expo SDK 50
-configurations.all {
-    resolutionStrategy.eachDependency { details ->
-        if (details.requested.group == 'com.android.tools.build'
-                && details.requested.name == 'gradle') {
-            details.useVersion '8.1.4'
-        }
-    }
+    // Remove any existing value for this key
+    const filtered = props.filter(p => p.key !== 'android.disableAutomaticComponentCreation');
+    filtered.push({
+      type: 'property',
+      key: 'android.disableAutomaticComponentCreation',
+      value: 'false',
+    });
+    config.modResults = filtered;
+    return config;
+  });
 }
 
+// root build.gradle fix — singleVariant patch for all android library subprojects
+const GRADLE_PATCH = `
+
+// ─── Papyri Gradle fix: expo-modules-core + AGP 8.x compatibility ────────────
 subprojects {
     plugins.withId("com.android.library") {
         android {
@@ -34,19 +44,21 @@ subprojects {
         }
     }
 }
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 `;
 
-module.exports = function withGradleFix(config) {
-  return withAndroidBuildGradle(config, (config) => {
-    const contents = config.modResults.contents;
-
-    // Only patch once
-    if (contents.includes('Papyri build fix')) {
-      return config;
+function patchRootBuildGradle(config) {
+  return withProjectBuildGradle(config, (config) => {
+    if (config.modResults.contents.includes('Papyri Gradle fix')) {
+      return config; // already patched
     }
-
-    config.modResults.contents = contents + PATCH;
+    config.modResults.contents += GRADLE_PATCH;
     return config;
   });
+}
+
+module.exports = function withGradleFix(config) {
+  config = addGradleProperty(config);
+  config = patchRootBuildGradle(config);
+  return config;
 };
