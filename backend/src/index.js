@@ -152,7 +152,7 @@ async function startServer() {
   app.use('/api/subscriptions', subscriptionsRoutes);
   app.use('/api/family', familyRoutes);
   app.use('/api/notifications', notificationsRoutes);
-  app.use('/devices', devicesRoutes);
+  app.use('/api/devices', devicesRoutes);
   app.use('/api/admin/notifications', adminNotificationsRoutes);
   app.use('/webhooks', webhooksRoutes);
   app.use('/api/publisher', publisherRoutes);
