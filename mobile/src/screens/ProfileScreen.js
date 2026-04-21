@@ -1,250 +1,194 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   RefreshControl,
+  Animated,
+  Platform,
 } from 'react-native';
 import {
-  Avatar,
-  Button,
   Text,
   Divider,
   Portal,
   Dialog,
   TextInput,
-  HelperText,
-  Banner,
-  ActivityIndicator,
+  Button,
   Switch,
   List,
+  ActivityIndicator,
+  Snackbar,
+  Banner,
 } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import {
+  getUserProfile,
+  updateUserProfile,
+  changePassword,
+} from '../services/user.service';
 import {
   getPreferences,
   updatePreferences,
   registerForPushNotifications,
 } from '../services/notifications.service';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import API_BASE_URL from '../config/api';
-import { getAccessToken, logout } from '../services/auth.service';
-import { useTranslation } from 'react-i18next';
+import { logout } from '../services/auth.service';
 import { changeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 
-// Import shared design tokens
 const tokens = require('../config/tokens');
 
-const ProfileScreen = ({ navigation }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-  // Notification preferences
-  const [notifPrefs, setNotifPrefs] = useState(null);
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+function getInitials(name, email) {
+  if (name?.trim()) {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+  if (email) return email[0].toUpperCase();
+  return '?';
+}
 
-  // Edit Profile Dialog
-  const [editDialogVisible, setEditDialogVisible] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    full_name: '',
-    language: 'fr',
+function formatDate(dateStr, locale) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString(locale === 'en' ? 'en-GB' : 'fr-FR', {
+    day: 'numeric', month: 'long', year: 'numeric',
   });
-  const [editLoading, setEditLoading] = useState(false);
+}
 
-  // Change Password Dialog
-  const [passwordDialogVisible, setPasswordDialogVisible] = useState(false);
-  const [passwordFormData, setPasswordFormData] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: '',
-  });
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false,
-  });
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState(null);
+function getSubStatusColor(status) {
+  switch (status) {
+    case 'active': return '#22c55e';
+    case 'cancelled': return '#f97316';
+    case 'expired': return '#ef4444';
+    default: return '#9ca3af';
+  }
+}
 
-  // RGPD
-  const [exportLoading, setExportLoading]         = useState(false);
-  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
-  const [deleteConfirm, setDeleteConfirm]         = useState('');
-  const [deleteLoading, setDeleteLoading]         = useState(false);
+// ── Main Component ────────────────────────────────────────────────────────────
 
-  // Language Selector Dialog (profile content language)
-  const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
-  // App UI language dialog
-  const [appLangDialogVisible, setAppLangDialogVisible] = useState(false);
-
+export default function ProfileScreen({ navigation }) {
   const { t, i18n } = useTranslation();
 
-  // Language options (profile preferred language for content)
-  const languageOptions = [
-    { value: 'fr', label: 'Français' },
-    { value: 'en', label: 'English' },
-    { value: 'es', label: 'Español' },
-    { value: 'pt', label: 'Português' },
-  ];
+  // ── Data state ──
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState(null);
 
-  // Fetch user profile
-  const fetchProfile = async () => {
+  // ── Feedback ──
+  const [snackMsg, setSnackMsg] = useState('');
+  const [snackError, setSnackError] = useState(false);
+
+  // ── Dialog visibility ──
+  const [editNameVisible, setEditNameVisible] = useState(false);
+  const [changePassVisible, setChangePassVisible] = useState(false);
+  const [langDialogVisible, setLangDialogVisible] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [dangerExpanded, setDangerExpanded] = useState(false);
+
+  // ── Edit name form ──
+  const [editName, setEditName] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+
+  // ── Change password form ──
+  const [passForm, setPassForm] = useState({ current: '', next: '', confirm: '' });
+  const [showPass, setShowPass] = useState({ current: false, next: false, confirm: false });
+  const [passLoading, setPassLoading] = useState(false);
+  const [passError, setPassError] = useState('');
+
+  // ── Delete account ──
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // ── Avatar pulse animation ──
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const pulseAvatar = () => {
+    Animated.sequence([
+      Animated.timing(avatarScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
+      Animated.timing(avatarScale, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+  };
+
+  // ── Load data ──
+  const fetchProfile = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
-      setError(null);
-
-      const token = await getAccessToken();
-      if (!token) {
-        navigation.replace('Login');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          navigation.replace('Login');
-          return;
-        }
-        throw new Error(data.error?.message || 'Erreur lors du chargement du profil.');
-      }
-
-      setUser(data.data);
-      setEditFormData({
-        full_name: data.data.full_name || '',
-        language: data.data.language || 'fr',
-      });
-      setLoading(false);
-      setRefreshing(false);
-    } catch (err) {
-      console.error('Fetch profile error:', err);
-      setError(err.message);
+      const profile = await getUserProfile();
+      setUser(profile);
+      setEditName(profile?.full_name || '');
+    } catch {
+      showSnack(t('errors.networkError'), true);
+    } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+    getPreferences().then(p => { if (p) setNotifPrefs(p); }).catch(() => {});
+    registerForPushNotifications().catch(() => {});
+  }, [fetchProfile]);
 
-  // Handle refresh
   const onRefresh = () => {
     setRefreshing(true);
-    fetchProfile();
+    fetchProfile(true);
   };
 
-  // Handle edit profile
-  const handleEditProfile = async () => {
+  // ── Feedback helper ──
+  const showSnack = (msg, isError = false) => {
+    setSnackMsg(msg);
+    setSnackError(isError);
+  };
+
+  // ── Edit name ──
+  const handleSaveName = async () => {
+    if (!editName.trim()) return;
+    setEditLoading(true);
     try {
-      setEditLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      const token = await getAccessToken();
-      const response = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(editFormData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Erreur lors de la mise à jour du profil.');
-      }
-
-      setUser(data.data);
-      setEditDialogVisible(false);
-      setSuccess('Profil mis à jour avec succès.');
-      setEditLoading(false);
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Edit profile error:', err);
-      setError(err.message);
+      const updated = await updateUserProfile({ full_name: editName.trim() });
+      setUser(prev => ({ ...prev, full_name: updated?.full_name || editName.trim() }));
+      setEditNameVisible(false);
+      showSnack(t('common.success'));
+    } catch {
+      showSnack(t('common.error'), true);
+    } finally {
       setEditLoading(false);
     }
   };
 
-  // Handle change password
+  // ── Change password ──
   const handleChangePassword = async () => {
+    setPassError('');
+    if (!passForm.current || !passForm.next || !passForm.confirm) {
+      setPassError(t('auth.fieldRequired'));
+      return;
+    }
+    if (passForm.next !== passForm.confirm) {
+      setPassError(t('auth.passwordMismatch'));
+      return;
+    }
+    if (passForm.next.length < 8) {
+      setPassError(t('auth.weakPassword'));
+      return;
+    }
+    setPassLoading(true);
     try {
-      setPasswordLoading(true);
-      setPasswordError(null);
-      setError(null);
-      setSuccess(null);
-
-      // Validate passwords match
-      if (passwordFormData.new_password !== passwordFormData.confirm_password) {
-        setPasswordError('Les mots de passe ne correspondent pas.');
-        setPasswordLoading(false);
-        return;
-      }
-
-      // Validate password length
-      if (passwordFormData.new_password.length < 8) {
-        setPasswordError('Le mot de passe doit contenir au moins 8 caractères.');
-        setPasswordLoading(false);
-        return;
-      }
-
-      const token = await getAccessToken();
-      const response = await fetch(`${API_BASE_URL}/users/me/password`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          current_password: passwordFormData.current_password,
-          new_password: passwordFormData.new_password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Erreur lors du changement de mot de passe.');
-      }
-
-      setPasswordDialogVisible(false);
-      setPasswordFormData({
-        current_password: '',
-        new_password: '',
-        confirm_password: '',
-      });
-      setSuccess('Mot de passe modifié avec succès.');
-      setPasswordLoading(false);
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Change password error:', err);
-      setPasswordError(err.message);
-      setPasswordLoading(false);
+      await changePassword({ current_password: passForm.current, new_password: passForm.next });
+      setChangePassVisible(false);
+      setPassForm({ current: '', next: '', confirm: '' });
+      showSnack(t('common.success'));
+    } catch (e) {
+      setPassError(e?.message || t('common.error'));
+    } finally {
+      setPassLoading(false);
     }
   };
 
-  // Charger les préférences de notification
-  useEffect(() => {
-    getPreferences().then((prefs) => { if (prefs) setNotifPrefs(prefs); }).catch(() => {});
-    // Enregistrer le token push si pas encore fait
-    registerForPushNotifications().catch(() => {});
-  }, []);
-
+  // ── Notifications toggle ──
   const handleToggleNotif = useCallback(async (key, value) => {
     if (!notifPrefs) return;
     const updated = { ...notifPrefs, [key]: value };
@@ -256,513 +200,462 @@ const ProfileScreen = ({ navigation }) => {
     }
   }, [notifPrefs]);
 
-  // RGPD — export données
-  const handleDataExport = async () => {
-    setExportLoading(true);
-    try {
-      const token = await getAccessToken();
-      const r = await fetch(`${API_BASE_URL}/users/me/data-export`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!r.ok) throw new Error('Erreur export');
-      setSuccess('Export demandé. Les données seront disponibles par email ou téléchargement.');
-    } catch (e) {
-      setError('Erreur lors de l\'export des données.');
-    } finally {
-      setExportLoading(false);
-    }
+  // ── Language change ──
+  const handleLangChange = async (code) => {
+    setLangDialogVisible(false);
+    await changeLanguage(code);
   };
 
-  // RGPD — suppression compte
+  // ── Logout ──
+  const handleLogout = async () => {
+    try { await logout(); } catch {}
+    navigation.replace('Login');
+  };
+
+  // ── Delete account ──
   const handleDeleteAccount = async () => {
-    if (deleteConfirm !== 'SUPPRIMER') return;
+    if (deleteConfirm.toUpperCase() !== 'SUPPRIMER') return;
     setDeleteLoading(true);
     try {
-      const token = await getAccessToken();
-      const r = await fetch(`${API_BASE_URL}/users/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!r.ok) throw new Error('Erreur suppression');
       await logout();
       navigation.replace('Login');
-    } catch (e) {
-      setError('Erreur lors de la suppression du compte.');
+    } catch {
+      showSnack(t('common.error'), true);
       setDeleteLoading(false);
     }
   };
 
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
-      navigation.replace('Login');
+  // ── Subscription helpers ──
+  const sub = user?.subscription;
+  const subStatusLabel = () => {
+    if (!sub) return t('profile.noSubscription');
+    switch (sub.status) {
+      case 'active': return t('subscription.active');
+      case 'cancelled': return t('subscription.cancelled');
+      case 'expired': return t('subscription.expired');
+      default: return sub.status;
     }
   };
 
-  if (loading) {
+  // ── Loading state ──
+  if (loading && !user) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top']}>
         <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  // ── Current app language label ──
+  const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === i18n.language) || SUPPORTED_LANGUAGES[0];
+  const firstName = user?.full_name?.split(' ')[0] || '';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tokens.colors.primary]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
         }
       >
-        {/* Success Banner */}
-        {success && (
-          <Banner
-            visible={!!success}
-            icon="check-circle"
-            style={styles.successBanner}
-            actions={[
-              {
-                label: 'Fermer',
-                onPress: () => setSuccess(null),
-              },
-            ]}
-          >
-            {success}
-          </Banner>
-        )}
-
-        {/* Error Banner */}
-        {error && (
-          <Banner
-            visible={!!error}
-            icon="alert-circle"
-            style={styles.errorBanner}
-            actions={[
-              {
-                label: 'Fermer',
-                onPress: () => setError(null),
-              },
-            ]}
-          >
-            {error}
-          </Banner>
-        )}
-
-        {/* Profile Header */}
+        {/* ── HEADER ─────────────────────────────────────────── */}
         <View style={styles.header}>
-          <Avatar.Text
-            size={80}
-            label={user.full_name ? user.full_name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
-            style={styles.avatar}
-            labelStyle={styles.avatarLabel}
-          />
-          <Text variant="headlineMedium" style={styles.name}>
-            {user.full_name || 'Utilisateur'}
-          </Text>
-          <Text variant="bodyMedium" style={styles.email}>
-            {user.email}
-          </Text>
-          <Button
-            mode="outlined"
-            icon="pencil"
-            onPress={() => setEditDialogVisible(true)}
-            style={styles.editButton}
-            labelStyle={styles.editButtonLabel}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => { pulseAvatar(); setEditNameVisible(true); }}
           >
-            Modifier le profil
-          </Button>
-        </View>
-
-        <Divider style={styles.divider} />
-
-        {/* Profile Information */}
-        <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Informations
-          </Text>
-
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="account" size={20} color={tokens.colors.onSurface.light} />
-            <View style={styles.infoContent}>
-              <Text variant="bodySmall" style={styles.infoLabel}>
-                Nom complet
+            <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
+              <Text style={styles.avatarText}>
+                {getInitials(user?.full_name, user?.email)}
               </Text>
-              <Text variant="bodyMedium" style={styles.infoValue}>
-                {user.full_name || '—'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="email" size={20} color={tokens.colors.onSurface.light} />
-            <View style={styles.infoContent}>
-              <Text variant="bodySmall" style={styles.infoLabel}>
-                Email
-              </Text>
-              <Text variant="bodyMedium" style={styles.infoValue}>
-                {user.email}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="translate" size={20} color={tokens.colors.onSurface.light} />
-            <View style={styles.infoContent}>
-              <Text variant="bodySmall" style={styles.infoLabel}>
-                Langue
-              </Text>
-              <Text variant="bodyMedium" style={styles.infoValue}>
-                {languageOptions.find(opt => opt.value === user.language)?.label || 'Français'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="calendar" size={20} color={tokens.colors.onSurface.light} />
-            <View style={styles.infoContent}>
-              <Text variant="bodySmall" style={styles.infoLabel}>
-                Membre depuis
-              </Text>
-              <Text variant="bodyMedium" style={styles.infoValue}>
-                {new Date(user.created_at).toLocaleDateString('fr-FR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
-            </View>
-          </View>
-
-          {user.subscription && (
-            <>
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="credit-card" size={20} color={tokens.colors.onSurface.light} />
-                <View style={styles.infoContent}>
-                  <Text variant="bodySmall" style={styles.infoLabel}>
-                    Abonnement
-                  </Text>
-                  <Text variant="bodyMedium" style={styles.infoValue}>
-                    {user.subscription.plan} - {user.subscription.status}
-                  </Text>
-                </View>
+              <View style={styles.avatarEditBadge}>
+                <MaterialCommunityIcons name="pencil" size={10} color="#fff" />
               </View>
+            </Animated.View>
+          </TouchableOpacity>
 
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="cash" size={20} color={tokens.colors.onSurface.light} />
-                <View style={styles.infoContent}>
-                  <Text variant="bodySmall" style={styles.infoLabel}>
-                    Prix
-                  </Text>
-                  <Text variant="bodyMedium" style={styles.infoValue}>
-                    {user.subscription.price_eur} EUR
-                  </Text>
-                </View>
-              </View>
-            </>
+          <Text style={styles.headerName}>{user?.full_name || t('common.unknown')}</Text>
+          <Text style={styles.headerEmail}>{user?.email}</Text>
+
+          {/* Subscription pill */}
+          {sub ? (
+            <View style={[styles.subPill, { borderColor: getSubStatusColor(sub.status) }]}>
+              <View style={[styles.subPillDot, { backgroundColor: getSubStatusColor(sub.status) }]} />
+              <Text style={[styles.subPillText, { color: getSubStatusColor(sub.status) }]}>
+                {subStatusLabel()}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.subPillCTA}
+              onPress={() => navigation.navigate('Subscription')}
+            >
+              <MaterialCommunityIcons name="crown-outline" size={14} color="#fff" />
+              <Text style={styles.subPillCTAText}>{t('profile.subscribeNow')}</Text>
+            </TouchableOpacity>
           )}
         </View>
 
-        <Divider style={styles.divider} />
+        {/* ── ABONNEMENT ─────────────────────────────────────── */}
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <MaterialCommunityIcons name="crown" size={20} color="#D4A017" />
+            <Text style={styles.cardTitle}>{t('profile.subscription')}</Text>
+          </View>
 
-        {/* Notifications Section */}
-        <Divider style={styles.divider} />
-        <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            🔔 Notifications
-          </Text>
-          {notifPrefs ? (
+          {sub ? (
             <>
-              <List.Item
-                title="Notifications push"
-                description="Activer/désactiver toutes les notifications"
-                left={(p) => <List.Icon {...p} icon="bell" color={tokens.colors.primary} />}
-                right={() => (
-                  <Switch
-                    value={Boolean(notifPrefs.push_enabled)}
-                    onValueChange={(v) => handleToggleNotif('push_enabled', v)}
-                    color={tokens.colors.primary}
-                  />
-                )}
-              />
-              <List.Item
-                title="Nouveaux contenus"
-                description="Alertes lors de l'ajout de nouveaux livres"
-                left={(p) => <List.Icon {...p} icon="book-plus" color="#B5651D" />}
-                right={() => (
-                  <Switch
-                    value={Boolean(notifPrefs.new_content)}
-                    onValueChange={(v) => handleToggleNotif('new_content', v)}
-                    color={tokens.colors.primary}
-                    disabled={!notifPrefs.push_enabled}
-                  />
-                )}
-              />
-              <List.Item
-                title="Rappels de lecture"
-                description="Rappels pour reprendre votre lecture"
-                left={(p) => <List.Icon {...p} icon="book-open-variant" color="#2E4057" />}
-                right={() => (
-                  <Switch
-                    value={Boolean(notifPrefs.reading_reminders)}
-                    onValueChange={(v) => handleToggleNotif('reading_reminders', v)}
-                    color={tokens.colors.primary}
-                    disabled={!notifPrefs.push_enabled}
-                  />
-                )}
-              />
-              <List.Item
-                title="Abonnement"
-                description="Expiration, renouvellement, promotions"
-                left={(p) => <List.Icon {...p} icon="credit-card" color="#D4A017" />}
-                right={() => (
-                  <Switch
-                    value={Boolean(notifPrefs.subscription_updates)}
-                    onValueChange={(v) => handleToggleNotif('subscription_updates', v)}
-                    color={tokens.colors.primary}
-                    disabled={!notifPrefs.push_enabled}
-                  />
-                )}
-              />
+              <View style={styles.subInfoRow}>
+                <Text style={styles.subLabel}>{t('subscription.plan')}</Text>
+                <Text style={styles.subValue}>
+                  {sub.plan === 'monthly' ? t('subscription.monthly') : sub.plan === 'yearly' ? t('subscription.yearly') : sub.plan}
+                </Text>
+              </View>
+              {sub.expires_at && (
+                <View style={styles.subInfoRow}>
+                  <Text style={styles.subLabel}>
+                    {sub.status === 'active' ? t('subscription.renewsOn', { date: formatDate(sub.expires_at, i18n.language) }) : t('subscription.expiresOn', { date: formatDate(sub.expires_at, i18n.language) })}
+                  </Text>
+                </View>
+              )}
+              {sub.price_eur && (
+                <View style={styles.subInfoRow}>
+                  <Text style={styles.subLabel}>{t('common.subscription')}</Text>
+                  <Text style={styles.subValue}>{sub.price_eur} €</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.subManageBtn}
+                onPress={() => navigation.navigate('Subscription')}
+              >
+                <Text style={styles.subManageBtnText}>{t('profile.manageSubscription')}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={16} color={tokens.colors.primary} />
+              </TouchableOpacity>
             </>
           ) : (
-            <ActivityIndicator size="small" color={tokens.colors.primary} />
+            <View>
+              <Text style={styles.subNone}>{t('profile.noSubscription')}</Text>
+              <TouchableOpacity
+                style={styles.subSubscribeBtn}
+                onPress={() => navigation.navigate('Subscription')}
+              >
+                <MaterialCommunityIcons name="crown-outline" size={16} color="#fff" />
+                <Text style={styles.subSubscribeBtnText}>{t('profile.subscribeNow')}</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
-        {/* Family Section */}
-        <Divider style={styles.divider} />
+        {/* ── MON COMPTE ─────────────────────────────────────── */}
         <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Compte famille
-          </Text>
-          <List.Item
-            title="Gérer les profils"
-            description="Créer, modifier ou supprimer des profils famille"
-            left={(p) => <List.Icon {...p} icon="account-group" color={tokens.colors.primary} />}
-            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
-            onPress={() => navigation.navigate('Family')}
-            style={styles.listItem}
-            titleStyle={styles.listItemTitle}
-          />
-          <List.Item
-            title="Changer de profil"
-            description="Passer à un autre profil de votre abonnement"
-            left={(p) => <List.Icon {...p} icon="account-switch" color={tokens.colors.primary} />}
-            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
-            onPress={() => navigation.navigate('ProfileSelector', { fromSettings: true })}
-            style={styles.listItem}
-            titleStyle={styles.listItemTitle}
-          />
-        </View>
-
-        {/* Security Section */}
-        <Divider style={styles.divider} />
-        <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Sécurité
-          </Text>
-
-          <Button
-            mode="outlined"
-            icon="lock"
-            onPress={() => setPasswordDialogVisible(true)}
-            style={styles.securityButton}
-          >
-            Changer le mot de passe
-          </Button>
-        </View>
-
-        <Divider style={styles.divider} />
-
-        {/* Préférences Section */}
-        <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            {t('settings.title')}
-          </Text>
-          <List.Item
-            title={t('common.language')}
-            description={SUPPORTED_LANGUAGES.find(l => l.code === i18n.language)?.label || 'Français'}
-            left={(p) => <List.Icon {...p} icon="translate" color={tokens.colors.primary} />}
-            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
-            onPress={() => setAppLangDialogVisible(true)}
-            style={styles.listItem}
-            titleStyle={styles.listItemTitle}
-          />
-        </View>
-
-        <Divider style={styles.divider} />
-
-        {/* RGPD Section */}
-        <View style={styles.section}>
-          <Text variant="labelLarge" style={styles.sectionTitle}>Données &amp; confidentialité</Text>
-          <Text style={styles.rgpdInfo}>
-            Conformément au RGPD, vous pouvez télécharger vos données ou supprimer votre compte.
-          </Text>
-          <Button
-            mode="outlined"
-            icon="download"
-            onPress={handleDataExport}
-            loading={exportLoading}
-            disabled={exportLoading}
-            style={styles.rgpdButton}
-            textColor={tokens.colors.primary}
-          >
-            Télécharger mes données
-          </Button>
-          <Button
-            mode="outlined"
-            icon="delete-forever"
-            onPress={() => setDeleteDialogVisible(true)}
-            style={[styles.rgpdButton, styles.deleteButton]}
-            textColor={tokens.colors.semantic.error}
-          >
-            Supprimer mon compte
-          </Button>
-        </View>
-
-        <Divider style={styles.divider} />
-
-        {/* Légal Section */}
-        <View style={styles.section}>
-          <Text variant="labelLarge" style={styles.sectionTitle}>Mentions légales</Text>
-          {[
-            { label: "Conditions Générales d'Utilisation", type: 'cgu', icon: 'file-document-outline' },
-            { label: 'Conditions Générales de Vente', type: 'cgv', icon: 'receipt' },
-            { label: 'Politique de confidentialité', type: 'privacy', icon: 'shield-lock-outline' },
-            { label: 'Politique de cookies', type: 'cookies', icon: 'cookie-outline' },
-            { label: 'Mentions légales', type: 'mentions', icon: 'information-outline' },
-            { label: 'Copyright & Signalement', type: 'copyright', icon: 'copyright' },
-          ].map((item) => (
-            <List.Item
-              key={item.type}
-              title={item.label}
-              titleStyle={styles.listItemTitle}
-              left={(props) => <List.Icon {...props} icon={item.icon} color={tokens.colors.primary} />}
-              right={(props) => <List.Icon {...props} icon="chevron-right" color="#9c7e49" />}
-              onPress={() => navigation.navigate('Legal', { type: item.type })}
-              style={styles.listItem}
+          <Text style={styles.sectionLabel}>{t('profile.myAccount')}</Text>
+          <View style={styles.listCard}>
+            <ListRow
+              icon="account-edit-outline"
+              title={t('profile.editProfile')}
+              value={user?.full_name || '—'}
+              onPress={() => { setEditName(user?.full_name || ''); setEditNameVisible(true); }}
             />
-          ))}
+            <Divider style={styles.rowDivider} />
+            <ListRow
+              icon="lock-outline"
+              title={t('profile.changePassword')}
+              onPress={() => { setPassForm({ current: '', next: '', confirm: '' }); setPassError(''); setChangePassVisible(true); }}
+            />
+            <Divider style={styles.rowDivider} />
+            <ListRow
+              icon="devices"
+              title={t('profile.myDevices')}
+              value={t('profile.devicesDesc')}
+              onPress={() => navigation.navigate('Subscription')}
+              chevron
+            />
+          </View>
         </View>
 
-        <Divider style={styles.divider} />
-
-        {/* Logout Section */}
+        {/* ── PRÉFÉRENCES ────────────────────────────────────── */}
         <View style={styles.section}>
-          <Button
-            mode="contained"
-            icon="logout"
-            onPress={handleLogout}
-            style={styles.logoutButton}
-            buttonColor={tokens.colors.semantic.error}
-          >
-            Se déconnecter
-          </Button>
+          <Text style={styles.sectionLabel}>{t('settings.title')}</Text>
+          <View style={styles.listCard}>
+            {/* Language */}
+            <ListRow
+              icon="translate"
+              title={t('common.language')}
+              value={`${currentLang.flag}  ${currentLang.label}`}
+              onPress={() => setLangDialogVisible(true)}
+              chevron
+            />
+
+            {/* Notifications */}
+            {notifPrefs && (
+              <>
+                <Divider style={styles.rowDivider} />
+                <SwitchRow
+                  icon="bell-outline"
+                  iconColor={tokens.colors.primary}
+                  title={t('settings.notifications')}
+                  value={Boolean(notifPrefs.push_enabled)}
+                  onToggle={v => handleToggleNotif('push_enabled', v)}
+                />
+                <Divider style={styles.rowDivider} />
+                <SwitchRow
+                  icon="book-plus-outline"
+                  iconColor="#B5651D"
+                  title={t('settings.notifNew')}
+                  value={Boolean(notifPrefs.new_content)}
+                  onToggle={v => handleToggleNotif('new_content', v)}
+                  disabled={!notifPrefs.push_enabled}
+                />
+                <Divider style={styles.rowDivider} />
+                <SwitchRow
+                  icon="book-open-outline"
+                  iconColor="#2E4057"
+                  title={t('settings.notifReminder')}
+                  value={Boolean(notifPrefs.reading_reminders)}
+                  onToggle={v => handleToggleNotif('reading_reminders', v)}
+                  disabled={!notifPrefs.push_enabled}
+                />
+              </>
+            )}
+          </View>
         </View>
+
+        {/* ── FAMILLE ────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>{t('profile.familyAccounts')}</Text>
+          <View style={styles.listCard}>
+            <ListRow
+              icon="account-group-outline"
+              title={t('profile.manageProfiles')}
+              onPress={() => navigation.navigate('Family')}
+              chevron
+            />
+            <Divider style={styles.rowDivider} />
+            <ListRow
+              icon="account-switch-outline"
+              title={t('profile.switchProfile')}
+              onPress={() => navigation.navigate('ProfileSelector', { fromSettings: true })}
+              chevron
+            />
+          </View>
+        </View>
+
+        {/* ── LÉGAL ──────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>{t('profile.legal')}</Text>
+          <View style={styles.listCard}>
+            {[
+              { label: t('profile.termsOfUse'), type: 'cgu', icon: 'file-document-outline' },
+              { label: 'CGV', type: 'cgv', icon: 'receipt' },
+              { label: t('profile.privacy'), type: 'privacy', icon: 'shield-lock-outline' },
+              { label: 'Cookies', type: 'cookies', icon: 'cookie-outline' },
+            ].map((item, i, arr) => (
+              <React.Fragment key={item.type}>
+                <ListRow
+                  icon={item.icon}
+                  title={item.label}
+                  onPress={() => navigation.navigate('Legal', { type: item.type })}
+                  chevron
+                />
+                {i < arr.length - 1 && <Divider style={styles.rowDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+
+        {/* ── INFOS COMPTE ───────────────────────────────────── */}
+        {user?.created_at && (
+          <Text style={styles.memberSince}>
+            {i18n.language === 'en'
+              ? `Member since ${formatDate(user.created_at, 'en')}`
+              : `Membre depuis ${formatDate(user.created_at, 'fr')}`}
+          </Text>
+        )}
+
+        {/* ── DÉCONNEXION ────────────────────────────────────── */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <MaterialCommunityIcons name="logout" size={20} color="#fff" />
+            <Text style={styles.logoutBtnText}>{t('profile.logoutButton')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── ZONE DE DANGER ─────────────────────────────────── */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.dangerToggle}
+            onPress={() => setDangerExpanded(v => !v)}
+          >
+            <MaterialCommunityIcons
+              name={dangerExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color="#9ca3af"
+            />
+            <Text style={styles.dangerToggleText}>{t('profile.dangerZone')}</Text>
+          </TouchableOpacity>
+
+          {dangerExpanded && (
+            <View style={styles.dangerCard}>
+              <Text style={styles.dangerDesc}>
+                {t('profile.deleteAccount')} — action irréversible.
+              </Text>
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={() => { setDeleteConfirm(''); setDeleteDialogVisible(true); }}
+              >
+                <MaterialCommunityIcons name="delete-forever-outline" size={18} color="#ef4444" />
+                <Text style={styles.dangerBtnText}>{t('profile.deleteAccount')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* App Language Dialog */}
-      <Portal>
-        <Dialog visible={appLangDialogVisible} onDismiss={() => setAppLangDialogVisible(false)}>
-          <Dialog.Title>{t('common.language')}</Dialog.Title>
-          <Dialog.Content>
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <Button
-                key={lang.code}
-                mode={i18n.language === lang.code ? 'contained' : 'outlined'}
-                onPress={async () => {
-                  await changeLanguage(lang.code);
-                  setAppLangDialogVisible(false);
-                }}
-                style={styles.languageOption}
-                buttonColor={i18n.language === lang.code ? tokens.colors.primary : undefined}
-              >
-                {lang.flag}  {lang.label}
-              </Button>
-            ))}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setAppLangDialogVisible(false)}>{t('common.cancel')}</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      {/* ── DIALOGS ──────────────────────────────────────────── */}
 
-      {/* Edit Profile Dialog */}
+      {/* Edit name */}
       <Portal>
-        <Dialog visible={editDialogVisible} onDismiss={() => setEditDialogVisible(false)}>
-          <Dialog.Title>Modifier le profil</Dialog.Title>
+        <Dialog visible={editNameVisible} onDismiss={() => setEditNameVisible(false)} style={styles.dialog}>
+          <Dialog.Title style={styles.dialogTitle}>{t('profile.editProfile')}</Dialog.Title>
           <Dialog.Content>
             <TextInput
-              label="Nom complet"
-              value={editFormData.full_name}
-              onChangeText={(text) => setEditFormData({ ...editFormData, full_name: text })}
+              label={t('profile.fullName')}
+              value={editName}
+              onChangeText={setEditName}
               mode="outlined"
+              autoFocus
+              maxLength={100}
+              outlineColor="#e5e0dc"
+              activeOutlineColor={tokens.colors.primary}
               style={styles.dialogInput}
-              maxLength={255}
             />
-
-            <Button
-              mode="outlined"
-              onPress={() => {
-                setLanguageDialogVisible(true);
-              }}
-              style={styles.languageButton}
-            >
-              {languageOptions.find(opt => opt.value === editFormData.language)?.label || 'Français'}
-            </Button>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setEditDialogVisible(false)} disabled={editLoading}>
-              Annuler
-            </Button>
-            <Button onPress={handleEditProfile} disabled={editLoading} loading={editLoading}>
-              Enregistrer
+            <Button onPress={() => setEditNameVisible(false)} textColor="#9ca3af">{t('common.cancel')}</Button>
+            <Button
+              onPress={handleSaveName}
+              loading={editLoading}
+              disabled={editLoading || !editName.trim()}
+              textColor={tokens.colors.primary}
+            >
+              {t('common.save')}
             </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
 
-      {/* Language Selector Dialog */}
+      {/* Change password */}
       <Portal>
-        <Dialog visible={languageDialogVisible} onDismiss={() => setLanguageDialogVisible(false)}>
-          <Dialog.Title>Choisir une langue</Dialog.Title>
+        <Dialog
+          visible={changePassVisible}
+          onDismiss={() => { setChangePassVisible(false); setPassError(''); }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{t('profile.changePassword')}</Dialog.Title>
           <Dialog.Content>
-            {languageOptions.map((option) => (
-              <Button
-                key={option.value}
-                mode={editFormData.language === option.value ? 'contained' : 'outlined'}
-                onPress={() => {
-                  setEditFormData({ ...editFormData, language: option.value });
-                  setLanguageDialogVisible(false);
-                }}
-                style={styles.languageOption}
-              >
-                {option.label}
-              </Button>
-            ))}
+            {passError ? (
+              <Banner visible icon="alert-circle" style={styles.errorBanner}>{passError}</Banner>
+            ) : null}
+            <PassField
+              label={t('auth.passwordLabel') + ' (actuel)'}
+              value={passForm.current}
+              onChange={v => setPassForm(f => ({ ...f, current: v }))}
+              show={showPass.current}
+              onToggle={() => setShowPass(s => ({ ...s, current: !s.current }))}
+            />
+            <PassField
+              label={t('auth.passwordLabel') + ' (nouveau)'}
+              value={passForm.next}
+              onChange={v => setPassForm(f => ({ ...f, next: v }))}
+              show={showPass.next}
+              onToggle={() => setShowPass(s => ({ ...s, next: !s.next }))}
+            />
+            <PassField
+              label={t('auth.confirmPasswordLabel')}
+              value={passForm.confirm}
+              onChange={v => setPassForm(f => ({ ...f, confirm: v }))}
+              show={showPass.confirm}
+              onToggle={() => setShowPass(s => ({ ...s, confirm: !s.confirm }))}
+            />
           </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => { setChangePassVisible(false); setPassError(''); }}
+              textColor="#9ca3af"
+              disabled={passLoading}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onPress={handleChangePassword}
+              loading={passLoading}
+              disabled={passLoading}
+              textColor={tokens.colors.primary}
+            >
+              {t('common.save')}
+            </Button>
+          </Dialog.Actions>
         </Dialog>
       </Portal>
 
-      {/* Delete Account Confirmation Dialog */}
+      {/* Language picker */}
       <Portal>
-        <Dialog visible={deleteDialogVisible} onDismiss={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }}>
-          <Dialog.Title>Supprimer mon compte</Dialog.Title>
+        <Dialog visible={langDialogVisible} onDismiss={() => setLangDialogVisible(false)} style={styles.dialog}>
+          <Dialog.Title style={styles.dialogTitle}>{t('common.language')}</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ fontSize: 14, color: '#374151', marginBottom: 12 }}>
-              Cette action est irréversible. Votre compte, vos données de lecture et vos informations personnelles seront supprimés définitivement.
+            {SUPPORTED_LANGUAGES.map(lang => (
+              <TouchableOpacity
+                key={lang.code}
+                style={[
+                  styles.langOption,
+                  i18n.language === lang.code && styles.langOptionActive,
+                ]}
+                onPress={() => handleLangChange(lang.code)}
+              >
+                <Text style={styles.langFlag}>{lang.flag}</Text>
+                <Text style={[
+                  styles.langLabel,
+                  i18n.language === lang.code && styles.langLabelActive,
+                ]}>
+                  {lang.label}
+                </Text>
+                {i18n.language === lang.code && (
+                  <MaterialCommunityIcons name="check" size={18} color={tokens.colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setLangDialogVisible(false)} textColor="#9ca3af">{t('common.close')}</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Delete account */}
+      <Portal>
+        <Dialog
+          visible={deleteDialogVisible}
+          onDismiss={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={[styles.dialogTitle, { color: '#ef4444' }]}>
+            {t('profile.deleteAccount')}
+          </Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.deleteWarning}>
+              Cette action est irréversible. Toutes vos données seront supprimées définitivement.
             </Text>
-            <Text style={{ fontSize: 14, color: '#374151', marginBottom: 8 }}>
-              Tapez <Text style={{ fontWeight: '700', color: '#B91C1C' }}>SUPPRIMER</Text> pour confirmer :
+            <Text style={styles.deleteInstruction}>
+              Tapez <Text style={styles.deleteKeyword}>SUPPRIMER</Text> pour confirmer :
             </Text>
             <TextInput
               mode="outlined"
@@ -770,236 +663,522 @@ const ProfileScreen = ({ navigation }) => {
               onChangeText={setDeleteConfirm}
               placeholder="SUPPRIMER"
               autoCapitalize="characters"
-              style={{ marginBottom: 4 }}
+              outlineColor="#fca5a5"
+              activeOutlineColor="#ef4444"
+              style={{ marginTop: 8 }}
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }} disabled={deleteLoading}>
-              Annuler
+            <Button
+              onPress={() => { setDeleteDialogVisible(false); setDeleteConfirm(''); }}
+              disabled={deleteLoading}
+              textColor="#9ca3af"
+            >
+              {t('common.cancel')}
             </Button>
             <Button
               onPress={handleDeleteAccount}
-              disabled={deleteConfirm !== 'SUPPRIMER' || deleteLoading}
+              disabled={deleteConfirm.toUpperCase() !== 'SUPPRIMER' || deleteLoading}
               loading={deleteLoading}
-              textColor="#B91C1C"
+              textColor="#ef4444"
             >
-              Supprimer
+              {t('common.delete')}
             </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
 
-      {/* Change Password Dialog */}
-      <Portal>
-        <Dialog
-          visible={passwordDialogVisible}
-          onDismiss={() => {
-            setPasswordDialogVisible(false);
-            setPasswordError(null);
-          }}
-        >
-          <Dialog.Title>Changer le mot de passe</Dialog.Title>
-          <Dialog.Content>
-            {passwordError && (
-              <Banner visible={!!passwordError} icon="alert-circle" style={styles.errorBanner}>
-                {passwordError}
-              </Banner>
-            )}
+      {/* Snackbar */}
+      <Snackbar
+        visible={!!snackMsg}
+        onDismiss={() => setSnackMsg('')}
+        duration={3000}
+        style={snackError ? styles.snackError : styles.snackSuccess}
+        action={{ label: t('common.close'), onPress: () => setSnackMsg('') }}
+      >
+        {snackMsg}
+      </Snackbar>
+    </SafeAreaView>
+  );
+}
 
-            <TextInput
-              label="Mot de passe actuel"
-              value={passwordFormData.current_password}
-              onChangeText={(text) =>
-                setPasswordFormData({ ...passwordFormData, current_password: text })
-              }
-              secureTextEntry={!showPasswords.current}
-              mode="outlined"
-              style={styles.dialogInput}
-              right={
-                <TextInput.Icon
-                  icon={showPasswords.current ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                />
-              }
-            />
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-            <TextInput
-              label="Nouveau mot de passe"
-              value={passwordFormData.new_password}
-              onChangeText={(text) =>
-                setPasswordFormData({ ...passwordFormData, new_password: text })
-              }
-              secureTextEntry={!showPasswords.new}
-              mode="outlined"
-              style={styles.dialogInput}
-              right={
-                <TextInput.Icon
-                  icon={showPasswords.new ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                />
-              }
-            />
-            <HelperText type="info">Minimum 8 caractères</HelperText>
+function ListRow({ icon, title, value, onPress, chevron }) {
+  const colors = require('../config/tokens').colors;
+  return (
+    <TouchableOpacity style={styles.listRow} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.listRowIcon}>
+        <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+      </View>
+      <View style={styles.listRowBody}>
+        <Text style={styles.listRowTitle}>{title}</Text>
+        {value ? <Text style={styles.listRowValue} numberOfLines={1}>{value}</Text> : null}
+      </View>
+      {chevron && (
+        <MaterialCommunityIcons name="chevron-right" size={20} color="#c4b9ae" />
+      )}
+    </TouchableOpacity>
+  );
+}
 
-            <TextInput
-              label="Confirmer le mot de passe"
-              value={passwordFormData.confirm_password}
-              onChangeText={(text) =>
-                setPasswordFormData({ ...passwordFormData, confirm_password: text })
-              }
-              secureTextEntry={!showPasswords.confirm}
-              mode="outlined"
-              style={styles.dialogInput}
-              right={
-                <TextInput.Icon
-                  icon={showPasswords.confirm ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                />
-              }
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button
-              onPress={() => {
-                setPasswordDialogVisible(false);
-                setPasswordError(null);
-              }}
-              disabled={passwordLoading}
-            >
-              Annuler
-            </Button>
-            <Button onPress={handleChangePassword} disabled={passwordLoading} loading={passwordLoading}>
-              Changer
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+function SwitchRow({ icon, iconColor, title, value, onToggle, disabled }) {
+  const colors = require('../config/tokens').colors;
+  return (
+    <View style={[styles.switchRow, disabled && { opacity: 0.4 }]}>
+      <View style={styles.switchRowLeft}>
+        <View style={[styles.switchIconBox, { backgroundColor: `${iconColor}18` }]}>
+          <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
+        </View>
+        <Text style={styles.switchRowTitle}>{title}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        color={colors.primary}
+        disabled={disabled}
+      />
     </View>
   );
-};
+}
+
+function PassField({ label, value, onChange, show, onToggle }) {
+  const colors = require('../config/tokens').colors;
+  return (
+    <TextInput
+      label={label}
+      value={value}
+      onChangeText={onChange}
+      secureTextEntry={!show}
+      mode="outlined"
+      outlineColor="#e5e0dc"
+      activeOutlineColor={colors.primary}
+      style={styles.dialogInput}
+      right={
+        <TextInput.Icon
+          icon={show ? 'eye-off' : 'eye'}
+          onPress={onToggle}
+          color="#9ca3af"
+        />
+      }
+    />
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const tokens_ref = require('../config/tokens');
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: tokens.colors.backgrounds.light,
+    backgroundColor: '#f5f1ec',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: tokens.colors.backgrounds.light,
+    backgroundColor: '#f5f1ec',
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 24,
-  },
-  successBanner: {
-    backgroundColor: '#E8F5E9',
-    marginBottom: 16,
-  },
-  errorBanner: {
-    backgroundColor: '#FFEBEE',
-    marginBottom: 16,
-  },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 32 },
+
+  // ── Header ──
   header: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingTop: 32,
+    paddingBottom: 28,
     paddingHorizontal: 24,
+    backgroundColor: '#fff',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 16,
   },
-  avatar: {
-    backgroundColor: tokens.colors.primary,
+  avatarWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: tokens_ref.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    shadowColor: tokens_ref.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  avatarLabel: {
+  avatarText: {
     fontSize: 32,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 1,
   },
-  name: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: tokens.colors.onSurface.light,
-    marginTop: 16,
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2E4057',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
-  email: {
-    fontSize: 14,
-    color: tokens.colors.onSurface.light,
-    marginTop: 4,
-  },
-  editButton: {
-    marginTop: 16,
-    borderColor: tokens.colors.primary,
-  },
-  editButtonLabel: {
-    color: tokens.colors.primary,
-  },
-  divider: {
-    marginVertical: 8,
-  },
-  section: {
-    padding: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: tokens.colors.onSurface.light,
-    marginBottom: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  infoContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: tokens.colors.onSurface.light,
+  headerName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#171412',
     marginBottom: 4,
+    textAlign: 'center',
   },
-  infoValue: {
+  headerEmail: {
     fontSize: 14,
+    color: '#867465',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  subPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  subPillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  subPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  subPillCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: tokens_ref.colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  subPillCTAText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // ── Card ──
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#171412',
+  },
+
+  // ── Subscription card ──
+  subInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  subLabel: {
+    fontSize: 13,
+    color: '#867465',
+  },
+  subValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#171412',
+  },
+  subManageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(181,101,29,0.08)',
+  },
+  subManageBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: tokens_ref.colors.primary,
+  },
+  subNone: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 14,
+  },
+  subSubscribeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: tokens_ref.colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  subSubscribeBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // ── Section ──
+  section: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+
+  // ── List card ──
+  listCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  listRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(181,101,29,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  listRowBody: {
+    flex: 1,
+  },
+  listRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#171412',
+  },
+  listRowValue: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 1,
+  },
+  rowDivider: {
+    marginLeft: 64,
+    backgroundColor: '#f3ede8',
+  },
+
+  // ── Switch row ──
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  switchRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  switchIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  switchRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#171412',
+    flex: 1,
+  },
+
+  // ── Member since ──
+  memberSince: {
+    fontSize: 12,
+    color: '#c4b9ae',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+
+  // ── Logout ──
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#ef4444',
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  logoutBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // ── Danger zone ──
+  dangerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  dangerToggleText: {
+    fontSize: 12,
+    color: '#9ca3af',
     fontWeight: '500',
-    color: tokens.colors.onSurface.light,
   },
-  securityButton: {
-    borderColor: '#D4C0A8',
-  },
-  logoutButton: {
+  dangerCard: {
+    backgroundColor: '#fff5f5',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    padding: 16,
     marginTop: 8,
+  },
+  dangerDesc: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  dangerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  dangerBtnText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // ── Dialogs ──
+  dialog: {
+    borderRadius: 20,
+    backgroundColor: '#fff',
+  },
+  dialogTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#171412',
   },
   dialogInput: {
-    marginBottom: 16,
-  },
-  languageButton: {
-    marginTop: 8,
-    borderColor: tokens.colors.primary,
-  },
-  languageOption: {
-    marginBottom: 8,
-  },
-  rgpdInfo: {
-    fontSize: 13,
-    color: tokens.colors.onSurface.light,
-    opacity: 0.7,
     marginBottom: 12,
-    lineHeight: 19,
+    backgroundColor: '#fff',
   },
-  rgpdButton: {
-    marginBottom: 8,
-    borderColor: tokens.colors.primary,
+  errorBanner: {
+    backgroundColor: '#fff5f5',
+    marginBottom: 12,
+    borderRadius: 10,
   },
-  deleteButton: {
-    borderColor: tokens.colors.semantic.error,
+
+  // ── Language picker ──
+  langOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+    backgroundColor: '#f9fafb',
   },
-  listItem: {
-    paddingHorizontal: 0,
-    paddingVertical: 2,
+  langOptionActive: {
+    backgroundColor: 'rgba(181,101,29,0.08)',
   },
-  listItemTitle: {
+  langFlag: {
+    fontSize: 22,
+  },
+  langLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  langLabelActive: {
+    fontWeight: '700',
+    color: tokens_ref.colors.primary,
+  },
+
+  // ── Delete ──
+  deleteWarning: {
     fontSize: 14,
-    color: tokens.colors.onSurface.light,
+    color: '#6b7280',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  deleteInstruction: {
+    fontSize: 13,
+    color: '#374151',
+  },
+  deleteKeyword: {
+    fontWeight: '700',
+    color: '#ef4444',
+  },
+
+  // ── Snackbar ──
+  snackSuccess: {
+    backgroundColor: '#22c55e',
+  },
+  snackError: {
+    backgroundColor: '#ef4444',
   },
 });
-
-export default ProfileScreen;
