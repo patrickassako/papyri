@@ -2,13 +2,15 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export default function BottomNavBar({ navigation, activeTab }) {
+  const { t } = useTranslation();
   const tabs = [
-    { name: 'Home', label: 'Accueil', icon: 'home-outline', iconActive: 'home' },
-    { name: 'Catalog', label: 'Catalogue', icon: 'view-grid-outline', iconActive: 'view-grid' },
-    { name: 'History', label: 'Bibliothèque', icon: 'bookmark-outline', iconActive: 'bookmark' },
-    { name: 'Profile', label: 'Profil', icon: 'account-outline', iconActive: 'account' }
+    { name: 'Home', label: t('nav.home'), icon: 'home-outline', iconActive: 'home' },
+    { name: 'Catalog', label: t('nav.catalog'), icon: 'view-grid-outline', iconActive: 'view-grid' },
+    { name: 'History', label: t('nav.library'), icon: 'bookmark-outline', iconActive: 'bookmark' },
+    { name: 'Profile', label: t('nav.profile'), icon: 'account-outline', iconActive: 'account' }
   ];
 
   return (

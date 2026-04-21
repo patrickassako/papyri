@@ -11,8 +11,10 @@ import { Text, TextInput, Button, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function RegisterScreen({ navigation }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,12 +23,12 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     if (!email || !password) {
-      setError('Veuillez remplir tous les champs');
+      setError(t('auth.fieldRequired'));
       return;
     }
 
     if (password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères');
+      setError(t('auth.weakPassword'));
       return;
     }
 
@@ -51,14 +53,14 @@ export default function RegisterScreen({ navigation }) {
         navigation.replace('Home');
       } else {
         // Email confirmation required
-        setError('Veuillez vérifier votre email pour confirmer votre inscription.');
+        setError(t('auth.resetSent'));
       }
     } catch (err) {
       console.error('Register error:', err);
       if (err.message.includes('already registered')) {
-        setError("L'adresse e-mail est déjà utilisée");
+        setError(t('auth.invalidEmail'));
       } else {
-        setError(err.message || "Erreur lors de l'inscription");
+        setError(err.message || t('auth.registerError'));
       }
     } finally {
       setLoading(false);
@@ -85,7 +87,7 @@ export default function RegisterScreen({ navigation }) {
               onPress={() => navigation.goBack()}
               style={styles.backButton}
             />
-            <Text style={styles.headerTitle}>S'INSCRIRE</Text>
+            <Text style={styles.headerTitle}>{t('common.register').toUpperCase()}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -93,22 +95,20 @@ export default function RegisterScreen({ navigation }) {
           <View style={styles.card}>
             {/* Header */}
             <View style={styles.titleContainer}>
-              <Text style={styles.title}>Créer un compte</Text>
-              <Text style={styles.subtitle}>
-                Rejoignez notre communauté de lecteurs passionnés.
-              </Text>
+              <Text style={styles.title}>{t('auth.registerTitle')}</Text>
+              <Text style={styles.subtitle}>{t('auth.registerSubtitle')}</Text>
             </View>
 
             {/* Form */}
             <View style={styles.form}>
               {/* Email Field */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{t('auth.emailLabel')}</Text>
                 <TextInput
                   mode="flat"
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="votre@email.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
@@ -130,13 +130,13 @@ export default function RegisterScreen({ navigation }) {
 
               {/* Password Field */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Mot de passe</Text>
+                <Text style={styles.label}>{t('auth.passwordLabel')}</Text>
                 <View style={styles.passwordContainer}>
                   <TextInput
                     mode="flat"
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="Votre mot de passe"
+                    placeholder={t('auth.passwordPlaceholder')}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoComplete="password"
@@ -182,19 +182,19 @@ export default function RegisterScreen({ navigation }) {
                 labelStyle={styles.buttonLabel}
                 buttonColor="#b4641d"
               >
-                Créer mon compte
+                {loading ? t('auth.registering') : t('auth.registerButton')}
               </Button>
             </View>
 
             {/* Login Link */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                Vous avez déjà un compte ?{' '}
+                {t('auth.hasAccount')}{' '}
                 <Text
                   style={styles.footerLink}
                   onPress={() => navigation.navigate('Login')}
                 >
-                  Se connecter
+                  {t('auth.signIn')}
                 </Text>
               </Text>
             </View>

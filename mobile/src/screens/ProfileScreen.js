@@ -25,8 +25,10 @@ import {
   registerForPushNotifications,
 } from '../services/notifications.service';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_BASE_URL from '../config/api';
+import { getAccessToken, logout } from '../services/auth.service';
+import { useTranslation } from 'react-i18next';
+import { changeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
@@ -71,10 +73,14 @@ const ProfileScreen = ({ navigation }) => {
   const [deleteConfirm, setDeleteConfirm]         = useState('');
   const [deleteLoading, setDeleteLoading]         = useState(false);
 
-  // Language Selector Dialog
+  // Language Selector Dialog (profile content language)
   const [languageDialogVisible, setLanguageDialogVisible] = useState(false);
+  // App UI language dialog
+  const [appLangDialogVisible, setAppLangDialogVisible] = useState(false);
 
-  // Language options
+  const { t, i18n } = useTranslation();
+
+  // Language options (profile preferred language for content)
   const languageOptions = [
     { value: 'fr', label: 'Français' },
     { value: 'en', label: 'English' },
@@ -87,7 +93,7 @@ const ProfileScreen = ({ navigation }) => {
     try {
       setError(null);
 
-      const token = await AsyncStorage.getItem('access_token');
+      const token = await getAccessToken();
       if (!token) {
         navigation.replace('Login');
         return;
@@ -105,8 +111,6 @@ const ProfileScreen = ({ navigation }) => {
 
       if (!response.ok) {
         if (response.status === 401) {
-          await AsyncStorage.removeItem('access_token');
-          await AsyncStorage.removeItem('refresh_token');
           navigation.replace('Login');
           return;
         }
@@ -145,7 +149,7 @@ const ProfileScreen = ({ navigation }) => {
       setError(null);
       setSuccess(null);
 
-      const token = await AsyncStorage.getItem('access_token');
+      const token = await getAccessToken();
       const response = await fetch(`${API_BASE_URL}/users/me`, {
         method: 'PATCH',
         headers: {
@@ -197,7 +201,7 @@ const ProfileScreen = ({ navigation }) => {
         return;
       }
 
-      const token = await AsyncStorage.getItem('access_token');
+      const token = await getAccessToken();
       const response = await fetch(`${API_BASE_URL}/users/me/password`, {
         method: 'PUT',
         headers: {
@@ -256,7 +260,7 @@ const ProfileScreen = ({ navigation }) => {
   const handleDataExport = async () => {
     setExportLoading(true);
     try {
-      const token = await AsyncStorage.getItem('access_token');
+      const token = await getAccessToken();
       const r = await fetch(`${API_BASE_URL}/users/me/data-export`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -274,13 +278,13 @@ const ProfileScreen = ({ navigation }) => {
     if (deleteConfirm !== 'SUPPRIMER') return;
     setDeleteLoading(true);
     try {
-      const token = await AsyncStorage.getItem('access_token');
+      const token = await getAccessToken();
       const r = await fetch(`${API_BASE_URL}/users/me`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) throw new Error('Erreur suppression');
-      await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
+      await logout();
       navigation.replace('Login');
     } catch (e) {
       setError('Erreur lors de la suppression du compte.');
@@ -291,28 +295,10 @@ const ProfileScreen = ({ navigation }) => {
   // Handle logout
   const handleLogout = async () => {
     try {
-      const token = await AsyncStorage.getItem('access_token');
-
-      // Call logout endpoint
-      await fetch(`${API_BASE_URL}/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // Clear tokens
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
-
-      // Navigate to login
-      navigation.replace('Login');
+      await logout();
     } catch (err) {
       console.error('Logout error:', err);
-      // Even if logout fails, clear tokens and navigate
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
+    } finally {
       navigation.replace('Login');
     }
   };
@@ -552,6 +538,32 @@ const ProfileScreen = ({ navigation }) => {
           )}
         </View>
 
+        {/* Family Section */}
+        <Divider style={styles.divider} />
+        <View style={styles.section}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Compte famille
+          </Text>
+          <List.Item
+            title="Gérer les profils"
+            description="Créer, modifier ou supprimer des profils famille"
+            left={(p) => <List.Icon {...p} icon="account-group" color={tokens.colors.primary} />}
+            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
+            onPress={() => navigation.navigate('Family')}
+            style={styles.listItem}
+            titleStyle={styles.listItemTitle}
+          />
+          <List.Item
+            title="Changer de profil"
+            description="Passer à un autre profil de votre abonnement"
+            left={(p) => <List.Icon {...p} icon="account-switch" color={tokens.colors.primary} />}
+            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
+            onPress={() => navigation.navigate('ProfileSelector', { fromSettings: true })}
+            style={styles.listItem}
+            titleStyle={styles.listItemTitle}
+          />
+        </View>
+
         {/* Security Section */}
         <Divider style={styles.divider} />
         <View style={styles.section}>
@@ -567,6 +579,24 @@ const ProfileScreen = ({ navigation }) => {
           >
             Changer le mot de passe
           </Button>
+        </View>
+
+        <Divider style={styles.divider} />
+
+        {/* Préférences Section */}
+        <View style={styles.section}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            {t('settings.title')}
+          </Text>
+          <List.Item
+            title={t('common.language')}
+            description={SUPPORTED_LANGUAGES.find(l => l.code === i18n.language)?.label || 'Français'}
+            left={(p) => <List.Icon {...p} icon="translate" color={tokens.colors.primary} />}
+            right={(p) => <List.Icon {...p} icon="chevron-right" color="#9c7e49" />}
+            onPress={() => setAppLangDialogVisible(true)}
+            style={styles.listItem}
+            titleStyle={styles.listItemTitle}
+          />
         </View>
 
         <Divider style={styles.divider} />
@@ -639,6 +669,32 @@ const ProfileScreen = ({ navigation }) => {
           </Button>
         </View>
       </ScrollView>
+
+      {/* App Language Dialog */}
+      <Portal>
+        <Dialog visible={appLangDialogVisible} onDismiss={() => setAppLangDialogVisible(false)}>
+          <Dialog.Title>{t('common.language')}</Dialog.Title>
+          <Dialog.Content>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <Button
+                key={lang.code}
+                mode={i18n.language === lang.code ? 'contained' : 'outlined'}
+                onPress={async () => {
+                  await changeLanguage(lang.code);
+                  setAppLangDialogVisible(false);
+                }}
+                style={styles.languageOption}
+                buttonColor={i18n.language === lang.code ? tokens.colors.primary : undefined}
+              >
+                {lang.flag}  {lang.label}
+              </Button>
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAppLangDialogVisible(false)}>{t('common.cancel')}</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Edit Profile Dialog */}
       <Portal>
@@ -907,7 +963,7 @@ const styles = StyleSheet.create({
     color: tokens.colors.onSurface.light,
   },
   securityButton: {
-    borderColor: tokens.colors.neutral[300],
+    borderColor: '#D4C0A8',
   },
   logoutButton: {
     marginTop: 8,

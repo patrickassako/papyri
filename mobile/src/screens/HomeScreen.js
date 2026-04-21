@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -27,12 +28,18 @@ import { contentsService } from '../services/contents.service';
 import BottomNavBar from '../components/BottomNavBar';
 import { getDownloadedContents, isOnline } from '../services/offline.service';
 import { COVER_PLACEHOLDER_SQUARE } from '../config/constants';
+import { useTranslation } from 'react-i18next';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.9, 360);
+
+// Résout le cover_url en essayant tous les champs possibles
+function resolveCover(item) {
+  return item?.cover_url || item?.thumbnail || item?.cover_image_url || item?.coverUrl || null;
+}
 
 function mapContinueItem(item) {
   const progressPercent = Math.max(0, Math.min(100, Math.round(item.progress_percent || 0)));
@@ -47,11 +54,12 @@ function mapContinueItem(item) {
     progress: progressPercent / 100,
     progressText: `${progressPercent}% ${isAudio ? 'écoutés' : 'terminés'}`,
     remainingText: item.remaining_text || defaultRemaining,
-    cover: item.cover_url || COVER_PLACEHOLDER_SQUARE,
+    cover: resolveCover(item),
   };
 }
 
 const HomeScreen = ({ navigation }) => {
+  const { t, i18n } = useTranslation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,78 +176,49 @@ const HomeScreen = ({ navigation }) => {
     };
   }, [searchQuery, searchVisible]);
 
+  const applyHomeData = (homeData) => {
+    if (!homeData) return;
+    setContinueReading((homeData.continue_reading || []).map(mapContinueItem));
+    setNouveautes((homeData.new_releases || []).map(item => ({
+      id: item.id, title: item.title, author: item.author || item.author_name,
+      cover: resolveCover(item),
+    })));
+    setPopulaires((homeData.popular || []).map(item => ({
+      id: item.id, title: item.title, author: item.author || item.author_name,
+      cover: resolveCover(item),
+    })));
+    setRecommendations((homeData.recommended || []).map(item => ({
+      id: item.id, title: item.title, author: item.author || item.author_name,
+      cover: resolveCover(item), type: item.content_type || 'ebook',
+    })));
+  };
+
   const loadInitialData = async () => {
+    setError(null);
+
+    // Phase 1 — profil + données home (affiche immédiatement)
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      // Charger le profil utilisateur et les données de la page d'accueil en parallèle
-      const [userProfile, homeData, historyData] = await Promise.all([
-        userService.getUserProfile().catch(err => {
-          console.warn('Error loading user profile:', err);
-          return null;
-        }),
-        homeService.getHomeData().catch(err => {
-          console.warn('Error loading home data:', err);
-          return null;
-        }),
-        homeService.getReadingHistory(1, 20).catch(err => {
-          console.warn('Error loading reading history:', err);
-          return null;
-        }),
+      const [userProfile, homeData] = await Promise.all([
+        userService.getUserProfile().catch(() => null),
+        homeService.getHomeData().catch(() => null),
       ]);
+      if (userProfile) setUser(userProfile);
+      applyHomeData(homeData);
 
-      // Mettre à jour le profil utilisateur
-      if (userProfile) {
-        setUser(userProfile);
-      }
-
-      // Mettre à jour les données de la page d'accueil
-      if (homeData) {
-        // Continue Reading - Transformer les données pour le format attendu
-        const continueReadingData = (homeData.continue_reading || []).map(mapContinueItem);
-        setContinueReading(continueReadingData);
-
-        // Nouveautés
-        const nouveautesData = (homeData.new_releases || []).map(item => ({
-          id: item.id,
-          title: item.title,
-          author: item.author,
-          cover: item.cover_url || COVER_PLACEHOLDER_SQUARE,
-        }));
-        setNouveautes(nouveautesData);
-
-        // Populaires
-        const populairesData = (homeData.popular || []).map(item => ({
-          id: item.id,
-          title: item.title,
-          author: item.author || item.author_name,
-          cover: item.cover_url || item.cover_image_url || COVER_PLACEHOLDER_SQUARE,
-        }));
-        setPopulaires(populairesData);
-
-        // Recommandations
-        const recoData = (homeData.recommended || []).map(item => ({
-          id: item.id,
-          title: item.title,
-          author: item.author || item.author_name,
-          cover: item.cover_url || item.cover_image_url || COVER_PLACEHOLDER_SQUARE,
-          type: item.content_type || 'ebook',
-        }));
-        setRecommendations(recoData);
-      }
-
-      // Fallback: si /home ne renvoie rien pour "continue_reading",
-      // on utilise l'historique pour alimenter la section "Reprendre".
-      if ((!homeData?.continue_reading || homeData.continue_reading.length === 0) && Array.isArray(historyData?.data)) {
-        const inProgress = historyData.data
-          .filter((item) => !item?.is_completed && Number(item?.progress_percent || 0) > 0)
-          .slice(0, 8)
-          .map(mapContinueItem);
-        setContinueReading(inProgress);
+      // Si pas de "reprendre" dans /home, charger l'historique en arrière-plan
+      if (!homeData?.continue_reading?.length) {
+        homeService.getReadingHistory(1, 20).then((historyData) => {
+          if (Array.isArray(historyData?.data)) {
+            const inProgress = historyData.data
+              .filter((item) => !item?.is_completed && Number(item?.progress_percent || 0) > 0)
+              .slice(0, 8)
+              .map(mapContinueItem);
+            setContinueReading(inProgress);
+          }
+        }).catch(() => {});
       }
     } catch (err) {
-      console.error('Error loading initial data:', err);
       setError('Impossible de charger les données. Vérifiez votre connexion.');
     } finally {
       setLoading(false);
@@ -252,51 +231,76 @@ const HomeScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
-    );
-  }
+  // Pas de blocage total — le contenu s'affiche progressivement
+
+  const DAILY_QUOTES_FR = [
+    { text: "Un livre ouvert, c'est un cerveau qui parle.", author: "Victor Hugo" },
+    { text: "La lecture est à l'esprit ce que l'exercice est au corps.", author: "Addison" },
+    { text: "Lire, c'est voyager ; voyager, c'est lire.", author: "Hugo" },
+    { text: "Une maison sans livre est une maison sans âme.", author: "Cicéron" },
+    { text: "Les livres sont les abeilles qui portent le pollen d'un esprit à l'autre.", author: "Lowell" },
+  ];
+  const DAILY_QUOTES_EN = [
+    { text: "A book is a dream that you hold in your hand.", author: "Neil Gaiman" },
+    { text: "Reading is to the mind what exercise is to the body.", author: "Addison" },
+    { text: "A room without books is like a body without a soul.", author: "Cicero" },
+    { text: "Not all those who wander are lost.", author: "Tolkien" },
+    { text: "Books are the bees which carry pollen from one mind to another.", author: "Lowell" },
+  ];
+  const DAILY_QUOTES = i18n.language === 'en' ? DAILY_QUOTES_EN : DAILY_QUOTES_FR;
+  const dailyQuote = DAILY_QUOTES[new Date().getDate() % DAILY_QUOTES.length];
+
+  const getTimeGreeting = (firstName) => {
+    const h = new Date().getHours();
+    const name = firstName || (i18n.language === 'en' ? 'Reader' : 'Lecteur');
+    if (h < 12) return t('home.greeting_morning', { name });
+    if (h < 18) return t('home.greeting_afternoon', { name });
+    return t('home.greeting_evening', { name });
+  };
 
   const renderHeader = () => {
-    // Extraire le prénom du nom complet
-    const firstName = user?.full_name?.split(' ')[0] || 'Utilisateur';
-
+    const firstName = user?.full_name?.split(' ')[0] || '';
     return (
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Bonjour, {firstName}</Text>
-          <Text style={styles.subGreeting}>Prêt pour une nouvelle histoire ?</Text>
+      <View>
+        {/* Barre supérieure */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>{getTimeGreeting(firstName)}</Text>
+            <Text style={styles.subGreeting}>{t('home.subtitle')}</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.searchButton} onPress={() => setSearchVisible(true)}>
+              <MaterialCommunityIcons name="magnify" size={22} color={tokens.colors.onSurface.light} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+              {user?.avatar_url ? (
+                <Avatar.Image size={40} source={{ uri: user.avatar_url }} style={styles.avatar} />
+              ) : (
+                <Avatar.Text
+                  size={40}
+                  label={firstName.substring(0, 2).toUpperCase()}
+                  style={styles.avatar}
+                  color="#FFFFFF"
+                />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.searchButton} onPress={() => setSearchVisible(true)}>
-            <MaterialCommunityIcons name="magnify" size={24} color={tokens.colors.onSurface.light} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            {user?.avatar_url ? (
-              <Avatar.Image
-                size={40}
-                source={{ uri: user.avatar_url }}
-                style={styles.avatar}
-              />
-            ) : (
-              <Avatar.Text
-                size={40}
-                label={firstName.substring(0, 2).toUpperCase()}
-                style={styles.avatar}
-                color="#FFFFFF"
-              />
-            )}
-          </TouchableOpacity>
+
+        {/* Citation du jour */}
+        <View style={styles.quoteCard}>
+          <MaterialCommunityIcons name="format-quote-open" size={20} color={tokens.colors.primary} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.quoteText}>« {dailyQuote.text} »</Text>
+            <Text style={styles.quoteAuthor}>— {dailyQuote.author}</Text>
+          </View>
         </View>
       </View>
     );
   };
 
   const renderCategories = () => {
-    const allCategories = [{ id: '__all__', name: 'Tous', slug: null }, ...apiCategories];
+    const allCategories = [{ id: '__all__', name: t('common.all'), slug: null }, ...apiCategories];
     return (
       <ScrollView
         horizontal
@@ -330,7 +334,10 @@ const HomeScreen = ({ navigation }) => {
 
   const renderContinueCard = (item) => (
     <View key={item.id} style={styles.continueCard}>
-      <Image source={{ uri: item.cover }} style={styles.continueCardCover} />
+      {item.cover
+        ? <Image source={{ uri: item.cover }} style={styles.continueCardCover} />
+        : <View style={[styles.continueCardCover, styles.coverFallback]}><MaterialCommunityIcons name="book" size={32} color="rgba(255,255,255,0.3)" /></View>
+      }
       <View style={styles.continueCardContent}>
         <View style={styles.continueCardTop}>
           <View style={styles.typeContainer}>
@@ -376,7 +383,7 @@ const HomeScreen = ({ navigation }) => {
                 item.type === 'audiobook' && styles.resumeButtonTextAudiobook,
               ]}
             >
-              {item.type === 'audiobook' ? 'Écouter' : 'Reprendre'}
+              {item.type === 'audiobook' ? t('common.listen') : t('common.resume')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -386,7 +393,7 @@ const HomeScreen = ({ navigation }) => {
 
   const renderContinueReading = () => (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Reprendre</Text>
+      <Text style={styles.sectionTitle}>{t('home.continueReading')}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -405,10 +412,10 @@ const HomeScreen = ({ navigation }) => {
       style={styles.bookCard}
       onPress={() => navigation.navigate('ContentDetail', { contentId: item.id })}
     >
-      <Image
-        source={{ uri: item.cover }}
-        style={styles.bookCover}
-      />
+      {item.cover
+        ? <Image source={{ uri: item.cover }} style={styles.bookCover} />
+        : <View style={[styles.bookCover, styles.coverFallback]}><MaterialCommunityIcons name="book-outline" size={28} color="rgba(0,0,0,0.2)" /></View>
+      }
       <Text style={styles.bookTitle} numberOfLines={1}>
         {item.title}
       </Text>
@@ -421,9 +428,9 @@ const HomeScreen = ({ navigation }) => {
   const renderNouveautes = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Nouveautés</Text>
+        <Text style={styles.sectionTitle}>{t('home.newReleases')}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-          <Text style={styles.seeAllButton}>Tout voir</Text>
+          <Text style={styles.seeAllButton}>{t('common.seeAll')}</Text>
         </TouchableOpacity>
       </View>
       <ScrollView
@@ -439,9 +446,9 @@ const HomeScreen = ({ navigation }) => {
   const renderPopulaires = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Populaires en Afrique</Text>
+        <Text style={styles.sectionTitle}>{t('home.popular')}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-          <Text style={styles.seeAllButton}>Tout voir</Text>
+          <Text style={styles.seeAllButton}>{t('common.seeAll')}</Text>
         </TouchableOpacity>
       </View>
       <ScrollView
@@ -457,9 +464,9 @@ const HomeScreen = ({ navigation }) => {
   const renderRecommendations = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Ça peut vous intéresser</Text>
+        <Text style={styles.sectionTitle}>{t('home.recommended')}</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-          <Text style={styles.seeAllButton}>Tout voir</Text>
+          <Text style={styles.seeAllButton}>{t('common.seeAll')}</Text>
         </TouchableOpacity>
       </View>
       <ScrollView
@@ -515,6 +522,9 @@ const HomeScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={tokens.colors.backgrounds.light} />
+      {loading && (
+        <View style={{ height: 3, backgroundColor: tokens.colors.primary, opacity: 0.7 }} />
+      )}
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -539,13 +549,13 @@ const HomeScreen = ({ navigation }) => {
           ) : filteredContents.length === 0 ? (
             <View style={styles.filterEmptyWrap}>
               <Text style={styles.filterEmptyIcon}>📭</Text>
-              <Text style={styles.filterEmptyText}>Aucun contenu dans cette catégorie</Text>
+              <Text style={styles.filterEmptyText}>{t('home.noContentsCategory')}</Text>
             </View>
           ) : (
             <View style={styles.filteredGrid}>
               <View style={styles.filteredGridHeader}>
                 <Text style={styles.filteredGridCount}>
-                  {filteredContents.length} contenu{filteredContents.length > 1 ? 's' : ''}
+                  {t('home.allContentsCount', { count: filteredContents.length })}
                 </Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Catalog', { initialCategory: selectedCategory })}>
                   <Text style={styles.filteredGridAll}>Voir tout →</Text>
@@ -581,9 +591,44 @@ const HomeScreen = ({ navigation }) => {
             {isOffline && (
               <View style={styles.offlineBanner}>
                 <MaterialCommunityIcons name="wifi-off" size={16} color="#fff" />
-                <Text style={styles.offlineBannerText}>Mode hors-ligne — contenu limité aux téléchargements</Text>
+                <Text style={styles.offlineBannerText}>{t('home.offlineBanner')}</Text>
               </View>
             )}
+
+            {/* Bannière featured — premier livre populaire */}
+            {populaires.length > 0 && (() => {
+              const featured = populaires[0];
+              return (
+                <TouchableOpacity
+                  key={`featured-${featured.id}`}
+                  style={styles.featuredCard}
+                  activeOpacity={0.88}
+                  onPress={() => navigation.navigate('ContentDetail', { contentId: featured.id })}
+                >
+                  {featured.cover ? (
+                    <Image source={{ uri: featured.cover }} style={styles.featuredBg} blurRadius={14} />
+                  ) : (
+                    <View style={[styles.featuredBg, { backgroundColor: '#B5651D' }]} />
+                  )}
+                  <View style={styles.featuredOverlay} />
+                  <View style={styles.featuredContent}>
+                    <View style={styles.featuredBadge}>
+                      <MaterialCommunityIcons name="fire" size={12} color="#fff" />
+                      <Text style={styles.featuredBadgeText}>{t('home.popularBadge')}</Text>
+                    </View>
+                    <Text style={styles.featuredTitle} numberOfLines={2}>{featured.title}</Text>
+                    <Text style={styles.featuredAuthor} numberOfLines={1}>{featured.author}</Text>
+                    <View style={styles.featuredCta}>
+                      <MaterialCommunityIcons name="book-open-variant" size={14} color="#111" />
+                      <Text style={styles.featuredCtaText}>{t('home.discover')}</Text>
+                    </View>
+                  </View>
+                  {featured.cover && (
+                    <Image source={{ uri: featured.cover }} style={styles.featuredCover} />
+                  )}
+                </TouchableOpacity>
+              );
+            })()}
 
             {/* Section téléchargements */}
             {offlineContents.length > 0 && (
@@ -591,10 +636,10 @@ const HomeScreen = ({ navigation }) => {
                 <View style={styles.sectionHeader}>
                   <View style={styles.offlineSectionTitle}>
                     <MaterialCommunityIcons name="download-circle" size={18} color={tokens.colors.primary} />
-                    <Text style={styles.sectionTitle}>Mes téléchargements</Text>
+                    <Text style={styles.sectionTitle}>{t('home.downloads')}</Text>
                   </View>
                   <TouchableOpacity onPress={() => navigation.navigate('Downloads')}>
-                    <Text style={styles.seeAll}>Gérer</Text>
+                    <Text style={styles.seeAll}>{t('home.manageDownloads')}</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.offlineGrid}>
@@ -644,17 +689,14 @@ const HomeScreen = ({ navigation }) => {
             {continueReading.length === 0 && nouveautes.length === 0 && populaires.length === 0 && recommendations.length === 0 && (
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="bookshelf" size={64} color="#d4c4b5" />
-                <Text style={styles.emptyStateTitle}>Bibliothèque en préparation</Text>
-                <Text style={styles.emptyStateText}>
-                  Aucun contenu disponible pour l'instant.{'\n'}
-                  Les livres et audiobooks apparaîtront ici dès qu'ils seront publiés.
-                </Text>
+                <Text style={styles.emptyStateTitle}>{t('home.emptyTitle')}</Text>
+                <Text style={styles.emptyStateText}>{t('home.emptyText')}</Text>
                 <TouchableOpacity
                   style={styles.emptyStateButton}
                   onPress={() => navigation.navigate('Catalog')}
                 >
                   <MaterialCommunityIcons name="compass-outline" size={18} color="#fff" />
-                  <Text style={styles.emptyStateButtonText}>Explorer le catalogue</Text>
+                  <Text style={styles.emptyStateButtonText}>{t('home.exploreCatalog')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -692,7 +734,7 @@ const HomeScreen = ({ navigation }) => {
             >
               <MaterialCommunityIcons name="arrow-left" size={22} color={tokens.colors.onSurface.light} />
             </TouchableOpacity>
-            <Text style={styles.searchModalTitle}>Recherche</Text>
+            <Text style={styles.searchModalTitle}>{t('common.search')}</Text>
             <View style={styles.searchCloseButton} />
           </View>
 
@@ -701,7 +743,7 @@ const HomeScreen = ({ navigation }) => {
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Titre, auteur..."
+              placeholder={t('home.searchPlaceholder')}
               placeholderTextColor="#9a8f86"
               style={styles.searchInput}
               autoFocus
@@ -711,7 +753,7 @@ const HomeScreen = ({ navigation }) => {
 
           <ScrollView contentContainerStyle={styles.searchResultsContent}>
             {searchQuery.trim().length < 2 ? (
-              <Text style={styles.searchHint}>Tape au moins 2 caractères.</Text>
+              <Text style={styles.searchHint}>{t('home.searchHint')}</Text>
             ) : null}
 
             {searchLoading ? (
@@ -725,7 +767,7 @@ const HomeScreen = ({ navigation }) => {
             ) : null}
 
             {!searchLoading && !searchError && searchQuery.trim().length >= 2 && searchResults.length === 0 ? (
-              <Text style={styles.searchHint}>Aucun résultat.</Text>
+              <Text style={styles.searchHint}>{t('home.noResults')}</Text>
             ) : null}
 
             {searchResults.map((item) => (
@@ -796,15 +838,119 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: tokens.colors.onBackground.light,
     fontFamily: 'Playfair Display',
   },
   subGreeting: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#867465',
     marginTop: 2,
+  },
+
+  // Citation du jour
+  quoteCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: `${tokens.colors.primary}12`,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: tokens.colors.primary,
+  },
+  quoteText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: tokens.colors.onBackground.light,
+    lineHeight: 18,
+  },
+  quoteAuthor: {
+    fontSize: 11,
+    color: '#9c7e49',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+
+  // Featured card
+  featuredCard: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    height: 160,
+    borderRadius: 18,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    backgroundColor: '#1a0f05',
+  },
+  featuredBg: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10,5,0,0.65)',
+  },
+  featuredContent: {
+    flex: 1,
+    padding: 18,
+    justifyContent: 'flex-end',
+    zIndex: 2,
+  },
+  featuredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: tokens.colors.primary,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  featuredBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  featuredTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#fff',
+    fontFamily: 'Playfair Display',
+    lineHeight: 22,
+  },
+  featuredAuthor: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 3,
+  },
+  featuredCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 10,
+    backgroundColor: tokens.colors.primary,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  featuredCtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111',
+  },
+  featuredCover: {
+    width: 100,
+    height: '100%',
+    zIndex: 2,
   },
   headerRight: {
     flexDirection: 'row',
@@ -999,6 +1145,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
+  },
+  coverFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e8ddd4',
   },
   typeBadge: {
     position: 'absolute',

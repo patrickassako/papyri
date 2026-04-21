@@ -11,8 +11,10 @@ import { Text, TextInput, Button, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginScreen({ navigation }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +23,7 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Veuillez remplir tous les champs');
+      setError(t('auth.fieldRequired'));
       return;
     }
 
@@ -37,11 +39,11 @@ export default function LoginScreen({ navigation }) {
       if (signInError) throw signInError;
 
       if (data.session) {
-        navigation.replace('Home');
+        navigation.replace('ProfileSelector');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message || 'Erreur de connexion. Vérifiez vos identifiants.');
+      setError(err.message || t('auth.loginError'));
     } finally {
       setLoading(false);
     }
@@ -69,22 +71,20 @@ export default function LoginScreen({ navigation }) {
 
             {/* Header */}
             <View style={styles.titleContainer}>
-              <Text style={styles.title}>Bon retour parmi nous</Text>
-              <Text style={styles.subtitle}>
-                Heureux de vous revoir pour une nouvelle lecture.
-              </Text>
+              <Text style={styles.title}>{t('auth.loginTitle')}</Text>
+              <Text style={styles.subtitle}>{t('auth.loginSubtitle')}</Text>
             </View>
 
             {/* Form */}
             <View style={styles.form}>
               {/* Email Field */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{t('auth.emailLabel')}</Text>
                 <TextInput
                   mode="flat"
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="votre@email.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
@@ -103,7 +103,7 @@ export default function LoginScreen({ navigation }) {
 
               {/* Password Field */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Mot de passe</Text>
+                <Text style={styles.label}>{t('auth.passwordLabel')}</Text>
                 <View style={styles.passwordContainer}>
                   <TextInput
                     mode="flat"
@@ -142,7 +142,7 @@ export default function LoginScreen({ navigation }) {
                 onPress={() => navigation.navigate('ForgotPassword')}
                 style={styles.forgotPassword}
               >
-                <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+                <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
               </TouchableOpacity>
 
               {/* Error Message */}
@@ -163,7 +163,7 @@ export default function LoginScreen({ navigation }) {
                 labelStyle={styles.buttonLabel}
                 buttonColor="#b4641d"
               >
-                Se connecter
+                {loading ? t('auth.loggingIn') : t('auth.loginButton')}
               </Button>
             </View>
 
@@ -171,7 +171,7 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.alternativeLogin}>
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OU</Text>
+                <Text style={styles.dividerText}>{t('common.or').toUpperCase()}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -189,12 +189,12 @@ export default function LoginScreen({ navigation }) {
           {/* Sign Up Link */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Pas encore de compte ?{' '}
+              {t('auth.noAccount')}{' '}
               <Text
                 style={styles.footerLink}
                 onPress={() => navigation.navigate('Register')}
               >
-                S'inscrire
+                {t('auth.signUp')}
               </Text>
             </Text>
           </View>

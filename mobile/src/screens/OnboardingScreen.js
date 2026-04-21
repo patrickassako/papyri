@@ -12,36 +12,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ONBOARDING_DATA = [
-  {
-    id: '1',
-    title: 'Ta bibliothèque,\npartout.',
-    description: "Accédez à des milliers d'ebooks et de livres audio où que vous soyez.",
-    imageUrl: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&h=800&fit=crop',
-    useRealImage: true,
-    buttonText: 'Suivant'
-  },
-  {
-    id: '2',
-    title: "Reprends exactement\noù tu t'es arrêté.",
-    description: 'Votre progression est synchronisée instantanément sur tous vos appareils.',
-    illustration: 'sync',
-    buttonText: 'Suivant'
-  },
-  {
-    id: '3',
-    title: 'Prépare ta lecture\nhors-ligne.',
-    description: 'Téléchargez vos œuvres favorites pour les savourer même sans connexion.',
-    illustration: 'offline',
-    buttonText: 'Commencer'
-  }
-];
-
 export default function OnboardingScreen({ navigation }) {
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const ONBOARDING_DATA = [
+    {
+      id: '1',
+      title: t('onboarding.slide1Title'),
+      description: t('onboarding.slide1Text'),
+      imageUrl: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&h=800&fit=crop',
+      useRealImage: true,
+    },
+    {
+      id: '2',
+      title: t('onboarding.slide2Title'),
+      description: t('onboarding.slide2Text'),
+      illustration: 'sync',
+    },
+    {
+      id: '3',
+      title: t('onboarding.slide3Title'),
+      description: t('onboarding.slide3Text'),
+      illustration: 'offline',
+    }
+  ];
   const flatListRef = useRef(null);
 
   const completeOnboarding = async () => {
@@ -166,7 +165,7 @@ export default function OnboardingScreen({ navigation }) {
       {/* Skip Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-          <Text style={styles.skipText}>Passer</Text>
+          <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -211,7 +210,7 @@ export default function OnboardingScreen({ navigation }) {
           )}
           buttonColor="#b4641d"
         >
-          {ONBOARDING_DATA[currentIndex].buttonText}
+          {currentIndex === ONBOARDING_DATA.length - 1 ? t('onboarding.getStarted') : t('common.next')}
         </Button>
       </View>
     </SafeAreaView>

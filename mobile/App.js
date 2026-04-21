@@ -1,3 +1,4 @@
+import './src/i18n'; // initialize i18n before anything else
 import React, { useState, useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -29,6 +30,8 @@ import BookReaderScreen from './src/screens/BookReaderScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import DownloadsScreen from './src/screens/DownloadsScreen';
 import LegalScreen from './src/screens/LegalScreen';
+import FamilyScreen from './src/screens/FamilyScreen';
+import ProfileSelectorScreen from './src/screens/ProfileSelectorScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -200,6 +203,18 @@ export default function App() {
               <Stack.Screen
                 name="Legal"
                 component={LegalScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Family accounts */}
+              <Stack.Screen
+                name="Family"
+                component={FamilyScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ProfileSelector"
+                component={ProfileSelectorScreen}
                 options={{ headerShown: false }}
               />
 
