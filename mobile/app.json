@@ -34,7 +34,8 @@
         {
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withGradleFix"
     ],
     "extra": {
       "eas": {
