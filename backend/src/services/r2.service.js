@@ -29,6 +29,10 @@ function getClient() {
         accessKeyId: config.r2.accessKeyId,
         secretAccessKey: config.r2.secretAccessKey,
       },
+      // Disable automatic checksum injection — Cloudflare R2 does not support
+      // x-amz-checksum-mode and returns 403 when it appears in signed requests.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
 
     console.log('✅ R2 client initialized');
