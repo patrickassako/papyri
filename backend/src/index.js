@@ -59,6 +59,7 @@ const adminPromoCodesRoutes    = require('./routes/admin.promoCodes.routes');
 const adminSettingsRoutes      = require('./routes/admin.settings.routes');
 const adminGeoRoutes           = require('./routes/admin.geo.routes');
 const adminAnalyticsRoutes     = require('./routes/admin.analytics.routes');
+const mediaRoutes              = require('./routes/media.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 // Start server with async AdminJS setup
@@ -167,6 +168,7 @@ async function startServer() {
   app.use('/api/admin/roles',                adminRolesRoutes);
   app.use('/api/admin/invitations',          adminInvitationsRoutes);
   app.use('/api/admin',                      adminGeneralRoutes);
+  app.use('/api/media',                      mediaRoutes);
   app.use('/', homeRoutes);
   app.use('/', readingRoutes);
 
