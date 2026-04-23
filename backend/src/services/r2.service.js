@@ -29,6 +29,9 @@ function getClient() {
         accessKeyId: config.r2.accessKeyId,
         secretAccessKey: config.r2.secretAccessKey,
       },
+      // Force path-style URLs — R2 returns 403 on virtual-hosted presigned URLs.
+      // Path-style: https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>
+      forcePathStyle: true,
       // Disable automatic checksum injection — Cloudflare R2 does not support
       // x-amz-checksum-mode and returns 403 when it appears in signed requests.
       requestChecksumCalculation: 'WHEN_REQUIRED',
