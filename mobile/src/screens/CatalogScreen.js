@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   StyleSheet,
@@ -18,16 +19,17 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { contentsService } from '../services/contents.service';
 import BottomNavBar from '../components/BottomNavBar';
+import BookCover from '../components/BookCover';
 
 const tokens = require('../config/tokens');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
 const SORT_OPTIONS = [
-  { key: 'published_at:desc', label: 'Plus récents', icon: 'clock-outline' },
-  { key: 'published_at:asc', label: 'Plus anciens', icon: 'clock-check-outline' },
-  { key: 'title:asc', label: 'Titre A→Z', icon: 'sort-alphabetical-ascending' },
-  { key: 'views:desc', label: 'Populaires', icon: 'trending-up' },
+  { key: 'newest', label: 'Plus récents', icon: 'clock-outline' },
+  { key: 'oldest', label: 'Plus anciens', icon: 'clock-check-outline' },
+  { key: 'title', label: 'Titre A→Z', icon: 'sort-alphabetical-ascending' },
+  { key: 'popular', label: 'Populaires', icon: 'trending-up' },
 ];
 
 const TYPE_OPTIONS = [
@@ -51,7 +53,7 @@ export default function CatalogScreen({ navigation, route }) {
   // Filters
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedType, setSelectedType] = useState('');
-  const [selectedSort, setSelectedSort] = useState('published_at:desc');
+  const [selectedSort, setSelectedSort] = useState('newest');
 
   // Search
   const [searchVisible, setSearchVisible] = useState(false);
@@ -64,7 +66,10 @@ export default function CatalogScreen({ navigation, route }) {
   const [filterVisible, setFilterVisible] = useState(false);
   // draft state inside modal
   const [draftType, setDraftType] = useState('');
-  const [draftSort, setDraftSort] = useState('published_at:desc');
+  const [draftSort, setDraftSort] = useState('newest');
+
+  // Recommandation dynamique — change à chaque ouverture de la page
+  const [recommendation, setRecommendation] = useState(null);
 
   useEffect(() => {
     loadCategories();
@@ -72,7 +77,23 @@ export default function CatalogScreen({ navigation, route }) {
 
   useEffect(() => {
     loadContents(true);
-  }, [selectedCategory, selectedType, selectedSort]);
+  }, [selectedCategory, selectedType, selectedSort]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tire une recommandation aléatoire à chaque ouverture de la page
+  useFocusEffect(
+    useCallback(() => {
+      const pick = async () => {
+        try {
+          const result = await contentsService.getContents({ page: 1, limit: 50, sort: 'published_at', order: 'desc' });
+          const items = result?.data || [];
+          if (items.length > 0) {
+            setRecommendation(items[Math.floor(Math.random() * items.length)]);
+          }
+        } catch (_) {}
+      };
+      pick();
+    }, [])
+  );
 
   const loadCategories = async () => {
     try {
@@ -93,15 +114,13 @@ export default function CatalogScreen({ navigation, route }) {
         setLoadingMore(true);
       }
 
-      const [sortField, sortOrder] = selectedSort.split(':');
       const params = {
         page: currentPage,
         limit: 20,
-        sort: sortField,
-        order: sortOrder,
+        sort: selectedSort,
       };
       if (selectedCategory) params.category = selectedCategory;
-      if (selectedType) params.content_type = selectedType;
+      if (selectedType) params.type = selectedType;
 
       const response = await contentsService.getContents(params);
       const newItems = response.data || [];
@@ -186,7 +205,7 @@ export default function CatalogScreen({ navigation, route }) {
     setFilterVisible(false);
   };
 
-  const activeFilterCount = (selectedType ? 1 : 0) + (selectedSort !== 'published_at:desc' ? 1 : 0);
+  const activeFilterCount = (selectedType ? 1 : 0) + (selectedSort !== 'newest' ? 1 : 0);
 
   // ── Renderers ─────────────────────────────────────────
   const renderCategoryChip = ({ item, index }) => {
@@ -214,11 +233,7 @@ export default function CatalogScreen({ navigation, route }) {
         onPress={() => navigation.navigate('ContentDetail', { contentId: item.id })}
       >
         <View style={styles.coverWrap}>
-          <Image
-            source={{ uri: item.cover_url || 'https://placehold.co/200x300/EEE/AAA?text=📚' }}
-            style={styles.coverImage}
-            resizeMode="cover"
-          />
+          <BookCover uri={item.cover_url} title={item.title} style={styles.coverImage} />
           <View style={styles.typeBadge}>
             <MaterialCommunityIcons name={isAudio ? 'headphones' : 'book'} size={11} color="#171412" />
             <Text style={styles.typeBadgeText}>{isAudio ? 'Audio' : 'E-book'}</Text>
@@ -241,10 +256,7 @@ export default function CatalogScreen({ navigation, route }) {
         navigation.navigate('ContentDetail', { contentId: item.id });
       }}
     >
-      <Image
-        source={{ uri: item.cover_url || 'https://placehold.co/60x90/EEE/AAA?text=📚' }}
-        style={styles.searchResultCover}
-      />
+      <BookCover uri={item.cover_url} title={item.title} style={styles.searchResultCover} />
       <View style={styles.searchResultBody}>
         <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
         <Text style={styles.searchResultAuthor} numberOfLines={1}>{item.author}</Text>
@@ -297,35 +309,50 @@ export default function CatalogScreen({ navigation, route }) {
     return null;
   };
 
-  const renderFeatured = () => (
-    <View style={styles.featuredWrap}>
-      <LinearGradient
-        colors={['#D4A017', 'rgba(212,160,23,0.8)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.featuredGradient}
-      >
-        <View style={styles.featuredContent}>
-          <View style={styles.featuredBadge}>
-            <Text style={styles.featuredBadgeText}>AUTEUR À L'HONNEUR</Text>
+  const renderFeatured = () => {
+    if (!recommendation) return null;
+    const coverUri = recommendation.cover_url || recommendation.thumbnail_url || null;
+    const title = recommendation.title || '';
+    const author = recommendation.author || recommendation.author_name || '';
+    const desc = recommendation.description || recommendation.excerpt || '';
+    return (
+      <View style={styles.featuredWrap}>
+        <LinearGradient
+          colors={['#b4641d', 'rgba(180,100,29,0.85)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.featuredGradient}
+        >
+          <View style={styles.featuredContent}>
+            <View style={styles.featuredBadge}>
+              <MaterialCommunityIcons name="star-four-points" size={10} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.featuredBadgeText}>RECOMMANDATION</Text>
+            </View>
+            <Text style={styles.featuredTitle} numberOfLines={2}>{title}</Text>
+            {!!author && (
+              <Text style={styles.featuredAuthor} numberOfLines={1}>{author}</Text>
+            )}
+            {!!desc && (
+              <Text style={styles.featuredDesc} numberOfLines={2}>{desc}</Text>
+            )}
+            <TouchableOpacity
+              style={styles.featuredBtn}
+              onPress={() => navigation.navigate('ContentDetail', { contentId: recommendation.id })}
+            >
+              <Text style={styles.featuredBtnText}>Découvrir</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.featuredTitle}>Chinua Achebe</Text>
-          <Text style={styles.featuredDesc} numberOfLines={2}>
-            Redécouvrez les classiques de la littérature africaine moderne
-          </Text>
-          <TouchableOpacity
-            style={styles.featuredBtn}
-            onPress={() => setSelectedCategory('')}
-          >
-            <Text style={styles.featuredBtnText}>Explorer</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.featuredIconBg}>
-          <MaterialCommunityIcons name="book-open-page-variant" size={140} color="rgba(255,255,255,0.15)" />
-        </View>
-      </LinearGradient>
-    </View>
-  );
+          <View style={styles.featuredIconBg}>
+            {coverUri ? (
+              <Image source={{ uri: coverUri }} style={styles.featuredCover} resizeMode="cover" />
+            ) : (
+              <MaterialCommunityIcons name="book-open-page-variant" size={120} color="rgba(255,255,255,0.2)" />
+            )}
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -373,12 +400,12 @@ export default function CatalogScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ) : null}
-          {selectedSort !== 'published_at:desc' ? (
+          {selectedSort !== 'newest' ? (
             <View style={styles.activeFilterTag}>
               <Text style={styles.activeFilterTagText}>
                 {SORT_OPTIONS.find(s => s.key === selectedSort)?.label}
               </Text>
-              <TouchableOpacity onPress={() => setSelectedSort('published_at:desc')}>
+              <TouchableOpacity onPress={() => setSelectedSort('newest')}>
                 <MaterialCommunityIcons name="close-circle" size={14} color={tokens.colors.primary} />
               </TouchableOpacity>
             </View>
@@ -466,8 +493,9 @@ export default function CatalogScreen({ navigation, route }) {
 
       {/* ── Filter Modal ── */}
       <Modal visible={filterVisible} transparent animationType="slide" onRequestClose={() => setFilterVisible(false)}>
-        <Pressable style={styles.filterOverlay} onPress={() => setFilterVisible(false)} />
-        <View style={styles.filterSheet}>
+        <View style={styles.filterModalRoot}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setFilterVisible(false)} />
+          <View style={styles.filterSheet}>
           <View style={styles.filterHandle} />
           <Text style={styles.filterSheetTitle}>Filtres & Tri</Text>
 
@@ -513,7 +541,7 @@ export default function CatalogScreen({ navigation, route }) {
           <View style={styles.filterActions}>
             <TouchableOpacity
               style={styles.filterResetBtn}
-              onPress={() => { setDraftType(''); setDraftSort('published_at:desc'); }}
+              onPress={() => { setDraftType(''); setDraftSort('newest'); }}
             >
               <Text style={styles.filterResetText}>Réinitialiser</Text>
             </TouchableOpacity>
@@ -521,6 +549,7 @@ export default function CatalogScreen({ navigation, route }) {
               <Text style={styles.filterApplyText}>Appliquer</Text>
             </TouchableOpacity>
           </View>
+        </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -676,6 +705,8 @@ const styles = StyleSheet.create({
     maxWidth: '70%',
   },
   featuredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
     paddingVertical: 3,
@@ -691,10 +722,16 @@ const styles = StyleSheet.create({
   },
   featuredTitle: {
     fontFamily: 'Playfair Display',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 6,
+    marginBottom: 2,
+  },
+  featuredAuthor: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   featuredDesc: {
     fontSize: 13,
@@ -709,17 +746,26 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignSelf: 'flex-start',
   },
+  featuredIconBg: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '35%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  featuredCover: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.35,
+  },
   featuredBtnText: {
-    color: '#D4A017',
+    color: '#b4641d',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
-  },
-  featuredIconBg: {
-    position: 'absolute',
-    right: -20,
-    top: -10,
-    opacity: 0.2,
   },
 
   // Book card
@@ -907,8 +953,9 @@ const styles = StyleSheet.create({
   },
 
   // Filter sheet
-  filterOverlay: {
+  filterModalRoot: {
     flex: 1,
+    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   filterSheet: {

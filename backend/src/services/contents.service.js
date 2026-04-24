@@ -146,11 +146,14 @@ async function getContents(options = {}) {
     case 'newest':
       query = query.order('published_at', { ascending: false });
       break;
+    case 'oldest':
+      query = query.order('published_at', { ascending: true });
+      break;
     case 'title':
       query = query.order('title', { ascending: true });
       break;
     default:
-      query = query.order('created_at', { ascending: false });
+      query = query.order('published_at', { ascending: false });
   }
 
   // Pagination
