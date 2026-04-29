@@ -98,6 +98,21 @@ async function startServer() {
   app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
   app.use('/public', express.static(path.join(__dirname, '..', 'public')));
 
+  // Android App Links verification file
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.json([{
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: 'com.bibliothequenumerique.app',
+        sha256_cert_fingerprints: [
+          'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C',
+        ],
+      },
+    }]);
+  });
+
   // 3. Health check
   app.get('/health', (req, res) => {
     res.status(200).json({
