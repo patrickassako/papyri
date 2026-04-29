@@ -23,6 +23,10 @@ function isMissingReadingHistoryTable(error) {
   if (error.code === 'PGRST205' && String(error.message || '').includes('reading_history')) {
     return true;
   }
+  // Column does not exist (schema not yet migrated) — treat as graceful empty
+  if (error.code === '42703') return true;
+  // Supabase REST wraps Postgres column errors differently
+  if (error.code === 'PGRST204') return true;
   return false;
 }
 
@@ -67,7 +71,9 @@ function applyProfileScope(query, profileId) {
   if (profileId) {
     return query.eq('profile_id', profileId);
   }
-  return query.is('profile_id', null);
+  // No profile (non-family user) → don't filter on profile_id at all.
+  // The column may not exist yet if migration 049 hasn't run.
+  return query;
 }
 
 async function upsertReadingProgress({
@@ -135,16 +141,18 @@ async function upsertReadingProgress({
   const normalizedProgress = Number(progressPercent);
   const normalizedTotalTime = Number(totalTimeSeconds || 0);
 
-  // Prepare update data
+  // Prepare update data — omit profile_id when null so the column is not
+  // required (migration 049 may not have run yet in all environments).
   const updateData = {
     user_id: userId,
-    profile_id: profileId,
+    ...(profileId != null ? { profile_id: profileId } : {}),
     content_id: contentId,
     progress_percent: normalizedProgress,
     last_position: normalizeLastPosition(lastPosition),
     last_read_at: now,
     updated_at: now,
     is_completed: normalizedProgress >= 100,
+    status: normalizedProgress >= 100 ? 'completed' : 'in_progress',
   };
 
   if (Number.isFinite(normalizedTotalTime) && normalizedTotalTime >= 0) {
@@ -1249,7 +1257,7 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
       .from('highlights')
       .insert({
         user_id: userId,
-        profile_id: profileContext.profileId,
+        ...(profileContext.profileId != null ? { profile_id: profileContext.profileId } : {}),
         content_id: contentId,
         text,
         cfi_range,
@@ -1360,7 +1368,7 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
       .from('bookmarks')
       .insert({
         user_id: userId,
-        profile_id: profileContext.profileId,
+        ...(profileContext.profileId != null ? { profile_id: profileContext.profileId } : {}),
         content_id: contentId,
         position,
         label: label || null,
@@ -1768,7 +1776,7 @@ router.post('/api/reading/:content_id/bookmarks', verifyJWT, async (req, res, ne
 
     const { data, error } = await supabaseAdmin
       .from('bookmarks')
-      .insert({ user_id: userId, profile_id: profileContext.profileId, content_id: contentId, position, label: label || null })
+      .insert({ user_id: userId, ...(profileContext.profileId != null ? { profile_id: profileContext.profileId } : {}), content_id: contentId, position, label: label || null })
       .select('id, position, label, created_at')
       .single();
 
@@ -1863,7 +1871,7 @@ router.post('/api/reading/:content_id/highlights', verifyJWT, async (req, res, n
       .from('highlights')
       .insert({
         user_id: userId,
-        profile_id: profileContext.profileId,
+        ...(profileContext.profileId != null ? { profile_id: profileContext.profileId } : {}),
         content_id: contentId,
         text,
         cfi_range,
@@ -1976,7 +1984,7 @@ router.post('/api/reading/ebook/list', verifyJWT, async (req, res, next) => {
     if (!existing) {
       const { error } = await supabaseAdmin
         .from('ebook_reading_list')
-        .insert({ user_id: userId, profile_id: profileContext.profileId, content_id: contentId });
+        .insert({ user_id: userId, ...(profileContext.profileId != null ? { profile_id: profileContext.profileId } : {}), content_id: contentId });
 
       if (error) throw error;
     }
