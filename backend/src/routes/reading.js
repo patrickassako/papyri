@@ -23,9 +23,14 @@ function isMissingReadingHistoryTable(error) {
   if (error.code === 'PGRST205' && String(error.message || '').includes('reading_history')) {
     return true;
   }
-  // Column does not exist (schema not yet migrated) — treat as graceful empty
+  return false;
+}
+
+function isMissingColumn(error) {
+  if (!error) return false;
+  // Postgres: column does not exist
   if (error.code === '42703') return true;
-  // Supabase REST wraps Postgres column errors differently
+  // Supabase REST wraps this differently
   if (error.code === 'PGRST204') return true;
   return false;
 }
@@ -179,7 +184,7 @@ async function upsertReadingProgress({
 
     if (updateError) {
       // Column doesn't exist yet (migration pending) — retry without that column
-      if (updateError.code === '42703' || updateError.code === 'PGRST204') {
+      if (isMissingColumn(updateError)) {
         const { status: _s, profile_id: _p, ...safeData } = updateData;
         const { data: retryUpd, error: retryUpdErr } = await supabaseAdmin
           .from('reading_history')
@@ -221,7 +226,7 @@ async function upsertReadingProgress({
 
   if (insertError) {
     // Column doesn't exist yet (migration pending) — retry without that column
-    if (insertError.code === '42703' || insertError.code === 'PGRST204') {
+    if (isMissingColumn(insertError)) {
       const { status: _s, profile_id: _p, ...safeData } = updateData;
       const { data: retryIns, error: retryInsErr } = await supabaseAdmin
         .from('reading_history')
@@ -557,9 +562,10 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
     const userId = req.user.id;
     const profileContext = await resolveProfileContext(req);
 
+    // Note: the column is content_type (not type) in the contents table
     let statsQuery = supabaseAdmin
       .from('reading_history')
-      .select('content_id, is_completed, status, progress_percent, total_time_seconds, last_read_at, contents(type)')
+      .select('content_id, is_completed, status, progress_percent, total_time_seconds, last_read_at, contents(content_type)')
       .eq('user_id', userId);
 
     statsQuery = applyProfileScope(statsQuery, profileContext.profileId);
@@ -567,14 +573,15 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
     let { data: history, error } = await statsQuery;
 
     // If status column doesn't exist yet (migration 052 pending), retry without it
-    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+    if (error && isMissingColumn(error)) {
       const fallback = await supabaseAdmin
         .from('reading_history')
-        .select('content_id, is_completed, progress_percent, total_time_seconds, last_read_at, contents(type)')
-        .eq('user_id', userId)
-        .then(r => r);
-      history = fallback.data;
-      error = fallback.error;
+        .select('content_id, is_completed, progress_percent, total_time_seconds, last_read_at')
+        .eq('user_id', userId);
+      const r2 = applyProfileScope(fallback, profileContext.profileId);
+      const res2 = await r2;
+      history = res2.data;
+      error = res2.error;
     }
 
     if (error && !isMissingReadingHistoryTable(error)) {
@@ -588,7 +595,7 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
     const inProgress = rows.filter(r => r.status === 'in_progress' || (!r.status && !r.is_completed)).length;
     const totalSeconds = rows.reduce((sum, r) => sum + (r.total_time_seconds || 0), 0);
     const audioSeconds = rows
-      .filter(r => r.contents?.type === 'audio')
+      .filter(r => r.contents?.content_type === 'audiobook')
       .reduce((sum, r) => sum + (r.total_time_seconds || 0), 0);
     const completionRate = totalBooks > 0 ? Math.round((completed / totalBooks) * 100) : 0;
 
