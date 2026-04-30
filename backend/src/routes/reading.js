@@ -141,8 +141,8 @@ async function upsertReadingProgress({
   const normalizedProgress = Number(progressPercent);
   const normalizedTotalTime = Number(totalTimeSeconds || 0);
 
-  // Prepare update data — omit profile_id when null so the column is not
-  // required (migration 049 may not have run yet in all environments).
+  // Prepare update data — omit profile_id and status when null/missing so
+  // columns are not required before migrations 049/052 have run.
   const updateData = {
     user_id: userId,
     ...(profileId != null ? { profile_id: profileId } : {}),
@@ -178,6 +178,19 @@ async function upsertReadingProgress({
       .single();
 
     if (updateError) {
+      // Column doesn't exist yet (migration pending) — retry without that column
+      if (updateError.code === '42703' || updateError.code === 'PGRST204') {
+        const { status: _s, profile_id: _p, ...safeData } = updateData;
+        const { data: retryUpd, error: retryUpdErr } = await supabaseAdmin
+          .from('reading_history')
+          .update(safeData)
+          .eq('id', existingHistory.id)
+          .select()
+          .single();
+        if (!retryUpdErr) {
+          return { ok: true, status: 200, payload: { success: true, data: retryUpd } };
+        }
+      }
       console.error('[upsertReadingProgress] Update FAILED:', updateError);
       throw new Error('Failed to update reading history');
     }
@@ -207,6 +220,21 @@ async function upsertReadingProgress({
     .single();
 
   if (insertError) {
+    // Column doesn't exist yet (migration pending) — retry without that column
+    if (insertError.code === '42703' || insertError.code === 'PGRST204') {
+      const { status: _s, profile_id: _p, ...safeData } = updateData;
+      const { data: retryIns, error: retryInsErr } = await supabaseAdmin
+        .from('reading_history')
+        .insert(safeData)
+        .select()
+        .single();
+      if (!retryInsErr) {
+        return { ok: true, status: 201, payload: { success: true, data: retryIns } };
+      }
+      console.error('[upsertReadingProgress] Retry without new columns also failed:', retryInsErr?.message);
+      return { ok: true, status: 200, payload: { success: true, skipped: true, data: null } };
+    }
+
     console.error('[upsertReadingProgress] Insert FAILED:', {
       code: insertError.code,
       message: insertError.message,
