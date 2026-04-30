@@ -559,12 +559,23 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
 
     let statsQuery = supabaseAdmin
       .from('reading_history')
-      .select('content_id, status, progress_percent, total_time_seconds, last_read_at, contents(type)')
+      .select('content_id, is_completed, status, progress_percent, total_time_seconds, last_read_at, contents(type)')
       .eq('user_id', userId);
 
     statsQuery = applyProfileScope(statsQuery, profileContext.profileId);
 
-    const { data: history, error } = await statsQuery;
+    let { data: history, error } = await statsQuery;
+
+    // If status column doesn't exist yet (migration 052 pending), retry without it
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const fallback = await supabaseAdmin
+        .from('reading_history')
+        .select('content_id, is_completed, progress_percent, total_time_seconds, last_read_at, contents(type)')
+        .eq('user_id', userId)
+        .then(r => r);
+      history = fallback.data;
+      error = fallback.error;
+    }
 
     if (error && !isMissingReadingHistoryTable(error)) {
       return next(error);
@@ -572,8 +583,9 @@ router.get('/reading-history/stats', verifyJWT, async (req, res, next) => {
 
     const rows = history || [];
     const totalBooks = rows.length;
-    const completed = rows.filter(r => r.status === 'completed').length;
-    const inProgress = rows.filter(r => r.status === 'in_progress').length;
+    // status col may not exist yet — fall back to is_completed boolean
+    const completed = rows.filter(r => r.status === 'completed' || (!r.status && r.is_completed)).length;
+    const inProgress = rows.filter(r => r.status === 'in_progress' || (!r.status && !r.is_completed)).length;
     const totalSeconds = rows.reduce((sum, r) => sum + (r.total_time_seconds || 0), 0);
     const audioSeconds = rows
       .filter(r => r.contents?.type === 'audio')
