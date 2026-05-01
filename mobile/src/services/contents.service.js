@@ -1,7 +1,7 @@
 // Service API pour les contenus et catégories (Mobile)
 import API_BASE_URL from '../config/api';
 import { authFetch } from './auth.service';
-import { apiClient } from './api.client';
+import { apiClient, DEVICE_COUNTRY } from './api.client';
 
 let fallbackCatalogCache = [];
 let fallbackCatalogCacheAt = 0;
@@ -16,11 +16,10 @@ export const contentsService = {
    * @param {Object} params - Paramètres de requête
    * @param {number} [params.page=1] - Numéro de page
    * @param {number} [params.limit=20] - Éléments par page
-   * @param {string} [params.content_type] - Type (ebook|audiobook)
+   * @param {string} [params.type] - Type (ebook|audiobook)
    * @param {string} [params.language] - Langue (fr|en)
    * @param {string} [params.category] - Slug de catégorie
-   * @param {string} [params.sort='published_at'] - Tri
-   * @param {string} [params.order='desc'] - Ordre
+   * @param {string} [params.sort='newest'] - Tri (newest|oldest|title|popular)
    * @returns {Promise<{data: Array, meta: Object}>}
    */
   async getContents(params = {}) {
@@ -58,10 +57,12 @@ export const contentsService = {
    * @returns {Promise<Object>}
    */
   async getContentAccess(id) {
+    const geoHeaders = DEVICE_COUNTRY ? { 'X-Country-Code': DEVICE_COUNTRY } : {};
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/access`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        ...geoHeaders,
       },
     });
 
@@ -158,7 +159,7 @@ export const contentsService = {
       // on bascule sur un filtrage local d'un snapshot catalogue.
       const now = Date.now();
       if (!Array.isArray(fallbackCatalogCache) || fallbackCatalogCache.length === 0 || (now - fallbackCatalogCacheAt) > FALLBACK_CACHE_TTL_MS) {
-        const catalog = await contentsService.getContents({ page: 1, limit: 200, sort: 'published_at', order: 'desc' });
+        const catalog = await contentsService.getContents({ page: 1, limit: 200, sort: 'newest' });
         fallbackCatalogCache = Array.isArray(catalog?.data) ? catalog.data : [];
         fallbackCatalogCacheAt = now;
       }

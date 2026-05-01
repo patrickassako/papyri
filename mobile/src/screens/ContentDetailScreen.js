@@ -8,20 +8,27 @@ import {
   Dimensions,
   Alert,
   Linking,
+  Share,
 } from 'react-native';
 import { Text, ActivityIndicator, ProgressBar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { contentsService } from '../services/contents.service';
+import BookCover from '../components/BookCover';
 import { subscriptionService } from '../services/subscription.service';
+import { detectCurrency, convertCents, formatMinorUnits } from '../services/currency.service';
 import {
   isContentDownloaded,
   downloadContent,
+  downloadAudiobookChapters,
   deleteDownloadedContent,
   getDownloadedContents,
+  getOfflineEntry,
+  isOnline,
   formatBytes,
 } from '../services/offline.service';
+import { readingService } from '../services/reading.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_WIDTH = Math.min(SCREEN_WIDTH * 0.58, 260);
@@ -34,17 +41,9 @@ function formatDuration(seconds) {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
-function formatMoney(cents, currency = 'USD') {
-  const amount = Number(cents || 0) / 100;
-  try {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-    }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
+// formatMoney : wrapper sur formatMinorUnits du currency service
+function formatMoney(cents, currency = 'EUR') {
+  return formatMinorUnits(cents, currency);
 }
 
 function formatYear(dateString) {
@@ -70,17 +69,53 @@ export default function ContentDetailScreen({ route, navigation }) {
   const [access, setAccess] = useState(null);
   const [usageData, setUsageData] = useState(null);
   const [subscription, setSubscription] = useState(null);
+  const [userCurrency, setUserCurrency] = useState(null);
   const [loading, setLoading] = useState(true);
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [recommendations, setRecommendations] = useState({ sameGenre: [], youllLike: [] });
 
+  // Favoris
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
   // Offline download state
   const [downloadState, setDownloadState] = useState('idle'); // 'idle' | 'downloading' | 'downloaded'
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadSize, setDownloadSize] = useState(null);
   const [downloadExpiry, setDownloadExpiry] = useState(null);
+
+  // Détecter la devise de l'utilisateur au montage (ipapi.co → fuseau → locale → EUR)
+  useEffect(() => {
+    detectCurrency().then(({ currency }) => setUserCurrency(currency)).catch(() => {});
+  }, []);
+
+  // Charger le statut favori
+  useEffect(() => {
+    if (!contentId) return;
+    readingService.getReadingList()
+      .then((items) => setIsFavorite(items.some((item) => item.id === contentId)))
+      .catch(() => {});
+  }, [contentId]);
+
+  const toggleFavorite = async () => {
+    if (favoriteLoading) return;
+    setFavoriteLoading(true);
+    try {
+      if (isFavorite) {
+        await readingService.removeFromReadingList(contentId);
+        setIsFavorite(false);
+      } else {
+        await readingService.addToReadingList(contentId);
+        setIsFavorite(true);
+      }
+    } catch (err) {
+      Alert.alert('Erreur', err.message || 'Impossible de modifier les favoris');
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -99,17 +134,51 @@ export default function ContentDetailScreen({ route, navigation }) {
       }
     };
 
+    const loadFromOffline = async () => {
+      const offlineEntry = await getOfflineEntry(contentId);
+      if (offlineEntry && alive) {
+        setContent({
+          id: contentId,
+          title: offlineEntry.title || 'Contenu',
+          author: offlineEntry.author || '',
+          cover_url: offlineEntry.cover_url || null,
+          content_type: offlineEntry.type || 'audiobook',
+          access_type: 'subscription',
+          price_cents: 0,
+        });
+        setAccess({ can_read: true, unlocked: true, access_type: 'subscription' });
+        return true;
+      }
+      return false;
+    };
+
+    const isNetworkError = (err) => {
+      const msg = err?.message || '';
+      return msg.includes('Network request failed')
+        || msg.includes('network')
+        || msg.includes('fetch')
+        || msg.includes('ENOTFOUND')
+        || msg.includes('ECONNREFUSED')
+        || msg.includes('timeout');
+    };
+
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        // Tenter l'API en ligne
         const [contentResult, subscriptionResult] = await Promise.allSettled([
           contentsService.getContentById(contentId),
           subscriptionService.getCurrentSubscription(),
         ]);
 
         if (contentResult.status !== 'fulfilled') {
+          // Erreur API → fallback hors-ligne si disponible
+          if (isNetworkError(contentResult.reason)) {
+            const loaded = await loadFromOffline();
+            if (loaded) return;
+          }
           throw contentResult.reason || new Error('Impossible de charger le contenu.');
         }
 
@@ -128,7 +197,14 @@ export default function ContentDetailScreen({ route, navigation }) {
         }).catch(() => {});
       } catch (err) {
         console.error('Error loading content detail:', err);
-        if (alive) setError('Impossible de charger ce contenu.');
+        // Dernière chance : tenter le hors-ligne
+        if (isNetworkError(err)) {
+          const loaded = await loadFromOffline();
+          if (loaded) return;
+          if (alive) setError('Pas de connexion internet et ce contenu n\'est pas disponible hors-ligne.');
+        } else {
+          if (alive) setError('Impossible de charger ce contenu.');
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -305,11 +381,11 @@ export default function ContentDetailScreen({ route, navigation }) {
   };
 
   const handlePrimaryAction = () => {
-    if (isLocked) {
-      handleLockedPrimaryAction();
+    if (canOpenContent) {
+      handleUnlockedAction();
       return;
     }
-    handleUnlockedAction();
+    handleLockedPrimaryAction();
   };
 
   const handleDownload = async () => {
@@ -341,23 +417,68 @@ export default function ContentDetailScreen({ route, navigation }) {
       setDownloadState('downloading');
       setDownloadProgress(0);
 
-      const payload = await contentsService.getContentFileUrl(content.id || contentId);
-      const signedUrl = payload?.data?.url || payload?.url || null;
-      if (!signedUrl) {
-        setDownloadState('idle');
-        Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
-        return;
-      }
+      const cid = content.id || contentId;
 
-      const format = isAudiobook ? 'audio' : (content.format || 'epub');
-      const filePath = await downloadContent({
-        contentId: content.id || contentId,
-        url: signedUrl,
-        format,
-        title: content.title || 'Contenu',
-        type: isAudiobook ? 'audiobook' : 'ebook',
-        onProgress: (pct) => setDownloadProgress(pct / 100),
-      });
+      if (isAudiobook) {
+        // ── Audiobook : télécharger tous les chapitres ─────────────────────
+        const chaptersData = await readingService.getChapters(cid);
+        const chapterList = chaptersData?.chapters || [];
+
+        if (chapterList.length === 0) {
+          // Pas de chapitres → télécharger le fichier principal unique
+          const payload = await contentsService.getContentFileUrl(cid);
+          const signedUrl = payload?.data?.url || payload?.url || null;
+          if (!signedUrl) {
+            setDownloadState('idle');
+            Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
+            return;
+          }
+          await downloadContent({
+            contentId: cid,
+            url: signedUrl,
+            format: 'audio',
+            title: content.title || 'Contenu',
+            author: content.author || '',
+            cover_url: content.cover_url || '',
+            type: 'audiobook',
+            onProgress: (pct) => setDownloadProgress(pct / 100),
+          });
+        } else {
+          // Télécharger chaque chapitre
+          await downloadAudiobookChapters({
+            contentId: cid,
+            chapters: chapterList,
+            getChapterUrl: async (chapterId) => {
+              const data = await readingService.getChapterFileUrl(cid, chapterId);
+              return data?.url || null;
+            },
+            title: content.title || 'Contenu',
+            author: content.author || '',
+            cover_url: content.cover_url || '',
+            duration_seconds: content.duration_seconds || 0,
+            onProgress: (pct) => setDownloadProgress(pct / 100),
+          });
+        }
+      } else {
+        // ── Ebook/PDF : télécharger le fichier unique ──────────────────────
+        const payload = await contentsService.getContentFileUrl(cid);
+        const signedUrl = payload?.data?.url || payload?.url || null;
+        if (!signedUrl) {
+          setDownloadState('idle');
+          Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
+          return;
+        }
+        await downloadContent({
+          contentId: cid,
+          url: signedUrl,
+          format: content.format || 'epub',
+          title: content.title || 'Contenu',
+          author: content.author || '',
+          cover_url: content.cover_url || '',
+          type: 'ebook',
+          onProgress: (pct) => setDownloadProgress(pct / 100),
+        });
+      }
 
       // Get file size + expiry from stored metadata
       const allDownloads = await getDownloadedContents();
@@ -378,29 +499,85 @@ export default function ContentDetailScreen({ route, navigation }) {
     Alert.alert('Playlist', 'Ajouté à votre playlist audio.');
   };
 
+  const handleShare = async () => {
+    try {
+      const title = content?.title || 'Découvrez ce contenu sur Papyri';
+      const author = content?.author ? ` de ${content.author}` : '';
+      const bookUrl = `https://www.papyrihub.net/catalogue/${contentId}`;
+      await Share.share({
+        title,
+        message: `Découvrez "${title}"${author} sur Papyri — Bibliothèque Numérique Privée.\n\n${bookUrl}`,
+        url: bookUrl,
+      });
+    } catch {
+      // user dismissed share sheet — no action needed
+    }
+  };
+
+  const handleReport = () => {
+    const subject = encodeURIComponent(`Signalement : ${content?.title || contentId}`);
+    const body = encodeURIComponent(
+      `Bonjour,\n\nJe souhaite signaler un problème avec le contenu suivant :\n- Titre : ${content?.title || ''}\n- ID : ${content?.id || contentId}\n\nDescription du problème :\n`
+    );
+    Linking.openURL(`mailto:contact@papyrihub.com?subject=${subject}&body=${body}`).catch(() =>
+      Alert.alert('Erreur', "Impossible d'ouvrir le client mail.")
+    );
+  };
+
   const denialCode = access?.denial?.code;
   const denialMessage = access?.denial?.message || null;
+
+  // Usage data
   const activeUsage = usageData?.usage || null;
   const bonuses = usageData?.bonuses || {};
-  const usedCount = Number(
-    isAudiobook ? activeUsage?.audio_unlocked_count : activeUsage?.text_unlocked_count
-  );
-  const quotaCount = Number(
-    isAudiobook ? activeUsage?.audio_quota : activeUsage?.text_quota
-  );
+  const usedCount = Number(isAudiobook ? activeUsage?.audio_unlocked_count : activeUsage?.text_unlocked_count);
+  const quotaCount = Number(isAudiobook ? activeUsage?.audio_quota : activeUsage?.text_quota);
   const hasQuota = Number.isFinite(quotaCount) && quotaCount > 0;
   const remainingQuota = hasQuota ? Math.max(0, quotaCount - (Number.isFinite(usedCount) ? usedCount : 0)) : 0;
-  const bonusRemaining = Math.max(
-    0,
-    Number(isAudiobook ? bonuses?.audio || 0 : bonuses?.text || 0) + Number(bonuses?.flex || 0)
+  const bonusRemaining = Math.max(0, Number(isAudiobook ? bonuses?.audio || 0 : bonuses?.text || 0) + Number(bonuses?.flex || 0));
+
+  // ── Access type — mirror web logic exactly ──────────────────────────────
+  // Backend returns: 'subscription' | 'paid' | 'subscription_or_paid'
+  const accessType = access?.access_type || content?.access_type || 'subscription';
+  const isSubscriptionBook = ['subscription', 'subscription_or_paid'].includes(accessType);
+  const isPaidBook = accessType === 'paid' || accessType === 'subscription_or_paid' || Number(content?.price_cents || 0) > 0;
+
+  // canOpenContent = user can open reader right now (quota consumed OR paid unlock)
+  const isUnlocked = Boolean(access?.unlocked);
+  const canOpenContent = Boolean(access?.can_read || isUnlocked);
+
+  // Pricing — source DB (EUR) puis conversion vers la devise de l'utilisateur
+  const dbCurrency = access?.pricing?.currency ?? content?.localized_price?.currency ?? content?.price_currency ?? 'EUR';
+  const dbBasePriceCents = Number(access?.pricing?.base_price_cents ?? content?.localized_price?.price_cents ?? content?.price_cents ?? 0);
+  const discountPercent = Number(access?.pricing?.discount_percent ?? 0);
+  const dbReducedPriceCents = Number(
+    access?.pricing?.final_price_cents ?? Math.max(0, Math.round(dbBasePriceCents * (100 - discountPercent) / 100))
   );
-  const primaryActionLabel = isLocked
-    ? (
-      denialCode === 'NO_ACTIVE_SUBSCRIPTION' && !access?.is_purchasable
-        ? (isAudiobook ? 'S\'abonner pour écouter' : 'S\'abonner pour lire')
-        : 'Débloquer maintenant'
-    )
-    : (isAudiobook ? 'Écouter' : 'Lire maintenant');
+
+  // Devise effective : celle du backend si géo-ajustée, sinon celle de l'utilisateur
+  const pricingCurrency = userCurrency ?? dbCurrency;
+  // Convertir depuis la devise DB vers la devise utilisateur
+  const basePriceCents = convertCents(dbBasePriceCents, dbCurrency, pricingCurrency);
+  const reducedPriceCents = convertCents(dbReducedPriceCents, dbCurrency, pricingCurrency);
+
+  // ── Primary action label — mirror web ──────────────────────────────────
+  const primaryActionLabel = (() => {
+    if (canOpenContent) return isAudiobook ? 'Écouter' : 'Lire maintenant';
+    if (hasActiveSubscription) {
+      if (accessType === 'paid') {
+        return basePriceCents > 0
+          ? `Acheter · ${formatMoney(reducedPriceCents || basePriceCents, pricingCurrency)}`
+          : 'Acheter';
+      }
+      return 'Débloquer';
+    }
+    if (isPaidBook) {
+      return basePriceCents > 0
+        ? `Acheter · ${formatMoney(basePriceCents, pricingCurrency)}`
+        : 'Acheter';
+    }
+    return "S'abonner";
+  })();
 
   if (loading) {
     return (
@@ -441,11 +618,30 @@ export default function ContentDetailScreen({ route, navigation }) {
               <Text style={styles.premiumPillText}>ABONNÉ</Text>
             </View>
           )}
-          <TouchableOpacity style={styles.iconButton}>
-            <MaterialCommunityIcons name={isLocked ? 'bookmark-outline' : 'share-variant-outline'} size={22} color="#171412" />
+          <TouchableOpacity style={styles.iconButton} onPress={toggleFavorite} disabled={favoriteLoading}>
+            <MaterialCommunityIcons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={22}
+              color={isFavorite ? '#B5651D' : '#171412'}
+            />
           </TouchableOpacity>
           {!isLocked && (
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
+              <MaterialCommunityIcons name="share-variant-outline" size={22} color="#171412" />
+            </TouchableOpacity>
+          )}
+          {!isLocked && (
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => Alert.alert(
+                'Options',
+                null,
+                [
+                  { text: 'Signaler un problème', onPress: handleReport },
+                  { text: 'Annuler', style: 'cancel' },
+                ]
+              )}
+            >
               <MaterialCommunityIcons name="dots-horizontal" size={22} color="#171412" />
             </TouchableOpacity>
           )}
@@ -456,8 +652,9 @@ export default function ContentDetailScreen({ route, navigation }) {
         <View style={styles.coverArea}>
           <View style={styles.coverShadow} />
           <View style={styles.coverBox}>
-            <Image
-              source={{ uri: content.cover_url || 'https://placehold.co/400x600/DDD/777?text=Cover' }}
+            <BookCover
+              uri={content.cover_url}
+              title={content.title}
               style={styles.coverImage}
               resizeMode="cover"
             />
@@ -535,19 +732,94 @@ export default function ContentDetailScreen({ route, navigation }) {
           })()}
         </View>
 
+        {/* ── Access info card — même logique que la page web ── */}
+        <View style={styles.accessCard}>
+          {canOpenContent ? (
+            <View style={styles.accessCardHeader}>
+              <MaterialCommunityIcons name="check-decagram" size={15} color="#1F7A39" />
+              <Text style={[styles.accessCardTitle, { color: '#1F7A39' }]}>
+                {isPaidBook && !isSubscriptionBook ? 'Contenu acheté' : 'Accès accordé'}
+              </Text>
+            </View>
+          ) : hasActiveSubscription ? (
+            <>
+              <View style={styles.accessCardHeader}>
+                <MaterialCommunityIcons name="check-decagram" size={15} color="#B5651D" />
+                <Text style={styles.accessCardTitle}>Abonnement actif</Text>
+              </View>
+              <Text style={styles.accessCardBody}>
+                {isSubscriptionBook
+                  ? 'Débloquez ce livre avec votre abonnement pour consommer votre quota.'
+                  : 'Vous pouvez acheter ce livre avec remise abonnement.'}
+              </Text>
+              {isSubscriptionBook && hasQuota ? (
+                <Text style={styles.accessCardMeta}>
+                  {'Quota '}{isAudiobook ? 'audio' : 'texte'}{' : '}
+                  <Text style={{ fontWeight: '700' }}>{usedCount}</Text>
+                  {' / '}{quotaCount}
+                  {'  ·  '}{remainingQuota}{' restant'}{remainingQuota > 1 ? 's' : ''}
+                </Text>
+              ) : null}
+              {isPaidBook && basePriceCents > 0 ? (
+                discountPercent > 0 && reducedPriceCents < basePriceCents ? (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceBase}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                    <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents, pricingCurrency)}</Text>
+                    <View style={styles.discountPill}>
+                      <Text style={styles.discountPillText}>-{discountPercent}%</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={styles.accessCardMeta}>
+                    {'Prix : '}<Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                  </Text>
+                )
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.accessCardHeader}>
+                <MaterialCommunityIcons name="crown-outline" size={15} color="#B5651D" />
+                <Text style={styles.accessCardTitle}>
+                  {subscription ? 'Abonnement inactif' : 'Pas encore abonné'}
+                </Text>
+              </View>
+              <Text style={styles.accessCardBody}>
+                {isSubscriptionBook
+                  ? "Abonnez-vous pour accéder à ce livre et profiter de votre quota de lecture."
+                  : "Abonnez-vous pour bénéficier d'une réduction sur les livres payants."}
+              </Text>
+              {isPaidBook && basePriceCents > 0 ? (
+                <Text style={styles.accessCardMeta}>
+                  {'Achat sans réduction : '}
+                  <Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                </Text>
+              ) : null}
+            </>
+          )}
+        </View>
+
         <View style={styles.actionsArea}>
           <TouchableOpacity
             style={[styles.primaryButton, unlocking ? styles.primaryButtonDisabled : null]}
             onPress={handlePrimaryAction}
             disabled={unlocking}
           >
-            <MaterialCommunityIcons name={isLocked ? 'lock' : (isAudiobook ? 'play-circle' : 'book-open-variant')} size={20} color="#fff" />
+            <MaterialCommunityIcons
+              name={canOpenContent
+                ? (isAudiobook ? 'play-circle' : 'book-open-variant')
+                : (accessType === 'paid' || (isPaidBook && !hasActiveSubscription)) ? 'tag'
+                  : hasActiveSubscription ? 'lock-open-outline'
+                  : 'crown-outline'}
+              size={20}
+              color="#fff"
+            />
             <Text style={styles.primaryButtonText}>
               {unlocking ? 'Déblocage...' : primaryActionLabel}
             </Text>
           </TouchableOpacity>
 
-          {!isLocked && (
+          {canOpenContent && (
             <View>
               <View style={styles.secondaryRow}>
                 <TouchableOpacity
@@ -600,27 +872,14 @@ export default function ContentDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {isLocked && (
+        {isLocked && !!denialMessage && (
           <View style={styles.lockedLabelWrap}>
-            <View style={styles.lockedLabel}>
-              <MaterialCommunityIcons name="lock" size={13} color="#D4A017" />
-              <Text style={styles.lockedLabelText}>CONTENU VERROUILLÉ</Text>
-            </View>
-            {!!denialMessage && (
-              <Text style={styles.lockedHintText}>{denialMessage}</Text>
-            )}
+            <Text style={styles.lockedHintText}>{denialMessage}</Text>
           </View>
         )}
 
-        {isLocked && hasActiveSubscription && (
+        {!canOpenContent && bonusRemaining > 0 && hasActiveSubscription && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Accès abonnement</Text>
-            <View style={styles.metaRow}>
-              <Text style={styles.metaKey}>Quota restant</Text>
-              <Text style={styles.metaValue}>
-                {hasQuota ? `${remainingQuota}/${quotaCount}` : '0/0'}
-              </Text>
-            </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaKey}>Bonus disponibles</Text>
               <Text style={styles.metaValue}>{bonusRemaining}</Text>
@@ -737,23 +996,17 @@ export default function ContentDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {isLocked && !isAudiobook && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Options</Text>
-            <TouchableOpacity style={styles.optionRow}>
-              <MaterialCommunityIcons name="share-variant-outline" size={18} color="#B5651D" />
-              <Text style={styles.optionText}>Partager l&apos;œuvre</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow}>
-              <MaterialCommunityIcons name="eye-outline" size={18} color="#B5651D" />
-              <Text style={styles.optionText}>Lire un aperçu gratuit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#c44" />
-              <Text style={styles.optionText}>Signaler un problème</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Options</Text>
+          <TouchableOpacity style={styles.optionRow} onPress={handleShare}>
+            <MaterialCommunityIcons name="share-variant-outline" size={18} color="#B5651D" />
+            <Text style={styles.optionText}>Partager l&apos;œuvre</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.optionRow} onPress={handleReport}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#c44" />
+            <Text style={[styles.optionText, { color: '#c44' }]}>Signaler un problème</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* ── Dans le même genre ── */}
         {recommendations.sameGenre.length > 0 && (
@@ -767,8 +1020,9 @@ export default function ContentDetailScreen({ route, navigation }) {
                   activeOpacity={0.8}
                   onPress={() => navigation.push('ContentDetail', { contentId: item.id })}
                 >
-                  <Image
-                    source={{ uri: item.cover_url || 'https://placehold.co/100x140/ece4d7/6b5840?text=Livre' }}
+                  <BookCover
+                    uri={item.cover_url}
+                    title={item.title}
                     style={styles.recCover}
                     resizeMode="cover"
                   />
@@ -792,8 +1046,9 @@ export default function ContentDetailScreen({ route, navigation }) {
                   activeOpacity={0.8}
                   onPress={() => navigation.push('ContentDetail', { contentId: item.id })}
                 >
-                  <Image
-                    source={{ uri: item.cover_url || 'https://placehold.co/100x140/ece4d7/6b5840?text=Livre' }}
+                  <BookCover
+                    uri={item.cover_url}
+                    title={item.title}
                     style={styles.recCover}
                     resizeMode="cover"
                   />
@@ -1010,6 +1265,65 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingVertical: 12,
     marginHorizontal: 4,
+  },
+
+  accessCard: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f0e7d8',
+    backgroundColor: '#FFFDFA',
+  },
+  accessCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 5,
+  },
+  accessCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#171412',
+  },
+  accessCardBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#5f513d',
+  },
+  accessCardMeta: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#5f513d',
+  },
+  priceRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  priceBase: {
+    fontSize: 13,
+    color: '#9c7e49',
+    textDecorationLine: 'line-through',
+  },
+  priceReduced: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#B5651D',
+  },
+  discountPill: {
+    backgroundColor: '#B5651D',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  discountPillText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   secondaryButtonText: {
     marginLeft: 6,

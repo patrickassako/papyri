@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
+import BookCover from './BookCover';
 
 const tokens = require('../config/tokens');
 
@@ -28,10 +29,7 @@ export default function MiniPlayer({ navigation, hideOnScreens = [] }) {
 
       <View style={styles.content}>
         {/* Cover */}
-        <Image
-          source={{ uri: content.cover_url || 'https://placehold.co/80x80/222/ddd?text=...' }}
-          style={styles.cover}
-        />
+        <BookCover uri={content.cover_url} title={content.title} style={styles.cover} />
 
         {/* Info */}
         <View style={styles.info}>

@@ -26,9 +26,14 @@ import * as homeService from '../services/home.service';
 import * as userService from '../services/user.service';
 import { contentsService } from '../services/contents.service';
 import BottomNavBar from '../components/BottomNavBar';
+import BookCover from '../components/BookCover';
 import { getDownloadedContents, isOnline } from '../services/offline.service';
 import { COVER_PLACEHOLDER_SQUARE } from '../config/constants';
+import { getProxiedImageUrl } from '../utils/imageProxy';
+import { getCategoryName } from '../utils/categoryName';
 import { useTranslation } from 'react-i18next';
+import { useFocusEffect } from '@react-navigation/native';
+import { useProfile } from '../context/ProfileContext';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
@@ -36,9 +41,20 @@ const tokens = require('../config/tokens');
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.9, 360);
 
-// Résout le cover_url en essayant tous les champs possibles
+// Résout le cover_url en essayant tous les champs possibles, puis proxifie
 function resolveCover(item) {
-  return item?.cover_url || item?.thumbnail || item?.cover_image_url || item?.coverUrl || null;
+  const raw = item?.cover_url || item?.thumbnail || item?.cover_image_url || item?.coverUrl || null;
+  return getProxiedImageUrl(raw);
+}
+
+// Mélange aléatoire (Fisher-Yates)
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 function mapContinueItem(item) {
@@ -60,6 +76,7 @@ function mapContinueItem(item) {
 
 const HomeScreen = ({ navigation }) => {
   const { t, i18n } = useTranslation();
+  const { activeProfile } = useProfile();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,12 +101,27 @@ const HomeScreen = ({ navigation }) => {
   // Offline
   const [offlineContents, setOfflineContents] = useState([]);
   const [isOffline, setIsOffline] = useState(false);
+  // Quote — random index, changes on each page focus
+  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * 5));
 
+  useFocusEffect(
+    useCallback(() => {
+      setQuoteIndex(Math.floor(Math.random() * 5));
+    }, [])
+  );
+
+  // Reload on mount AND when active profile changes (family profile switch)
   useEffect(() => {
     loadInitialData();
     loadApiCategories();
-    loadOfflineContents();
-  }, []);
+  }, [activeProfile?.id]);
+
+  // Reload offline contents every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadOfflineContents();
+    }, [])
+  );
 
   useEffect(() => {
     if (selectedCategory) {
@@ -123,8 +155,7 @@ const HomeScreen = ({ navigation }) => {
         page: 1,
         limit: 40,
         category: categorySlug,
-        sort: 'published_at',
-        order: 'desc',
+        sort: 'newest',
       });
       setFilteredContents(response.data || []);
     } catch (err) {
@@ -158,7 +189,7 @@ const HomeScreen = ({ navigation }) => {
           id: item.id || item.content_id,
           title: item.title || 'Sans titre',
           author: item.author || 'Auteur inconnu',
-          cover: item.cover_url || 'https://placehold.co/120x180/EEE/AAA?text=Book',
+          cover: item.cover_url || null,
           type: item.content_type || 'ebook',
         })).filter((item) => !!item.id);
         setSearchResults(mapped);
@@ -187,16 +218,14 @@ const HomeScreen = ({ navigation }) => {
       id: item.id, title: item.title, author: item.author || item.author_name,
       cover: resolveCover(item),
     })));
-    setRecommendations((homeData.recommended || []).map(item => ({
+    setRecommendations(shuffle((homeData.recommended || []).map(item => ({
       id: item.id, title: item.title, author: item.author || item.author_name,
       cover: resolveCover(item), type: item.content_type || 'ebook',
-    })));
+    }))));
   };
 
   const loadInitialData = async () => {
     setError(null);
-
-    // Phase 1 — profil + données home (affiche immédiatement)
     setLoading(true);
     try {
       const [userProfile, homeData] = await Promise.all([
@@ -216,6 +245,28 @@ const HomeScreen = ({ navigation }) => {
               .map(mapContinueItem);
             setContinueReading(inProgress);
           }
+        }).catch(() => {});
+      }
+
+      // Fallback Nouveautés — si home ne retourne rien
+      if (!homeData?.new_releases?.length) {
+        contentsService.getContents({ sort: 'newest', limit: 10 }).then((res) => {
+          const items = (res?.data || []).map(item => ({
+            id: item.id, title: item.title, author: item.author || item.author_name,
+            cover: resolveCover(item),
+          }));
+          if (items.length > 0) setNouveautes(items);
+        }).catch(() => {});
+      }
+
+      // Fallback Recommandations — si home ne retourne pas assez
+      if (!homeData?.recommended?.length) {
+        contentsService.getContents({ sort: 'popular', limit: 20 }).then((res) => {
+          const items = shuffle((res?.data || []).map(item => ({
+            id: item.id, title: item.title, author: item.author || item.author_name,
+            cover: resolveCover(item), type: item.content_type || 'ebook',
+          })));
+          if (items.length > 0) setRecommendations(items.slice(0, 10));
         }).catch(() => {});
       }
     } catch (err) {
@@ -248,7 +299,7 @@ const HomeScreen = ({ navigation }) => {
     { text: "Books are the bees which carry pollen from one mind to another.", author: "Lowell" },
   ];
   const DAILY_QUOTES = i18n.language === 'en' ? DAILY_QUOTES_EN : DAILY_QUOTES_FR;
-  const dailyQuote = DAILY_QUOTES[new Date().getDate() % DAILY_QUOTES.length];
+  const dailyQuote = DAILY_QUOTES[quoteIndex % DAILY_QUOTES.length];
 
   const getTimeGreeting = (firstName) => {
     const h = new Date().getHours();
@@ -310,6 +361,7 @@ const HomeScreen = ({ navigation }) => {
       >
         {allCategories.map((cat) => {
           const isSelected = cat.slug === selectedCategory;
+          const displayName = cat.slug ? getCategoryName(cat.slug, t, cat.name) : cat.name;
           return (
             <Chip
               key={cat.id || cat.slug}
@@ -324,7 +376,7 @@ const HomeScreen = ({ navigation }) => {
                 isSelected && styles.categoryChipTextSelected,
               ]}
             >
-              {cat.name}
+              {displayName}
             </Chip>
           );
         })}
@@ -334,10 +386,7 @@ const HomeScreen = ({ navigation }) => {
 
   const renderContinueCard = (item) => (
     <View key={item.id} style={styles.continueCard}>
-      {item.cover
-        ? <Image source={{ uri: item.cover }} style={styles.continueCardCover} />
-        : <View style={[styles.continueCardCover, styles.coverFallback]}><MaterialCommunityIcons name="book" size={32} color="rgba(255,255,255,0.3)" /></View>
-      }
+      <BookCover uri={item.cover} title={item.title} style={styles.continueCardCover} resizeMode="cover" />
       <View style={styles.continueCardContent}>
         <View style={styles.continueCardTop}>
           <View style={styles.typeContainer}>
@@ -412,10 +461,7 @@ const HomeScreen = ({ navigation }) => {
       style={styles.bookCard}
       onPress={() => navigation.navigate('ContentDetail', { contentId: item.id })}
     >
-      {item.cover
-        ? <Image source={{ uri: item.cover }} style={styles.bookCover} />
-        : <View style={[styles.bookCover, styles.coverFallback]}><MaterialCommunityIcons name="book-outline" size={28} color="rgba(0,0,0,0.2)" /></View>
-      }
+      <BookCover uri={item.cover} title={item.title} style={styles.bookCover} />
       <Text style={styles.bookTitle} numberOfLines={1}>
         {item.title}
       </Text>
@@ -425,21 +471,38 @@ const HomeScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderSkeletonCards = (count = 4) => (
+    Array.from({ length: count }).map((_, i) => (
+      <View key={i} style={styles.skeletonCard}>
+        <View style={styles.skeletonCover} />
+        <View style={styles.skeletonTitle} />
+        <View style={styles.skeletonAuthor} />
+      </View>
+    ))
+  );
+
   const renderNouveautes = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{t('home.newReleases')}</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Catalog', { initialSort: 'newest' })}>
           <Text style={styles.seeAllButton}>{t('common.seeAll')}</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.booksScrollContent}
-      >
-        {nouveautes.map(renderBookCard)}
-      </ScrollView>
+      {isOffline ? (
+        <View style={styles.offlineSectionMsg}>
+          <MaterialCommunityIcons name="wifi-off" size={20} color="#b4a090" />
+          <Text style={styles.offlineSectionMsgText}>Non disponible hors ligne</Text>
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.booksScrollContent}
+        >
+          {nouveautes.length > 0 ? nouveautes.map(renderBookCard) : renderSkeletonCards(4)}
+        </ScrollView>
+      )}
     </View>
   );
 
@@ -465,23 +528,29 @@ const HomeScreen = ({ navigation }) => {
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{t('home.recommended')}</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Catalog', { initialSort: 'popular' })}>
           <Text style={styles.seeAllButton}>{t('common.seeAll')}</Text>
         </TouchableOpacity>
       </View>
+      {isOffline ? (
+        <View style={styles.offlineSectionMsg}>
+          <MaterialCommunityIcons name="wifi-off" size={20} color="#b4a090" />
+          <Text style={styles.offlineSectionMsgText}>Non disponible hors ligne</Text>
+        </View>
+      ) : (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.booksScrollContent}
       >
-        {recommendations.map((item) => (
+        {recommendations.length > 0 ? recommendations.map((item) => (
           <TouchableOpacity
             key={item.id}
             style={styles.bookCard}
             onPress={() => navigation.navigate('ContentDetail', { contentId: item.id })}
           >
             <View style={styles.bookCoverWrapper}>
-              <Image source={{ uri: item.cover }} style={styles.bookCover} />
+              <BookCover uri={item.cover} title={item.title} style={styles.bookCover} />
               <View style={[styles.typeBadge, item.type === 'audiobook' && styles.typeBadgeAudio]}>
                 <MaterialCommunityIcons
                   name={item.type === 'audiobook' ? 'headphones' : 'book-open-variant'}
@@ -493,8 +562,9 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.bookTitle} numberOfLines={1}>{item.title}</Text>
             <Text style={styles.bookAuthor} numberOfLines={1}>{item.author}</Text>
           </TouchableOpacity>
-        ))}
+        )) : renderSkeletonCards(4)}
       </ScrollView>
+      )}
     </View>
   );
 
@@ -571,8 +641,9 @@ const HomeScreen = ({ navigation }) => {
                       activeOpacity={0.85}
                       onPress={() => navigation.navigate('ContentDetail', { contentId: item.id })}
                     >
-                      <Image
-                        source={{ uri: item.cover_url || 'https://placehold.co/200x300/EEE/AAA?text=📚' }}
+                      <BookCover
+                        uri={item.cover_url}
+                        title={item.title}
                         style={styles.filteredCardCover}
                         resizeMode="cover"
                       />
@@ -658,17 +729,12 @@ const HomeScreen = ({ navigation }) => {
                           }
                         }}
                       >
-                        {item.cover_url ? (
-                          <Image source={{ uri: item.cover_url }} style={styles.offlineCover} resizeMode="cover" />
-                        ) : (
-                          <View style={[styles.offlineCover, styles.offlineCoverPlaceholder]}>
-                            <MaterialCommunityIcons
-                              name={isAudio ? 'headphones' : 'book-open-variant'}
-                              size={22}
-                              color={tokens.colors.primary}
-                            />
-                          </View>
-                        )}
+                        <BookCover
+                          uri={item.cover_url}
+                          title={item.title}
+                          style={styles.offlineCover}
+                          resizeMode="cover"
+                        />
                         <View style={styles.offlineBadge}>
                           <MaterialCommunityIcons name="check-circle" size={14} color="#4caf50" />
                         </View>
@@ -681,9 +747,9 @@ const HomeScreen = ({ navigation }) => {
             )}
 
             {continueReading.length > 0 && renderContinueReading()}
-            {nouveautes.length > 0 && renderNouveautes()}
+            {renderNouveautes()}
             {populaires.length > 0 && renderPopulaires()}
-            {recommendations.length > 0 && renderRecommendations()}
+            {renderRecommendations()}
 
             {/* Empty state — shown when no content is available at all */}
             {continueReading.length === 0 && nouveautes.length === 0 && populaires.length === 0 && recommendations.length === 0 && (
@@ -779,7 +845,7 @@ const HomeScreen = ({ navigation }) => {
                   navigation.navigate('ContentDetail', { contentId: item.id });
                 }}
               >
-                <Image source={{ uri: item.cover }} style={styles.searchResultCover} />
+                <BookCover uri={item.cover} title={item.title} style={styles.searchResultCover} />
                 <View style={styles.searchResultBody}>
                   <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
                   <Text style={styles.searchResultAuthor} numberOfLines={1}>{item.author}</Text>
@@ -977,6 +1043,8 @@ const styles = StyleSheet.create({
   // Categories
   categoriesContainer: {
     marginTop: 8,
+    flexShrink: 0,
+    minHeight: 44,
   },
   categoriesContent: {
     paddingHorizontal: 16,
@@ -1428,6 +1496,44 @@ const styles = StyleSheet.create({
     color: tokens.colors.onSurface.light,
     marginTop: 5,
     lineHeight: 15,
+  },
+
+  // Skeleton cards
+  skeletonCard: {
+    width: 128,
+    marginRight: 0,
+  },
+  skeletonCover: {
+    width: 128,
+    height: 192,
+    borderRadius: 8,
+    backgroundColor: '#e8e0d8',
+    marginBottom: 8,
+  },
+  skeletonTitle: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e8e0d8',
+    marginBottom: 6,
+    width: '80%',
+  },
+  skeletonAuthor: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#ede7e0',
+    width: '55%',
+  },
+  offlineSectionMsg: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  offlineSectionMsgText: {
+    fontSize: 14,
+    color: '#867465',
+    fontStyle: 'italic',
   },
 
   // Empty state

@@ -205,4 +205,27 @@ export const readingService = {
     if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de supprimer le surlignage.');
     return payload.data;
   },
+
+  // ── Liste de lecture / Favoris ─────────────────────────────────────────
+
+  async getReadingList() {
+    const payload = await request('/api/reading/ebook/list', { method: 'GET' });
+    if (!payload?.success) return [];
+    return payload?.data?.items || [];
+  },
+
+  async addToReadingList(contentId) {
+    const payload = await request('/api/reading/ebook/list', {
+      method: 'POST',
+      body: JSON.stringify({ content_id: contentId }),
+    });
+    if (!payload?.success) throw new Error(payload?.error?.message || "Impossible d'ajouter aux favoris.");
+    return payload.data;
+  },
+
+  async removeFromReadingList(contentId) {
+    const payload = await request(`/api/reading/ebook/list/${contentId}`, { method: 'DELETE' });
+    if (!payload?.success) throw new Error(payload?.error?.message || 'Impossible de retirer des favoris.');
+    return payload.data;
+  },
 };

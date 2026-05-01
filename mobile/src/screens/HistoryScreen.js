@@ -14,10 +14,14 @@ import {
   Snackbar,
   Surface,
 } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { readingService } from '../services/reading.service';
 import { authFetch } from '../services/auth.service';
 import API_URL from '../config/api';
 import ContentCardWithProgress from '../components/ContentCardWithProgress';
+import BottomNavBar from '../components/BottomNavBar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useProfile } from '../context/ProfileContext';
 
 const tokens = require('../config/tokens');
 
@@ -38,10 +42,10 @@ function formatTime(seconds) {
 
 function StatsBar({ stats, loading }) {
   const cards = [
-    { label: 'Livres lus', value: loading ? '…' : String(stats?.total_books ?? 0), icon: '📚' },
-    { label: 'Temps total', value: loading ? '…' : formatTime(stats?.total_time_seconds), icon: '⏱️' },
-    { label: 'Série', value: loading ? '…' : `${stats?.streak_days ?? 0}j`, icon: '🔥' },
-    { label: 'Terminés', value: loading ? '…' : String(stats?.completed ?? 0), icon: '✅' },
+    { label: 'Livres lus', value: loading ? '…' : String(stats?.total_books ?? 0), icon: 'book-open-variant' },
+    { label: 'Temps total', value: loading ? '…' : formatTime(stats?.total_time_seconds), icon: 'clock-outline' },
+    { label: 'Série', value: loading ? '…' : `${stats?.streak_days ?? 0}j`, icon: 'fire' },
+    { label: 'Terminés', value: loading ? '…' : String(stats?.completed ?? 0), icon: 'check-circle-outline' },
   ];
 
   return (
@@ -49,13 +53,13 @@ function StatsBar({ stats, loading }) {
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.statsBar}
-      style={{ flexGrow: 0 }}
+      style={styles.statsBarWrap}
     >
       {cards.map((s) => (
         <Surface key={s.label} style={styles.statCard} elevation={0}>
-          <Text style={styles.statIcon}>{s.icon}</Text>
-          <Text style={styles.statValue}>{s.value}</Text>
-          <Text style={styles.statLabel}>{s.label}</Text>
+          <MaterialCommunityIcons name={s.icon} size={20} color={tokens.colors.primary} style={{ marginBottom: 4 }} />
+          <Text style={styles.statValue} numberOfLines={1}>{s.value}</Text>
+          <Text style={styles.statLabel} numberOfLines={1}>{s.label}</Text>
         </Surface>
       ))}
     </ScrollView>
@@ -68,7 +72,7 @@ function FilterTabs({ active, onChange }) {
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.filterRow}
-      style={{ flexGrow: 0 }}
+      style={styles.filterTabsWrap}
     >
       {FILTERS.map((f) => {
         const isActive = active === f.key;
@@ -89,6 +93,7 @@ function FilterTabs({ active, onChange }) {
 }
 
 export default function HistoryScreen({ navigation }) {
+  const { activeProfile } = useProfile();
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 0 });
   const [loading, setLoading] = useState(true);
@@ -140,10 +145,11 @@ export default function HistoryScreen({ navigation }) {
     }
   }, [navigation]);
 
+  // Reload on mount AND when active profile changes (family profile switch)
   useEffect(() => {
     fetchHistory(1);
     fetchStats();
-  }, [fetchHistory, fetchStats]);
+  }, [activeProfile?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -203,7 +209,7 @@ export default function HistoryScreen({ navigation }) {
     if (loading) return null;
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📭</Text>
+        <MaterialCommunityIcons name="bookshelf" size={56} color={tokens.colors.primaryLight} style={{ marginBottom: 16 }} />
         <Text variant="titleMedium" style={styles.emptyTitle}>
           {filter === 'all'
             ? 'Aucun contenu dans votre historique'
@@ -237,7 +243,7 @@ export default function HistoryScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Text variant="headlineMedium" style={styles.title}>Mon Historique</Text>
@@ -282,7 +288,9 @@ export default function HistoryScreen({ navigation }) {
       >
         {error}
       </Snackbar>
-    </View>
+
+      <BottomNavBar navigation={navigation} activeTab="History" />
+    </SafeAreaView>
   );
 }
 
@@ -313,6 +321,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   // Stats
+  statsBarWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 90,
+  },
   statsBar: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -320,41 +333,42 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    width: 90,
+    minWidth: 84,
     alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: tokens.colors.surfaces.light.variant,
   },
-  statIcon: {
-    fontSize: 18,
-    marginBottom: 2,
-  },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: tokens.colors.primary,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: tokens.colors.onSurface.light,
     opacity: 0.7,
-    marginTop: 1,
+    marginTop: 2,
   },
   // Filters
+  filterTabsWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 50,
+  },
   filterRow: {
     paddingHorizontal: 20,
     paddingBottom: 8,
     gap: 6,
   },
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: tokens.colors.surfaces.light.variant,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
   filterChipActive: {
@@ -362,7 +376,7 @@ const styles = StyleSheet.create({
     borderColor: tokens.colors.primary,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     color: tokens.colors.onSurface.light,
   },
@@ -373,7 +387,7 @@ const styles = StyleSheet.create({
   // List
   list: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 90,
   },
   loadingMore: {
     paddingVertical: 16,
@@ -386,10 +400,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingVertical: 60,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
   },
   emptyTitle: {
     color: tokens.colors.onBackground.light,

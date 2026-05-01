@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Application from 'expo-application';
 import { authFetch } from './auth.service';
+import API_BASE_URL from '../config/api';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = API_BASE_URL;
 const DEVICE_KEY = 'papyri_device_id';
 
 // ─── Device identity ──────────────────────────────────────────────────────────
@@ -11,9 +13,31 @@ let _cachedDeviceId = null;
 
 export async function getDeviceId() {
   if (_cachedDeviceId) return _cachedDeviceId;
+
+  // Prefer stable hardware ID (survives reinstalls) — Android: androidId, iOS: identifierForVendor
+  let stableId = null;
+  try {
+    if (Platform.OS === 'android') {
+      stableId = Application.androidId || null;
+    } else if (Platform.OS === 'ios') {
+      stableId = await Application.getIosIdForVendorAsync?.() || null;
+    }
+  } catch {
+    // expo-application may not be available in some builds
+  }
+
+  if (stableId) {
+    // Prefix to distinguish from old random UUIDs
+    const id = `hw-${stableId}`;
+    _cachedDeviceId = id;
+    // Persist it so the device_id is consistent and old random entries can be cleaned up
+    await AsyncStorage.setItem(DEVICE_KEY, id).catch(() => {});
+    return id;
+  }
+
+  // Fallback: reuse persisted UUID (or generate one if first install)
   let id = await AsyncStorage.getItem(DEVICE_KEY);
   if (!id) {
-    // Generate a UUID v4
     id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
       return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
@@ -41,7 +65,7 @@ export const deviceService = {
 
   async register() {
     const device_id = await getDeviceId();
-    const res = await authFetch(`${API_URL}/devices/register`, {
+    const res = await authFetch(`${API_URL}/api/devices/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -55,14 +79,14 @@ export const deviceService = {
 
   async list() {
     const device_id = await getDeviceId();
-    const res = await authFetch(`${API_URL}/devices`, {
+    const res = await authFetch(`${API_URL}/api/devices`, {
       headers: { 'X-Device-Id': device_id },
     });
     return res.json();
   },
 
   async remove(deviceId) {
-    const res = await authFetch(`${API_URL}/devices/${encodeURIComponent(deviceId)}`, {
+    const res = await authFetch(`${API_URL}/api/devices/${encodeURIComponent(deviceId)}`, {
       method: 'DELETE',
     });
     return res.json();
@@ -70,7 +94,7 @@ export const deviceService = {
 
   async acquireLock(contentId) {
     const device_id = await getDeviceId();
-    const res = await authFetch(`${API_URL}/devices/reading-lock`, {
+    const res = await authFetch(`${API_URL}/api/devices/reading-lock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_id, content_id: contentId }),
@@ -81,7 +105,7 @@ export const deviceService = {
   async releaseLock() {
     try {
       const device_id = await getDeviceId();
-      await authFetch(`${API_URL}/devices/reading-lock`, {
+      await authFetch(`${API_URL}/api/devices/reading-lock`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ device_id }),
@@ -93,7 +117,7 @@ export const deviceService = {
 
   async heartbeat() {
     const device_id = await getDeviceId();
-    const res = await authFetch(`${API_URL}/devices/reading-lock/heartbeat`, {
+    const res = await authFetch(`${API_URL}/api/devices/reading-lock/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_id }),

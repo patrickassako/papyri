@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Text, Chip } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from '../theme/colors';
+import BookCover from './BookCover';
 
 /**
  * Carte de contenu pour le catalogue mobile
@@ -27,13 +28,7 @@ export default function ContentCard({ content }) {
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
       <Card style={styles.card} elevation={2}>
         <View style={styles.coverContainer}>
-          <Image
-            source={{
-              uri: content.cover_url || 'https://placehold.co/400x600/2E4057/FFF?text=Pas+de+couverture'
-            }}
-            style={styles.cover}
-            resizeMode="cover"
-          />
+          <BookCover uri={content.cover_url} title={content.title} style={styles.cover} />
           <Chip
             style={[
               styles.typeChip,

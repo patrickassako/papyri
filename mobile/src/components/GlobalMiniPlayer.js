@@ -7,9 +7,11 @@ import { useAudioPlayer } from '../hooks/useAudioPlayer';
 const tokens = require('../config/tokens');
 
 export default function GlobalMiniPlayer({ navigationRef }) {
-  const { content, contentId, isPlaying, progress, togglePlayPause } = useAudioPlayer();
+  const { content, contentId, isPlaying, progress, togglePlayPause, dismiss } = useAudioPlayer();
 
   if (!content || !contentId) return null;
+
+  const coverUri = content.cover_url || content.thumbnail || content.coverUrl || null;
 
   return (
     <TouchableOpacity
@@ -24,27 +26,39 @@ export default function GlobalMiniPlayer({ navigationRef }) {
 
       <View style={styles.content}>
         {/* Cover */}
-        <Image
-          source={{ uri: content.cover_url || 'https://placehold.co/80x80/222/ddd?text=...' }}
-          style={styles.cover}
-        />
+        {coverUri ? (
+          <Image source={{ uri: coverUri }} style={styles.cover} />
+        ) : (
+          <View style={[styles.cover, styles.coverPlaceholder]}>
+            <MaterialCommunityIcons name="music" size={20} color="rgba(255,255,255,0.4)" />
+          </View>
+        )}
 
         {/* Info */}
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={1}>{content.title}</Text>
-          <Text style={styles.author} numberOfLines={1}>{content.author}</Text>
+          <Text style={styles.author} numberOfLines={1}>{content.author || content.authors || ''}</Text>
         </View>
 
         {/* Play/Pause */}
         <TouchableOpacity
           style={styles.playButton}
-          onPress={togglePlayPause}
+          onPress={(e) => { e.stopPropagation?.(); togglePlayPause(); }}
         >
           <MaterialCommunityIcons
             name={isPlaying ? 'pause' : 'play'}
             size={22}
             color="#fff"
           />
+        </TouchableOpacity>
+
+        {/* Close */}
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={(e) => { e.stopPropagation?.(); dismiss(); }}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        >
+          <MaterialCommunityIcons name="close" size={16} color="rgba(255,255,255,0.5)" />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -105,6 +119,18 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: tokens.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  coverPlaceholder: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -7,7 +7,12 @@ import {
   RefreshControl,
   Animated,
   Platform,
+  Image,
+  ActionSheetIOS,
+  Alert,
+  Linking,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Text,
   Divider,
@@ -28,6 +33,7 @@ import {
   getUserProfile,
   updateUserProfile,
   changePassword,
+  uploadAvatar,
 } from '../services/user.service';
 import {
   getPreferences,
@@ -36,6 +42,8 @@ import {
 } from '../services/notifications.service';
 import { logout } from '../services/auth.service';
 import { changeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
+import BottomNavBar from '../components/BottomNavBar';
+import { getProxiedImageUrl } from '../utils/imageProxy';
 
 const tokens = require('../config/tokens');
 
@@ -110,6 +118,90 @@ export default function ProfileScreen({ navigation }) {
       Animated.timing(avatarScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
       Animated.timing(avatarScale, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
+  };
+
+  // ── Avatar upload ──
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const pickAndUploadImage = async (fromCamera) => {
+    try {
+      const permResult = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permResult.status !== 'granted') {
+        Alert.alert(
+          'Permission requise',
+          fromCamera
+            ? "Autorisez l'accès à l'appareil photo dans les paramètres."
+            : "Autorisez l'accès à la galerie dans les paramètres."
+        );
+        return;
+      }
+
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      setAvatarUploading(true);
+      pulseAvatar();
+
+      const ext = asset.uri.split('.').pop() || 'jpg';
+      const updated = await uploadAvatar({
+        uri: asset.uri,
+        name: `avatar-${Date.now()}.${ext}`,
+        type: asset.mimeType || 'image/jpeg',
+      });
+
+      const avatarUrl = updated?.avatar_url || null;
+
+      if (avatarUrl) {
+        const url = avatarUrl + '?t=' + Date.now();
+        setUser(prev => ({ ...prev, avatar_url: url }));
+        showSnack('Photo de profil mise à jour.');
+      } else {
+        fetchProfile(true);
+      }
+    } catch (e) {
+      showSnack('Impossible de mettre à jour la photo.', true);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    pulseAvatar();
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Annuler', 'Prendre une photo', 'Choisir dans la galerie'],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) pickAndUploadImage(true);
+          if (index === 2) pickAndUploadImage(false);
+        }
+      );
+    } else {
+      Alert.alert('Photo de profil', 'Choisissez une source', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Appareil photo', onPress: () => pickAndUploadImage(true) },
+        { text: 'Galerie', onPress: () => pickAndUploadImage(false) },
+      ]);
+    }
   };
 
   // ── Load data ──
@@ -267,16 +359,23 @@ export default function ProfileScreen({ navigation }) {
       >
         {/* ── HEADER ─────────────────────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => { pulseAvatar(); setEditNameVisible(true); }}
-          >
+          <TouchableOpacity activeOpacity={0.8} onPress={handleAvatarPress}>
             <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
-              <Text style={styles.avatarText}>
-                {getInitials(user?.full_name, user?.email)}
-              </Text>
+              {user?.avatar_url ? (
+                <Image
+                  source={{ uri: getProxiedImageUrl(user.avatar_url) }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {getInitials(user?.full_name, user?.email)}
+                </Text>
+              )}
               <View style={styles.avatarEditBadge}>
-                <MaterialCommunityIcons name="pencil" size={10} color="#fff" />
+                {avatarUploading
+                  ? <ActivityIndicator size={10} color="#fff" />
+                  : <MaterialCommunityIcons name="camera" size={10} color="#fff" />}
               </View>
             </Animated.View>
           </TouchableOpacity>
@@ -374,7 +473,7 @@ export default function ProfileScreen({ navigation }) {
               icon="devices"
               title={t('profile.myDevices')}
               value={t('profile.devicesDesc')}
-              onPress={() => navigation.navigate('Subscription')}
+              onPress={() => navigation.navigate('Devices')}
               chevron
             />
           </View>
@@ -467,6 +566,20 @@ export default function ProfileScreen({ navigation }) {
                 {i < arr.length - 1 && <Divider style={styles.rowDivider} />}
               </React.Fragment>
             ))}
+          </View>
+        </View>
+
+        {/* ── SITE WEB ────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Papyri</Text>
+          <View style={styles.listCard}>
+            <ListRow
+              icon="web"
+              title="Visiter le site web"
+              value="papyrihub.net"
+              onPress={() => Linking.openURL('https://www.papyrihub.net').catch(() => {})}
+              chevron
+            />
           </View>
         </View>
 
@@ -698,6 +811,8 @@ export default function ProfileScreen({ navigation }) {
       >
         {snackMsg}
       </Snackbar>
+
+      <BottomNavBar navigation={navigation} activeTab="Profile" />
     </SafeAreaView>
   );
 }
@@ -781,7 +896,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f1ec',
   },
   scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 32 },
+  scrollContent: { paddingBottom: 100 },
 
   // ── Header ──
   header: {
@@ -812,6 +927,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
+  },
+  avatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
   },
   avatarText: {
     fontSize: 32,

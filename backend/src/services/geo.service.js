@@ -130,11 +130,20 @@ function getZoneFromRequest(req) {
 }
 
 /**
- * Détecte zone + pays depuis la requête HTTP
+ * Détecte zone + pays depuis la requête HTTP.
+ * Priorité : header X-Country-Code (mobile/client) > IP géoloc.
  * @param {import('express').Request} req
  * @returns {{ zone: string|null, country: string|null }}
  */
 function getGeoFromRequest(req) {
+  // Priorité au code pays déclaré par le client (mobile)
+  const headerCountry = req.headers['x-country-code'];
+  if (headerCountry && /^[A-Z]{2}$/.test(headerCountry.toUpperCase())) {
+    const country = headerCountry.toUpperCase();
+    const zone = COUNTRY_TO_ZONE[country] || null;
+    return { zone, country };
+  }
+
   const ip = getClientIp(req);
   return getGeoFromIp(ip);
 }

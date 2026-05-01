@@ -18,8 +18,8 @@ import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useReadingLock } from '../hooks/useReadingLock';
 
 const tokens = require('../config/tokens');
-const { width } = Dimensions.get('window');
-const COVER_SIZE = Math.min(width - 80, 360);
+const { width, height } = Dimensions.get('window');
+const COVER_SIZE = Math.min(width - 80, height * 0.28, 260);
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 const SLEEP_OPTIONS = [
   { label: '5 min', minutes: 5 },
@@ -225,13 +225,30 @@ export default function AudioPlayerScreen({ route, navigation }) {
         <View style={styles.headerButton} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Cover */}
+      <View style={styles.scrollContent}>
+        {/* Cover + bouton chapitres flottant */}
         <View style={styles.coverContainer}>
-          <Image
-            source={{ uri: content.cover_url || 'https://placehold.co/400x400/222/ddd?text=Cover' }}
-            style={styles.cover}
-          />
+          <View style={{ position: 'relative' }}>
+            {(content.cover_url || content.thumbnail || content.coverUrl) ? (
+              <Image
+                source={{ uri: content.cover_url || content.thumbnail || content.coverUrl }}
+                style={styles.cover}
+              />
+            ) : (
+              <View style={[styles.cover, styles.coverPlaceholder]}>
+                <MaterialCommunityIcons name="headphones" size={80} color="rgba(255,255,255,0.15)" />
+              </View>
+            )}
+            {/* Chapitres — icône flottante en haut à gauche */}
+            <TouchableOpacity
+              style={styles.chaptersFab}
+              onPress={() => setChaptersVisible(true)}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons name="format-list-bulleted" size={16} color="#fff" />
+              <Text style={styles.chaptersFabText}>{chapterItems.length}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Title & Author */}
@@ -294,15 +311,6 @@ export default function AudioPlayerScreen({ route, navigation }) {
         {/* Secondary actions */}
         <View style={styles.secondaryActions}>
           <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => setChaptersVisible(true)}
-            activeOpacity={0.85}
-          >
-            <MaterialCommunityIcons name="format-list-bulleted" size={18} color="#fff" />
-            <Text style={styles.secondaryBtnText}>Chapitres ({chapterItems.length})</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.secondaryBtn, sleepRemaining !== null && styles.secondaryBtnActive]}
             onPress={() => sleepRemaining !== null ? cancelSleepTimer() : setSleepVisible(true)}
             activeOpacity={0.85}
@@ -353,27 +361,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
           ))}
         </View>
 
-        {/* Chapters */}
-        {chapterItems.length > 1 && (
-          <View style={styles.chaptersSection}>
-            <Text style={styles.chaptersTitle}>Chapitres</Text>
-            {chapterItems.map((ch) => (
-              <TouchableOpacity
-                key={ch.key}
-                style={[styles.chapterItem, ch.active && styles.chapterItemActive]}
-                onPress={() => goToChapter(ch.index)}
-              >
-                <Text style={[styles.chapterItemText, ch.active && styles.chapterItemTextActive]}>
-                  {String(ch.index + 1).padStart(2, '0')} · {ch.title}
-                </Text>
-                {ch.active && (
-                  <MaterialCommunityIcons name="volume-high" size={16} color={tokens.colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+      </View>
 
       {/* Sleep Timer Modal */}
       <Modal
@@ -582,8 +570,10 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
+    flex: 1,
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
   },
 
   // Cover
@@ -596,6 +586,30 @@ const styles = StyleSheet.create({
     height: COVER_SIZE,
     borderRadius: 12,
     backgroundColor: '#1f2937',
+  },
+  coverPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1f2937',
+  },
+  chaptersFab: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  chaptersFabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
 
   // Info

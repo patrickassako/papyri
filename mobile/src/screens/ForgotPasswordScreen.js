@@ -5,7 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Image,
 } from 'react-native';
 import { Text, TextInput, Button, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,11 +72,10 @@ export default function ForgotPasswordScreen({ navigation }) {
 
           {/* White Card */}
           <View style={styles.card}>
-            {/* Logo Icon */}
+            {/* Logo Papyri */}
             <View style={styles.logoContainer}>
-              <View style={styles.logoCircle}>
-                <MaterialCommunityIcons name="lock-reset" size={32} color="#b4641d" />
-              </View>
+              <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
+              <Text style={styles.logoName}>Papyri</Text>
             </View>
 
             {/* Header */}
@@ -196,15 +196,20 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 24
+    marginBottom: 24,
+    gap: 8,
   },
-  logoCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(180, 100, 29, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center'
+  logoImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+  },
+  logoName: {
+    fontFamily: 'Playfair Display',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#171412',
+    letterSpacing: 1,
   },
   titleContainer: {
     alignItems: 'center',

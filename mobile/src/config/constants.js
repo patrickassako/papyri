@@ -1,5 +1,5 @@
 // Constantes globales de l'application Papyri Mobile
-
-export const COVER_PLACEHOLDER_PORTRAIT = 'https://placehold.co/200x300/ece4d7/6b5840?text=Papyri';
-export const COVER_PLACEHOLDER_SQUARE   = 'https://placehold.co/150x200/ece4d7/6b5840?text=Papyri';
-export const COVER_PLACEHOLDER_SMALL    = 'https://placehold.co/120x180/ece4d7/6b5840?text=Papyri';
+// placehold.co retourne du SVG que React Native ne peut pas afficher → null = fallback local
+export const COVER_PLACEHOLDER_PORTRAIT = null;
+export const COVER_PLACEHOLDER_SQUARE   = null;
+export const COVER_PLACEHOLDER_SMALL    = null;

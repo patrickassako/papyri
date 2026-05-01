@@ -20,26 +20,30 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { contentsService } from '../services/contents.service';
 import BottomNavBar from '../components/BottomNavBar';
 import BookCover from '../components/BookCover';
+import { useTranslation } from 'react-i18next';
+import { getCategoryName } from '../utils/categoryName';
 
 const tokens = require('../config/tokens');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
-
-const SORT_OPTIONS = [
-  { key: 'newest', label: 'Plus récents', icon: 'clock-outline' },
-  { key: 'oldest', label: 'Plus anciens', icon: 'clock-check-outline' },
-  { key: 'title', label: 'Titre A→Z', icon: 'sort-alphabetical-ascending' },
-  { key: 'popular', label: 'Populaires', icon: 'trending-up' },
-];
-
-const TYPE_OPTIONS = [
-  { key: '', label: 'Tous', icon: 'bookshelf' },
-  { key: 'ebook', label: 'Ebooks', icon: 'book-open-variant' },
-  { key: 'audiobook', label: 'Audiobooks', icon: 'headphones' },
-];
+const NUM_COLUMNS = SCREEN_WIDTH >= 600 ? 3 : 2;
+const CARD_WIDTH = (SCREEN_WIDTH - 16 - NUM_COLUMNS * 16) / NUM_COLUMNS;
 
 export default function CatalogScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const initialCategory = route?.params?.initialCategory || '';
+
+  const SORT_OPTIONS = [
+    { key: 'newest', label: t('catalog.newest'), icon: 'clock-outline' },
+    { key: 'oldest', label: t('catalog.oldest'), icon: 'clock-check-outline' },
+    { key: 'title', label: 'Titre A→Z', icon: 'sort-alphabetical-ascending' },
+    { key: 'popular', label: t('catalog.popular'), icon: 'trending-up' },
+  ];
+
+  const TYPE_OPTIONS = [
+    { key: '', label: t('catalog.allTypes'), icon: 'bookshelf' },
+    { key: 'ebook', label: t('catalog.ebooks'), icon: 'book-open-variant' },
+    { key: 'audiobook', label: t('catalog.audiobooks'), icon: 'headphones' },
+  ];
 
   const [contents, setContents] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -53,7 +57,7 @@ export default function CatalogScreen({ navigation, route }) {
   // Filters
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedType, setSelectedType] = useState('');
-  const [selectedSort, setSelectedSort] = useState('newest');
+  const [selectedSort, setSelectedSort] = useState(route?.params?.initialSort || 'newest');
 
   // Search
   const [searchVisible, setSearchVisible] = useState(false);
@@ -84,7 +88,7 @@ export default function CatalogScreen({ navigation, route }) {
     useCallback(() => {
       const pick = async () => {
         try {
-          const result = await contentsService.getContents({ page: 1, limit: 50, sort: 'published_at', order: 'desc' });
+          const result = await contentsService.getContents({ page: 1, limit: 50, sort: 'newest' });
           const items = result?.data || [];
           if (items.length > 0) {
             setRecommendation(items[Math.floor(Math.random() * items.length)]);
@@ -218,7 +222,7 @@ export default function CatalogScreen({ navigation, route }) {
         activeOpacity={0.7}
       >
         <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-          {isAll ? 'Tout' : item.name}
+          {isAll ? t('catalog.allTypes') : getCategoryName(item.slug, t, item.name)}
         </Text>
       </TouchableOpacity>
     );
@@ -388,7 +392,7 @@ export default function CatalogScreen({ navigation, route }) {
       </View>
 
       {/* Active filter indicator */}
-      {(selectedType || selectedSort !== 'published_at:desc') && (
+      {(selectedType || selectedSort !== 'newest') && (
         <View style={styles.activeFilters}>
           {selectedType ? (
             <View style={styles.activeFilterTag}>
@@ -424,7 +428,8 @@ export default function CatalogScreen({ navigation, route }) {
           data={contents}
           renderItem={renderBookCard}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          numColumns={NUM_COLUMNS}
+          key={NUM_COLUMNS}
           columnWrapperStyle={styles.row}
           ListHeaderComponent={renderFeatured}
           ListEmptyComponent={renderEmpty}
@@ -615,6 +620,7 @@ const styles = StyleSheet.create({
   // Chips
   chipsWrap: {
     paddingBottom: 8,
+    minHeight: 50,
   },
   chipsList: {
     paddingHorizontal: 16,

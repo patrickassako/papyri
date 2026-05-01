@@ -356,6 +356,8 @@ async function renewSubscription(subscriptionId, newPeriodEnd) {
 }
 
 async function getPaymentHistory(userId) {
+  if (!userId) return [];
+
   const { data, error } = await supabaseAdmin
     .from('payments')
     .select('*')

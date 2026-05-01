@@ -147,18 +147,19 @@ export default function MiniPlayer() {
         onClick={(e) => { e.stopPropagation(); dismiss(); }}
         sx={{
           position: 'absolute',
-          top: -10,
-          right: -10,
-          width: 22,
-          height: 22,
-          bgcolor: 'rgba(50,50,50,0.9)',
-          border: '1px solid rgba(255,255,255,0.15)',
-          color: 'rgba(255,255,255,0.6)',
-          zIndex: 1,
-          '&:hover': { bgcolor: 'rgba(80,80,80,0.95)', color: '#fff' },
+          top: -12,
+          right: -12,
+          width: 26,
+          height: 26,
+          bgcolor: 'rgba(30,30,30,0.95)',
+          border: '1.5px solid rgba(255,255,255,0.25)',
+          color: 'rgba(255,255,255,0.8)',
+          zIndex: 10,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          '&:hover': { bgcolor: '#333', color: '#fff', borderColor: 'rgba(255,255,255,0.5)' },
         }}
       >
-        <X size={12} />
+        <X size={14} />
       </IconButton>
       <Box
         sx={{

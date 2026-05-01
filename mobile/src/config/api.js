@@ -29,6 +29,6 @@ function resolveDevApiUrl() {
 
 const API_BASE_URL = __DEV__
   ? resolveDevApiUrl()
-  : (envApiUrl || 'https://api.votre-domaine.com');
+  : (envApiUrl || 'https://papyri-backend.onrender.com');
 
 export default API_BASE_URL;

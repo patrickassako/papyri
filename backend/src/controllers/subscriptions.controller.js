@@ -19,15 +19,20 @@ const MAX_FAMILY_SEATS = 10;
  * GET /api/subscriptions/plans
  * Get available subscription plans (public)
  */
-// Currency info per geo zone
+// Currency info per geo zone.
+// rateToCent = "minor units of target per minor unit of EUR"
+// EUR minor unit = 1 EUR cent (÷100 to display). XAF/XOF have no subunit but we use ×100
+// convention so formatMinorUnits() can always divide by 100.
+// USD: 1 EUR cent → 1.08 USD cents (USD has cents) → rateToCent = 1.08
+// XAF: 1 EUR cent → 0.01 EUR × 655.957 = 6.5596 XAF, stored ×100 → rateToCent = 655.957
 const ZONE_CURRENCY = {
-  africa:        { code: 'XAF', symbol: 'XAF', rateToCent: 6.5596, label: 'Franc CFA' }, // 1 EUR = 655.96 XAF → 1 EUR-cent ≈ 6.5596 XAF
-  europe:        { code: 'EUR', symbol: '€',   rateToCent: 1,      label: 'Euro' },
-  north_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' }, // approx
-  south_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
-  asia:          { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
-  middle_east:   { code: 'USD', symbol: '$',   rateToCent: 1.08,   label: 'Dollar US' },
-  oceania:       { code: 'AUD', symbol: 'A$',  rateToCent: 1.62,   label: 'Dollar AUS' },
+  africa:        { code: 'XAF', symbol: 'XAF', rateToCent: 655.957, label: 'Franc CFA' },
+  europe:        { code: 'EUR', symbol: '€',   rateToCent: 1,       label: 'Euro' },
+  north_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,    label: 'Dollar US' },
+  south_america: { code: 'USD', symbol: '$',   rateToCent: 1.08,    label: 'Dollar US' },
+  asia:          { code: 'USD', symbol: '$',   rateToCent: 1.08,    label: 'Dollar US' },
+  middle_east:   { code: 'USD', symbol: '$',   rateToCent: 1.08,    label: 'Dollar US' },
+  oceania:       { code: 'AUD', symbol: 'A$',  rateToCent: 1.62,    label: 'Dollar AUS' },
 };
 
 async function getPlans(req, res) {
@@ -481,7 +486,10 @@ async function reactivateSubscription(req, res) {
  */
 async function getPaymentHistory(req, res) {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Non authentifié' });
+    }
 
     const payments = await subscriptionsService.getPaymentHistory(userId);
 

@@ -200,6 +200,9 @@ export default function DownloadsScreen({ navigation }) {
                 {/* Info */}
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+                  {!!item.author && (
+                    <Text style={styles.cardAuthor} numberOfLines={1}>{item.author}</Text>
+                  )}
                   <Text style={styles.cardMeta}>{isAudio ? 'Livre audio' : 'Ebook'} · {formatBytes(item.fileSize || 0)}</Text>
                   {expiryLabel && (
                     <Text style={[styles.cardExpiry, { color: expiryColor }]}>{expiryLabel}</Text>
@@ -379,8 +382,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#2E4057',
-    marginBottom: 4,
+    marginBottom: 2,
     lineHeight: 19,
+  },
+  cardAuthor: {
+    fontSize: 12,
+    color: '#B5651D',
+    fontWeight: '600',
+    marginBottom: 4,
   },
   cardMeta: {
     fontSize: 12,

@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Note: Token storage is handled by Supabase client with custom storage adapter
 // Session persists in global storage (to be migrated to AsyncStorage later)
@@ -216,13 +217,38 @@ export async function authFetch(url, options = {}) {
     throw new Error('Not authenticated');
   }
 
+  // Read active family profile (if any) to scope API data
+  let profileId = null;
+  try {
+    const raw = await AsyncStorage.getItem('@papyri_active_profile');
+    if (raw) {
+      const activeProfile = JSON.parse(raw);
+      profileId = activeProfile?.id || null;
+    }
+  } catch (_) {}
+
   // Add authorization header with Supabase JWT
   const headers = {
     ...options.headers,
     Authorization: `Bearer ${accessToken}`,
+    ...(profileId ? { 'X-Profile-Id': profileId } : {}),
   };
 
-  const response = await fetch(url, { ...options, headers });
+  const timeoutMs = options.timeout || 30000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(url, { ...options, headers, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('REQUEST_TIMEOUT');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   // If 401, session expired - logout
   if (response.status === 401) {

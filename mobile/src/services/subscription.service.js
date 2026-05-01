@@ -2,6 +2,17 @@ import API_BASE_URL from '../config/api';
 import { supabase } from '../config/supabase';
 import { apiClient } from './api.client';
 
+/** Fetch avec timeout (ms) */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 /**
  * Appel interne : GET /api/subscriptions/me → retourne le payload brut ou null
  */
@@ -9,7 +20,7 @@ const _fetchSubscriptionPayload = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) return null;
 
-  const response = await fetch(`${API_BASE_URL}/api/subscriptions/me`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/me`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -104,7 +115,7 @@ export const subscriptionService = {
         return null;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/subscriptions/usage/me`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/usage/me`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -133,11 +144,11 @@ export const subscriptionService = {
   getPaymentHistory: async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      if (!session?.access_token || !session?.user?.id) {
         return [];
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/subscriptions/payment-history`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/payment-history`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

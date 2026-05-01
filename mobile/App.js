@@ -1,6 +1,9 @@
 import './src/i18n'; // initialize i18n before anything else
+import TrackPlayer from 'react-native-track-player';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+
+TrackPlayer.registerPlaybackService(() => require('./src/services/trackPlayer.service'));
+import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,6 +15,7 @@ import * as authService from './src/services/auth.service';
 import { deviceService } from './src/services/device.service';
 import { registerForPushNotifications } from './src/services/notifications.service';
 import { AudioProvider } from './src/context/AudioContext';
+import { ProfileProvider } from './src/context/ProfileContext';
 import GlobalMiniPlayer from './src/components/GlobalMiniPlayer';
 
 // Import screens
@@ -29,6 +33,7 @@ import ReaderScreen from './src/screens/ReaderScreen';
 import BookReaderScreen from './src/screens/BookReaderScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import DownloadsScreen from './src/screens/DownloadsScreen';
+import DevicesScreen from './src/screens/DevicesScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import FamilyScreen from './src/screens/FamilyScreen';
 import ProfileSelectorScreen from './src/screens/ProfileSelectorScreen';
@@ -37,6 +42,32 @@ const Stack = createNativeStackNavigator();
 
 // Screens where mini-player should be hidden
 const HIDE_MINI_PLAYER_SCREENS = ['Onboarding', 'Login', 'Register', 'ForgotPassword', 'AudioPlayer', 'Reader', 'BookReader'];
+
+// React Navigation deep link mapping
+const linking = {
+  prefixes: [
+    'papyri://',
+    'https://papyrihub.net',
+    'https://www.papyrihub.net',
+  ],
+  config: {
+    screens: {
+      ContentDetail: {
+        path: 'catalogue/:contentId',
+        parse: { contentId: (id) => id },
+      },
+    },
+  },
+  // Custom getInitialURL to handle cold-start links
+  async getInitialURL() {
+    const url = await Linking.getInitialURL();
+    return url ?? null;
+  },
+  subscribe(listener) {
+    const sub = Linking.addEventListener('url', ({ url }) => listener(url));
+    return () => sub.remove();
+  },
+};
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -89,16 +120,21 @@ export default function App() {
 
   const getInitialRoute = () => {
     if (!hasSeenOnboarding) return 'Onboarding';
-    return isAuthenticated ? 'Home' : 'Login';
+    if (!isAuthenticated) return 'Login';
+    // Toujours afficher la sélection de profil au démarrage
+    // ProfileSelectorScreen gère le cas 1 seul profil → redirige Home automatiquement
+    return 'ProfileSelector';
   };
 
   const showMiniPlayer = !HIDE_MINI_PLAYER_SCREENS.includes(currentRoute);
 
   return (
     <PaperProvider theme={theme}>
+      <ProfileProvider>
       <AudioProvider>
         <NavigationContainer
           ref={navigationRef}
+          linking={linking}
           onReady={() => {
             setCurrentRoute(navigationRef.getCurrentRoute()?.name || '');
           }}
@@ -131,17 +167,17 @@ export default function App() {
               <Stack.Screen
                 name="Login"
                 component={LoginScreen}
-                options={{ title: 'Connexion' }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="Register"
                 component={RegisterScreen}
-                options={{ title: 'Inscription' }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="ForgotPassword"
                 component={ForgotPasswordScreen}
-                options={{ title: 'Mot de passe oublié' }}
+                options={{ headerShown: false }}
               />
 
               {/* Protected routes */}
@@ -166,7 +202,7 @@ export default function App() {
               <Stack.Screen
                 name="History"
                 component={HistoryScreen}
-                options={{ title: 'Historique' }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="Catalog"
@@ -196,6 +232,13 @@ export default function App() {
               <Stack.Screen
                 name="Downloads"
                 component={DownloadsScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Devices */}
+              <Stack.Screen
+                name="Devices"
+                component={DevicesScreen}
                 options={{ headerShown: false }}
               />
 
@@ -236,6 +279,7 @@ export default function App() {
           </View>
         </NavigationContainer>
       </AudioProvider>
+      </ProfileProvider>
     </PaperProvider>
   );
 }

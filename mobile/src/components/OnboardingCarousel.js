@@ -167,7 +167,7 @@ const OnboardingCarousel = ({ onComplete, onSkip }) => {
               styles.dot,
               {
                 backgroundColor:
-                  index === activeIndex ? tokens.colors.primary : tokens.colors.neutral[300],
+                  index === activeIndex ? tokens.colors.primary : '#D4C0A8',
               },
             ]}
           />

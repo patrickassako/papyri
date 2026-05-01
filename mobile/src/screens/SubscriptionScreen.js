@@ -4,27 +4,24 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   RefreshControl,
-  Linking,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { subscriptionService } from '../services/subscription.service';
-import API_BASE_URL from '../config/api';
 
 const tokens = require('../config/tokens');
-
-const IS_IOS = Platform.OS === 'ios';
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function formatAmount(amount, currency) {
@@ -35,26 +32,6 @@ function formatAmount(amount, currency) {
 function resolvePlanName(subscription) {
   if (!subscription) return '';
   return subscription?.plan_snapshot?.name || subscription?.planName || subscription?.plan_type || subscription?.plan || '';
-}
-
-/* ─── Composant iOS uniquement ────────────────────────────────── */
-function IosNotice() {
-  return (
-    <View style={styles.iosNotice}>
-      <MaterialCommunityIcons name="crown-outline" size={28} color="#8a6a53" />
-      <Text style={styles.iosNoticeTitle}>Gérez votre abonnement</Text>
-      <Text style={styles.iosNoticeBody}>
-        La souscription et la gestion de votre abonnement s'effectuent depuis notre site web.
-      </Text>
-      <TouchableOpacity
-        style={styles.iosWebBtn}
-        onPress={() => Linking.openURL('https://papyri.app')}
-      >
-        <MaterialCommunityIcons name="web" size={18} color="#fff" />
-        <Text style={styles.iosWebBtnText}>Accéder au site web</Text>
-      </TouchableOpacity>
-    </View>
-  );
 }
 
 /* ─── Plan card Android ───────────────────────────────────────── */
@@ -103,54 +80,25 @@ export default function SubscriptionScreen({ navigation }) {
   const [usage, setUsage] = useState(null);
   const [payments, setPayments] = useState([]);
 
-  // Android only
-  const [plans, setPlans] = useState([]);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoLoading, setPromoLoading] = useState(false);
-  const [promoResult, setPromoResult] = useState(null);
-  const [promoError, setPromoError] = useState('');
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setError('');
-      const fetches = [
+      const [statusResult, usageResult, paymentResult] = await Promise.all([
         subscriptionService.getMySubscriptionStatus(),
         subscriptionService.getMyUsage(),
         subscriptionService.getPaymentHistory(),
-      ];
-      // Plans seulement sur Android
-      if (!IS_IOS) {
-        fetches.push(
-          fetch(`${API_BASE_URL}/api/subscriptions/plans`)
-            .then((r) => r.json())
-            .then((d) => d?.data || d?.plans || [])
-            .catch(() => [])
-        );
-      }
-      const [statusResult, usageResult, paymentResult, plansResult] = await Promise.all(fetches);
+      ]);
       setStatusPayload(statusResult || null);
       setUsage(usageResult || null);
       setPayments(Array.isArray(paymentResult) ? paymentResult : []);
-      if (!IS_IOS && Array.isArray(plansResult)) {
-        setPlans(plansResult);
-        if (plansResult.length > 0 && !selectedPlan) {
-          // Sélectionner mensuel par défaut
-          const monthly = plansResult.find((p) =>
-            !String(p.slug || p.code || '').includes('year') &&
-            !String(p.name || '').toLowerCase().includes('annuel')
-          );
-          setSelectedPlan(monthly || plansResult[0]);
-        }
-      }
     } catch (e) {
       setError('Impossible de charger les données abonnement.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -164,63 +112,6 @@ export default function SubscriptionScreen({ navigation }) {
   const isActive = statusPayload?.isActive === true || String(subscription?.status || '').toLowerCase() === 'active';
   const planName = useMemo(() => resolvePlanName(subscription), [subscription]);
 
-  /* ── Validation code promo (Android) ─────────────────────────── */
-  const handleValidatePromo = useCallback(async () => {
-    if (!promoCode.trim() || !selectedPlan) return;
-    setPromoLoading(true);
-    setPromoError('');
-    setPromoResult(null);
-    try {
-      const result = await subscriptionService.validatePromoCode({
-        code: promoCode.trim(),
-        planId: selectedPlan.id,
-        planCode: selectedPlan.slug || selectedPlan.code,
-        usersLimit: 1,
-      });
-      setPromoResult(result);
-    } catch (err) {
-      setPromoError(err.message || 'Code promo invalide.');
-    } finally {
-      setPromoLoading(false);
-    }
-  }, [promoCode, selectedPlan]);
-
-  /* ── Checkout Flutterwave (Android) ───────────────────────────── */
-  const handleCheckout = useCallback(async () => {
-    if (!selectedPlan) return;
-    setCheckoutLoading(true);
-    setError('');
-    try {
-      const result = await subscriptionService.checkout({
-        planId: selectedPlan.id,
-        planCode: selectedPlan.slug || selectedPlan.code,
-        usersLimit: 1,
-        provider: 'flutterwave',
-        promoCode: promoResult ? promoCode.trim() : undefined,
-      });
-      const url = result?.paymentLink || result?.data?.paymentLink;
-      if (url) {
-        await Linking.openURL(url);
-      } else {
-        setError('Lien de paiement non disponible. Réessayez.');
-      }
-    } catch (err) {
-      setError(err.message || 'Erreur lors du paiement.');
-    } finally {
-      setCheckoutLoading(false);
-    }
-  }, [selectedPlan, promoResult, promoCode]);
-
-  /* ── Prix affiché après promo ─────────────────────────────────── */
-  const displayPrice = useMemo(() => {
-    if (!selectedPlan) return null;
-    if (promoResult) {
-      const final = (promoResult.finalAmountCents / 100).toFixed(2);
-      const orig = (promoResult.originalAmountCents / 100).toFixed(2);
-      return { final, orig, currency: selectedPlan.currency || 'EUR' };
-    }
-    return { final: Number(selectedPlan.price).toFixed(2), orig: null, currency: selectedPlan.currency || 'EUR' };
-  }, [selectedPlan, promoResult]);
 
   if (loading) {
     return (
@@ -248,9 +139,6 @@ export default function SubscriptionScreen({ navigation }) {
           <Text style={styles.title}>Abonnement</Text>
           <View style={styles.iconBtn} />
         </View>
-
-        {/* iOS : message redirection web */}
-        {IS_IOS && <IosNotice />}
 
         {/* Statut abonnement actuel */}
         <View style={styles.card}>
@@ -306,97 +194,6 @@ export default function SubscriptionScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ── Android uniquement : choix de plan + paiement ─────── */}
-        {!IS_IOS && plans.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              {isActive ? 'Changer de plan' : 'Choisir un plan'}
-            </Text>
-            <Text style={styles.androidSubtitle}>Paiement via Mobile Money (Flutterwave)</Text>
-
-            {plans.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                selected={selectedPlan?.id === plan.id}
-                onSelect={(p) => {
-                  setSelectedPlan(p);
-                  setPromoResult(null);
-                  setPromoError('');
-                }}
-              />
-            ))}
-
-            {/* Champ code promo */}
-            <View style={styles.promoRow}>
-              <TextInput
-                style={styles.promoInput}
-                placeholder="Code promo (ex: BIENVENUE)"
-                placeholderTextColor="#b0a090"
-                value={promoCode}
-                onChangeText={(v) => {
-                  setPromoCode(v);
-                  setPromoResult(null);
-                  setPromoError('');
-                }}
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={[styles.promoBtn, (!promoCode.trim() || promoLoading) && styles.promoBtnDisabled]}
-                onPress={handleValidatePromo}
-                disabled={!promoCode.trim() || promoLoading}
-              >
-                {promoLoading
-                  ? <ActivityIndicator size={14} color="#fff" />
-                  : <Text style={styles.promoBtnText}>Appliquer</Text>
-                }
-              </TouchableOpacity>
-            </View>
-
-            {/* Résultat promo */}
-            {promoResult && (
-              <View style={styles.promoSuccess}>
-                <MaterialCommunityIcons name="check-circle" size={16} color="#1F7A39" />
-                <Text style={styles.promoSuccessText}>
-                  Code «{promoResult.code}» : {promoResult.discountType === 'percent'
-                    ? `-${promoResult.discountValue}%`
-                    : `-${(promoResult.discountCents / 100).toFixed(2)} €`}
-                </Text>
-              </View>
-            )}
-            {promoError ? (
-              <Text style={styles.promoErrorText}>{promoError}</Text>
-            ) : null}
-
-            {/* Récapitulatif prix */}
-            {displayPrice && (
-              <View style={styles.priceSummary}>
-                {displayPrice.orig && (
-                  <Text style={styles.priceOrig}>{displayPrice.orig} {displayPrice.currency}</Text>
-                )}
-                <Text style={styles.priceFinal}>{displayPrice.final} {displayPrice.currency}</Text>
-              </View>
-            )}
-
-            {/* Bouton payer */}
-            <TouchableOpacity
-              style={[styles.payBtn, (!selectedPlan || checkoutLoading) && styles.payBtnDisabled]}
-              onPress={handleCheckout}
-              disabled={!selectedPlan || checkoutLoading}
-              activeOpacity={0.85}
-            >
-              {checkoutLoading ? (
-                <ActivityIndicator size={18} color="#fff" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="cellphone" size={20} color="#fff" />
-                  <Text style={styles.payBtnText}>Payer via Mobile Money</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Historique paiements */}
         <View style={styles.card}>
@@ -506,8 +303,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   separator: { height: 1, backgroundColor: '#EEE8E2', marginVertical: 6 },
-  label: { color: '#867a71', fontSize: 14 },
-  value: { color: '#171412', fontSize: 14, fontWeight: '700' },
+  label: { color: '#867a71', fontSize: 14, flexShrink: 0 },
+  value: { color: '#171412', fontSize: 14, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
   statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   statusActive: { backgroundColor: '#E8F5EB' },
   statusInactive: { backgroundColor: '#F2ECE7' },

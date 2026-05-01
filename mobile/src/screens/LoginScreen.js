@@ -5,9 +5,10 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Image,
 } from 'react-native';
-import { Text, TextInput, Button, IconButton } from 'react-native-paper';
+import { Text, TextInput, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
@@ -62,11 +63,14 @@ export default function LoginScreen({ navigation }) {
         >
           {/* White Card */}
           <View style={styles.card}>
-            {/* Logo Icon */}
+            {/* Logo Papyri */}
             <View style={styles.logoContainer}>
-              <View style={styles.logoCircle}>
-                <MaterialCommunityIcons name="book-open-page-variant" size={28} color="#b4641d" />
-              </View>
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.logoName}>Papyri</Text>
             </View>
 
             {/* Header */}
@@ -167,36 +171,21 @@ export default function LoginScreen({ navigation }) {
               </Button>
             </View>
 
-            {/* Alternative Login */}
-            <View style={styles.alternativeLogin}>
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>{t('common.or').toUpperCase()}</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <View style={styles.socialButtons}>
-                <TouchableOpacity style={styles.socialButton}>
-                  <MaterialCommunityIcons name="apple" size={20} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton}>
-                  <MaterialCommunityIcons name="google" size={20} color="#000" />
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
 
-          {/* Sign Up Link */}
+          {/* Sign Up Button */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              {t('auth.noAccount')}{' '}
-              <Text
-                style={styles.footerLink}
-                onPress={() => navigation.navigate('Register')}
-              >
-                {t('auth.signUp')}
-              </Text>
-            </Text>
+            <Text style={styles.footerText}>{t('auth.noAccount')}</Text>
+            <Button
+              mode="outlined"
+              onPress={() => navigation.navigate('Register')}
+              style={styles.registerButton}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.registerButtonLabel}
+              textColor="#b4641d"
+            >
+              {t('auth.signUp')}
+            </Button>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -230,15 +219,20 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 24
+    marginBottom: 20
   },
-  logoCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(180, 100, 29, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center'
+  logoImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+  },
+  logoName: {
+    fontFamily: 'Playfair Display',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#b4641d',
+    marginTop: 8,
+    letterSpacing: 0.5,
   },
   titleContainer: {
     alignItems: 'center',
@@ -322,51 +316,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3
   },
-  alternativeLogin: {
-    marginTop: 32
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e5e0dc'
-  },
-  dividerText: {
-    fontSize: 10,
-    color: '#867465',
-    fontWeight: '500',
-    letterSpacing: 1.5,
-    marginHorizontal: 16
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16
-  },
-  socialButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#e5e0dc',
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
   footer: {
-    marginTop: 32,
-    alignItems: 'center'
+    marginTop: 24,
+    alignItems: 'center',
+    gap: 12,
   },
   footerText: {
     fontSize: 14,
     color: '#867465'
   },
-  footerLink: {
-    color: '#b4641d',
-    fontWeight: '700'
+  registerButton: {
+    borderRadius: 28,
+    borderColor: '#b4641d',
+    borderWidth: 1.5,
+    width: '100%',
+  },
+  registerButtonLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   }
 });

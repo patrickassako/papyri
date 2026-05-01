@@ -1,51 +1,43 @@
+import { supabase } from '../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_BASE_URL from '../config/api';
 
+const ACTIVE_PROFILE_KEY = '@papyri_active_profile';
+
+const getActiveProfileId = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(ACTIVE_PROFILE_KEY);
+    if (!raw) return null;
+    const profile = JSON.parse(raw);
+    return profile?.id || null;
+  } catch {
+    return null;
+  }
+};
+
+// Code pays extrait de la locale de l'appareil (ex: "fr-CM" → "CM")
+const _rawLocale = Intl.DateTimeFormat().resolvedOptions().locale || '';
+const DEVICE_COUNTRY = (() => {
+  try {
+    const region = new Intl.Locale(_rawLocale).region;
+    if (region && /^[A-Z]{2}$/.test(region)) return region;
+  } catch {}
+  // Fallback: prendre le dernier segment s'il fait 2 lettres
+  const parts = _rawLocale.split('-');
+  const last = parts[parts.length - 1].toUpperCase();
+  return last.length === 2 ? last : null;
+})();
+
 /**
- * Récupère le token d'accès depuis AsyncStorage
+ * Récupère le token d'accès depuis la session Supabase active
  */
 const getAccessToken = async () => {
   try {
-    return await AsyncStorage.getItem('access_token');
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
   } catch (error) {
-    console.error('Erreur lecture access_token:', error);
+    console.error('Erreur lecture session Supabase:', error);
     return null;
-  }
-};
-
-/**
- * Récupère le refresh token depuis AsyncStorage
- */
-const getRefreshToken = async () => {
-  try {
-    return await AsyncStorage.getItem('refresh_token');
-  } catch (error) {
-    console.error('Erreur lecture refresh_token:', error);
-    return null;
-  }
-};
-
-/**
- * Sauvegarde les tokens dans AsyncStorage
- */
-const setTokens = async (accessToken, refreshToken) => {
-  try {
-    await AsyncStorage.setItem('access_token', accessToken);
-    await AsyncStorage.setItem('refresh_token', refreshToken);
-  } catch (error) {
-    console.error('Erreur sauvegarde tokens:', error);
-  }
-};
-
-/**
- * Supprime les tokens d'AsyncStorage
- */
-const clearTokens = async () => {
-  try {
-    await AsyncStorage.removeItem('access_token');
-    await AsyncStorage.removeItem('refresh_token');
-  } catch (error) {
-    console.error('Erreur suppression tokens:', error);
   }
 };
 
@@ -82,48 +74,32 @@ const fetchWithAuth = async (url, options = {}) => {
     headers.Authorization = `Bearer ${token}`;
   }
 
+  if (DEVICE_COUNTRY) {
+    headers['X-Country-Code'] = DEVICE_COUNTRY;
+  }
+
+  // Injecter le profil famille actif si sélectionné
+  const profileId = await getActiveProfileId();
+  if (profileId) {
+    headers['X-Profile-Id'] = profileId;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers
   });
 
-  // Gestion du 401 (token expiré)
+  // Gestion du 401 (token expiré) — laisser Supabase rafraîchir la session
   if (response.status === 401 && !options._retry) {
     try {
-      const refreshToken = await getRefreshToken();
-      if (!refreshToken) {
-        await clearTokens();
-        throw new Error('No refresh token available');
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) {
+        await supabase.auth.signOut();
+        throw new Error('Session expired');
       }
-
-      // Rafraîchir le token
-      const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken })
-      });
-
-      if (!refreshResponse.ok) {
-        await clearTokens();
-        throw new Error('Token refresh failed');
-      }
-
-      const refreshData = await refreshResponse.json();
-      const session = refreshData?.data?.session || refreshData?.session;
-      const accessToken = session?.access_token;
-      const nextRefreshToken = session?.refresh_token;
-
-      if (!accessToken || !nextRefreshToken) {
-        await clearTokens();
-        throw new Error('Invalid refresh response');
-      }
-
-      await setTokens(accessToken, nextRefreshToken);
-
-      // Réessayer la requête originale
+      // Réessayer avec le nouveau token
       return fetchWithAuth(url, { ...options, _retry: true });
     } catch (refreshError) {
-      await clearTokens();
       throw refreshError;
     }
   }
@@ -134,6 +110,8 @@ const fetchWithAuth = async (url, options = {}) => {
 /**
  * Client API compatible avec l'interface axios
  */
+export { DEVICE_COUNTRY };
+
 export const apiClient = {
   /**
    * GET request
