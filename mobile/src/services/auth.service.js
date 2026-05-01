@@ -123,6 +123,11 @@ export async function logout() {
     await revokePushToken();
   } catch (_) {}
 
+  // Clear family profile so a stale X-Profile-Id isn't sent after re-login
+  try {
+    await AsyncStorage.removeItem('@papyri_active_profile');
+  } catch (_) {}
+
   const { error } = await supabase.auth.signOut();
 
   if (error) {

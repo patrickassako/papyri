@@ -5,7 +5,7 @@ const { verifyJWT } = require('../middleware/auth');
 const { rejectKidProfile } = require('../middleware/family-access');
 
 const MAX_DEVICES = 3;
-const LOCK_TTL_MS = 15_000; // 15s — lock is stale if no heartbeat
+const LOCK_TTL_MS = 60_000; // 60s — 2× heartbeat interval (30s) with safety margin
 
 function isLockFresh(heartbeatAt) {
   if (!heartbeatAt) return false;

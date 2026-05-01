@@ -334,13 +334,20 @@ async function resolveProfileForUser(userId, requestedProfileId = null) {
   }
 
   if (requestedProfileId) {
-    const { profile } = await getProfileForOwner(userId, requestedProfileId);
-    return {
-      subscription,
-      profile: sanitizeProfile(profile),
-      profileId: profile.id,
-      isFamilyContext: true,
-    };
+    try {
+      const { profile } = await getProfileForOwner(userId, requestedProfileId);
+      return {
+        subscription,
+        profile: sanitizeProfile(profile),
+        profileId: profile.id,
+        isFamilyContext: true,
+      };
+    } catch (profileErr) {
+      // Stale or invalid profileId (e.g. subscription renewed, profile deleted) —
+      // fall through to owner profile lookup rather than propagating as 500.
+      const benign = ['PROFILE_NOT_FOUND', 'NO_ACTIVE_SUBSCRIPTION', 'FAMILY_SUBSCRIPTION_REQUIRED'];
+      if (!benign.includes(profileErr.message)) throw profileErr;
+    }
   }
 
   const { data, error } = await supabaseAdmin
