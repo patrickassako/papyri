@@ -86,6 +86,7 @@ async function createCheckoutSession({
   stripeCustomerId,
   paymentType = 'subscription_initial',
   redirectBaseUrl,
+  mobileCallbackBase, // e.g. 'papyri://payment/callback' for Android
 }) {
   const stripe = getClient();
   const frontendUrl = redirectBaseUrl || config.frontendUrl;
@@ -127,8 +128,12 @@ async function createCheckoutSession({
         plan_code: planCode,
       },
     },
-    success_url: `${frontendUrl}/subscription/callback?provider=stripe&session_id={CHECKOUT_SESSION_ID}&status=successful`,
-    cancel_url: `${frontendUrl}/pricing?payment=cancelled`,
+    success_url: mobileCallbackBase
+      ? `${mobileCallbackBase}?provider=stripe&session_id={CHECKOUT_SESSION_ID}&status=successful`
+      : `${frontendUrl}/subscription/callback?provider=stripe&session_id={CHECKOUT_SESSION_ID}&status=successful`,
+    cancel_url: mobileCallbackBase
+      ? `${mobileCallbackBase}?provider=stripe&status=cancelled`
+      : `${frontendUrl}/pricing?payment=cancelled`,
   };
 
   // Attach to existing Stripe customer or pre-fill email

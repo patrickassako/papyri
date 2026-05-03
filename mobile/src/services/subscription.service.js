@@ -195,7 +195,36 @@ export const subscriptionService = {
   },
 
   /**
+   * Récupère la liste des plans disponibles (public)
+   * Envoie x-country-code basé sur la locale du device pour la tarification géolocalisée.
+   * Returns { plans, geo }
+   */
+  getPlans: async () => {
+    // Extract country code from device locale (e.g. "fr-CM" → "CM")
+    let countryCode = null;
+    try {
+      const locale = Intl.DateTimeFormat().resolvedOptions().locale || '';
+      const parts = locale.split(/[-_]/);
+      if (parts.length > 1) countryCode = parts[parts.length - 1].toUpperCase();
+    } catch (_) {}
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (countryCode && /^[A-Z]{2}$/.test(countryCode)) {
+      headers['x-country-code'] = countryCode;
+    }
+
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/plans`, {
+      method: 'GET',
+      headers,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.message || 'Impossible de charger les plans.');
+    return { plans: data.plans || [], geo: data.geo || null };
+  },
+
+  /**
    * Initier un paiement d'abonnement (Flutterwave ou Stripe)
+   * source: 'mobile' → callback vers papyri://payment/callback
    * Returns { paymentLink, provider, reference, subscription }
    */
   checkout: async ({ planId, planCode, usersLimit, provider = 'flutterwave', promoCode } = {}) => {
@@ -213,6 +242,7 @@ export const subscriptionService = {
         planCode,
         usersLimit,
         provider,
+        source: 'mobile', // tell backend to use papyri:// deep link callback
         promoCode: promoCode ? promoCode.trim().toUpperCase() : undefined,
       }),
     });
@@ -223,6 +253,52 @@ export const subscriptionService = {
         throw new Error(data?.message || 'Paiement indisponible : fournisseur non configuré.');
       }
       throw new Error(data?.message || data?.error || 'Échec du paiement.');
+    }
+    return data;
+  },
+
+  /**
+   * Vérifier un paiement Flutterwave (appelé depuis le callback deep link)
+   */
+  verifyPayment: async ({ transactionId, reference }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Non authentifié');
+
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/verify-payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ transactionId, reference }),
+    }, 30000);
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || data?.error || 'Vérification échouée.');
+    }
+    return data;
+  },
+
+  /**
+   * Vérifier une session Stripe (appelé depuis le callback deep link)
+   */
+  verifyStripeSession: async ({ sessionId }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Non authentifié');
+
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/subscriptions/verify-stripe-session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ sessionId }),
+    }, 30000);
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.message || data?.error || 'Vérification Stripe échouée.');
     }
     return data;
   },

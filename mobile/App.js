@@ -37,6 +37,7 @@ import DevicesScreen from './src/screens/DevicesScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import FamilyScreen from './src/screens/FamilyScreen';
 import ProfileSelectorScreen from './src/screens/ProfileSelectorScreen';
+import PaymentCallbackScreen from './src/screens/PaymentCallbackScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -56,6 +57,7 @@ const linking = {
         path: 'catalogue/:contentId',
         parse: { contentId: (id) => id },
       },
+      PaymentCallback: 'payment/callback',
     },
   },
   // Custom getInitialURL to handle cold-start links
@@ -258,6 +260,13 @@ export default function App() {
               <Stack.Screen
                 name="ProfileSelector"
                 component={ProfileSelectorScreen}
+                options={{ headerShown: false }}
+              />
+
+              {/* Payment callback (deep link from Stripe / Flutterwave) */}
+              <Stack.Screen
+                name="PaymentCallback"
+                component={PaymentCallbackScreen}
                 options={{ headerShown: false }}
               />
 

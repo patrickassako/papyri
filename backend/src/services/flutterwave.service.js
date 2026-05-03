@@ -53,6 +53,7 @@ async function initiatePayment({
   usersLimit,
   userId,
   redirectBaseUrl,
+  overrideRedirectUrl,
 }) {
   return initiateCheckout({
     amount,
@@ -61,6 +62,7 @@ async function initiatePayment({
     name,
     userId,
     redirectBaseUrl,
+    overrideRedirectUrl,
     txPrefix: 'SUB',
     redirectPath: '/subscription/callback',
     title: 'Papyri - Bibliothèque Numérique',
@@ -86,6 +88,7 @@ async function initiateCheckout({
   redirectBaseUrl = config.frontendUrl,
   txPrefix = 'PAY',
   redirectPath = '/subscription/callback',
+  overrideRedirectUrl, // e.g. 'papyri://payment/callback' for Android mobile
   title = 'Papyri - Bibliothèque Numérique',
   description = 'Paiement',
   meta = {},
@@ -101,7 +104,7 @@ async function initiateCheckout({
       tx_ref: `${txPrefix}-${Date.now()}-${userId.substring(0, 8)}`,
       amount: amount,
       currency,
-      redirect_url: `${String(redirectBaseUrl || config.frontendUrl).replace(/\/$/, '')}${redirectPath}`,
+      redirect_url: overrideRedirectUrl || `${String(redirectBaseUrl || config.frontendUrl).replace(/\/$/, '')}${redirectPath}`,
       customer: {
         email: email,
         name: name,
