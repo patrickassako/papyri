@@ -10,7 +10,16 @@ function isFamilySubscription(subscription) {
   if (!subscription) return false;
   const snapshotSlug = String(subscription?.plan_snapshot?.slug || '').toLowerCase();
   const typeSlug = String(subscription?.plan_type || '').toLowerCase();
-  return snapshotSlug === 'family' || typeSlug === 'family';
+  // Detect any plan starting with "family" (family, family-monthly, family-annual, family-yearly).
+  // Fallback: included_users > 1 — any multi-seat plan is family-style.
+  if (snapshotSlug.startsWith('family') || typeSlug.startsWith('family')) return true;
+  const includedUsers = Number(
+    subscription?.plan_snapshot?.includedUsers
+    ?? subscription?.included_profiles
+    ?? subscription?.users_limit
+    ?? 1
+  );
+  return includedUsers > 1;
 }
 
 function sanitizeProfile(row) {

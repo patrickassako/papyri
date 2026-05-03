@@ -257,201 +257,88 @@ async function unlockContent(req, res) {
     const subscriptionMembership = await subscriptionsService.getActiveSubscriptionForMember(userId);
     const hasActiveSubscription = !!subscriptionMembership?.subscription;
     const subscription = subscriptionMembership?.subscription || null;
-    const canSubscriptionAccess = hasActiveSubscription && ['subscription', 'subscription_or_paid'].includes(content.access_type);
-    const isTextContent = content.content_type === 'ebook';
 
-    if (canSubscriptionAccess && subscription) {
-      await subscriptionsService.ensureOwnerMembership(subscription);
-      const cycle = await subscriptionsService.ensureCurrentCycle(subscription);
-
-      if (cycle) {
-        const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
-        const useProfileScopedUsage = Boolean(
-          familyContext?.isFamilyContext
-          && familyContext?.subscription?.id === subscription.id
-          && familyContext?.profileId
-        );
-
-        const usage = useProfileScopedUsage
-          ? await subscriptionsService.ensureProfileCycleUsage(subscription, cycle, familyContext.profileId)
-          : await subscriptionsService.ensureMemberCycleUsage(subscription, cycle, userId);
-
-        const quotaField = isTextContent ? 'text_unlocked_count' : 'audio_unlocked_count';
-        const quotaLimitField = isTextContent ? 'text_quota' : 'audio_quota';
-        const currentCount = Number(usage[quotaField] || 0);
-        const quotaLimit = Number(usage[quotaLimitField] || 0);
-        const usageTable = useProfileScopedUsage ? 'profile_cycle_usage' : 'member_cycle_usage';
-
-        if (currentCount < quotaLimit) {
-          const nextCount = currentCount + 1;
-          const { data: updatedUsageRow, error: usageError } = await supabaseAdmin
-            .from(usageTable)
-            .update({
-              [quotaField]: nextCount,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', usage.id)
-            .eq(quotaField, currentCount)
-            .select('id, text_unlocked_count, audio_unlocked_count')
-            .maybeSingle();
-
-          if (!usageError && updatedUsageRow) {
-            const unlock = await contentsService.createContentUnlock({
-              user_id: userId,
-              profile_id: effectiveProfileId,
-              content_id: content.id,
-              source: 'quota',
-              currency: content.price_currency || 'USD',
-              metadata: {
-                cycle_id: cycle.id,
-                subscription_id: subscription.id,
-                ...(useProfileScopedUsage ? { profile_id: familyContext.profileId } : {}),
-              },
-            });
-
-            return res.status(200).json({
-              success: true,
-              data: {
-                unlocked: true,
-                source: 'quota',
-                unlock,
-                cycle_usage: {
-                  used: nextCount,
-                  quota: quotaLimit,
-                },
-              },
-            });
-          }
-        }
-
-        if (useProfileScopedUsage) {
-          const currentBonusUsed = Number(usage.bonus_used_count || 0);
-          const bonusQuota = Number(usage.bonus_quota || 0);
-
-          if (currentBonusUsed < bonusQuota) {
-            const nextBonusUsed = currentBonusUsed + 1;
-            const { data: updatedBonusUsageRow, error: bonusUsageError } = await supabaseAdmin
-              .from('profile_cycle_usage')
-              .update({
-                bonus_used_count: nextBonusUsed,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', usage.id)
-              .eq('bonus_used_count', currentBonusUsed)
-              .select('id, bonus_used_count')
-              .maybeSingle();
-
-            if (!bonusUsageError && updatedBonusUsageRow) {
-              const unlock = await contentsService.createContentUnlock({
-                user_id: userId,
-                profile_id: effectiveProfileId,
-                content_id: content.id,
-                source: 'bonus',
-                currency: content.price_currency || 'USD',
-                metadata: {
-                  cycle_id: cycle.id,
-                  subscription_id: subscription.id,
-                  profile_id: familyContext.profileId,
-                  profile_bonus: true,
-                },
-              });
-
-              return res.status(200).json({
-                success: true,
-                data: {
-                  unlocked: true,
-                  source: 'bonus',
-                  unlock,
-                  profile_bonus_remaining: Math.max(0, bonusQuota - nextBonusUsed),
-                },
-              });
-            }
-          }
-        } else {
-          const nowIso = new Date().toISOString();
-          const bonusType = isTextContent ? 'text' : 'audio';
-          const { data: bonusCredits, error: bonusError } = await supabaseAdmin
-            .from('bonus_credits')
-            .select('*')
-            .eq('user_id', userId)
-            .gt('expires_at', nowIso)
-            .in('bonus_type', [bonusType, 'flex'])
-            .order('expires_at', { ascending: true })
-            .limit(10);
-
-          if (bonusError) throw bonusError;
-
-          const bonusCredit = (bonusCredits || []).find(
-            (item) => Number(item.quantity_used || 0) < Number(item.quantity_total || 0)
-          ) || null;
-          if (bonusCredit) {
-            const nextUsed = Number(bonusCredit.quantity_used || 0) + 1;
-            const updatePayload = {
-              quantity_used: nextUsed,
-              updated_at: new Date().toISOString(),
-            };
-
-            if (nextUsed >= Number(bonusCredit.quantity_total || 0)) {
-              updatePayload.consumed_at = new Date().toISOString();
-            }
-
-            const { data: updatedBonusRow, error: bonusUpdateError } = await supabaseAdmin
-              .from('bonus_credits')
-              .update(updatePayload)
-              .eq('id', bonusCredit.id)
-              .eq('quantity_used', bonusCredit.quantity_used)
-              .select('id, quantity_used')
-              .maybeSingle();
-
-            if (!bonusUpdateError && updatedBonusRow) {
-              const unlock = await contentsService.createContentUnlock({
-                user_id: userId,
-                content_id: content.id,
-                source: 'bonus',
-                bonus_credit_id: bonusCredit.id,
-                currency: content.price_currency || 'USD',
-                metadata: {
-                  cycle_id: cycle.id,
-                  subscription_id: subscription.id,
-                },
-              });
-
-              const { error: usageBonusError } = await supabaseAdmin
-                .from('member_cycle_usage')
-                .update({
-                  bonus_used_count: Number(usage.bonus_used_count || 0) + 1,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', usage.id);
-
-              if (usageBonusError) {
-                console.warn('Unable to increment bonus_used_count:', usageBonusError.message);
-              }
-
-              return res.status(200).json({
-                success: true,
-                data: {
-                  unlocked: true,
-                  source: 'bonus',
-                  unlock,
-                  bonus_credit_id: bonusCredit.id,
-                },
-              });
-            }
-          }
-        }
-      }
-    }
-
-    const subscriptionOnlyPathForHybrid = hasActiveSubscription && content.access_type === 'subscription_or_paid';
-    if (subscriptionOnlyPathForHybrid) {
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'SUBSCRIPTION_QUOTA_REQUIRED',
-          message: 'Votre abonnement actif doit etre utilise pour debloquer ce contenu via quota ou bonus.',
+    // Catalogue illimité : pas d'unlock requis pour les contenus 'subscription'
+    if (hasActiveSubscription && content.access_type === 'subscription') {
+      return res.status(200).json({
+        success: true,
+        data: {
+          unlocked: true,
+          source: 'subscription',
+          already_accessible: true,
         },
       });
+    }
+
+    // Pour les contenus payants/hybrides : tentative d'utilisation d'un crédit
+    // (sauf si l'utilisateur demande explicitement le paiement via { useCredit: false })
+    const useCreditOptIn = req.body?.useCredit !== false;
+
+    if (subscription && useCreditOptIn && ['paid', 'subscription_or_paid'].includes(content.access_type)) {
+      const nowIso = new Date().toISOString();
+      const { data: credits, error: creditsError } = await supabaseAdmin
+        .from('bonus_credits')
+        .select('*')
+        .eq('user_id', subscription.user_id)
+        .eq('subscription_id', subscription.id)
+        .gt('expires_at', nowIso)
+        .order('expires_at', { ascending: true })
+        .limit(20);
+
+      if (creditsError) throw creditsError;
+
+      const usableCredit = (credits || []).find(
+        (item) => Number(item.quantity_used || 0) < Number(item.quantity_total || 0)
+      ) || null;
+
+      if (usableCredit) {
+        const nextUsed = Number(usableCredit.quantity_used || 0) + 1;
+        const updatePayload = {
+          quantity_used: nextUsed,
+          updated_at: new Date().toISOString(),
+        };
+        if (nextUsed >= Number(usableCredit.quantity_total || 0)) {
+          updatePayload.consumed_at = new Date().toISOString();
+        }
+
+        // Atomic decrement (concurrent-safe via the equality on quantity_used).
+        const { data: updatedCredit, error: updateError } = await supabaseAdmin
+          .from('bonus_credits')
+          .update(updatePayload)
+          .eq('id', usableCredit.id)
+          .eq('quantity_used', usableCredit.quantity_used)
+          .select('id, quantity_used, grants_lifetime_access')
+          .maybeSingle();
+
+        if (!updateError && updatedCredit) {
+          const lifetimeAccess = Boolean(updatedCredit.grants_lifetime_access ?? usableCredit.grants_lifetime_access);
+          const unlock = await contentsService.createContentUnlock({
+            user_id: userId,
+            profile_id: effectiveProfileId,
+            content_id: content.id,
+            source: 'bonus',
+            bonus_credit_id: usableCredit.id,
+            lifetime_access: lifetimeAccess,
+            currency: content.price_currency || 'USD',
+            metadata: {
+              subscription_id: subscription.id,
+              credit_lifetime: lifetimeAccess,
+            },
+          });
+
+          return res.status(200).json({
+            success: true,
+            data: {
+              unlocked: true,
+              source: 'bonus',
+              unlock,
+              credit_id: usableCredit.id,
+              lifetime_access: lifetimeAccess,
+              credits_remaining: Math.max(0, Number(usableCredit.quantity_total || 0) - nextUsed),
+            },
+          });
+        }
+      }
     }
 
     // Paid fallback path

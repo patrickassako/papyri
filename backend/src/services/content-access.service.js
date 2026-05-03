@@ -175,30 +175,41 @@ async function resolveContentAccess({ userId, contentId, zone = null, profileId 
   const accessType = content.access_type || 'subscription';
   const pricing = computePricing(content, hasActiveSubscription, planDiscountPercent);
   const isPurchasable = accessType === 'paid'
-    || (!hasActiveSubscription && accessType === 'subscription_or_paid')
+    || accessType === 'subscription_or_paid'
     || Boolean(content.is_purchasable && accessType === 'paid');
 
-  const canReadByUnlock = Boolean(unlock);
-  // Access requires an explicit unlock (quota consumption). Merely having an active
-  // subscription is not enough — the subscriber must go through the unlock flow first.
-  const canRead = canReadByUnlock;
+  // New unlock semantics:
+  // - subscription content : abo actif suffit, pas d'unlock requis (catalogue illimité)
+  // - paid / subscription_or_paid avec abo actif : abo actif suffit (lecture directe)
+  //     OU unlock existe (acheté ou crédit) — accessible si lifetime_access OU abo actif
+  // - paid sans abo : doit avoir un unlock lifetime
+  const subscriberCatalogAccess = hasActiveSubscription
+    && (accessType === 'subscription' || accessType === 'subscription_or_paid');
+
+  let canReadByUnlock = false;
+  if (unlock) {
+    const lifetime = unlock.lifetime_access !== false; // default TRUE pour rétrocompatibilité
+    canReadByUnlock = lifetime || hasActiveSubscription;
+  }
+
+  const canRead = subscriberCatalogAccess || canReadByUnlock;
 
   let denialCode = null;
   let denialMessage = null;
 
   if (!canRead) {
-    if (accessType === 'subscription' && !hasActiveSubscription) {
+    if (accessType === 'subscription') {
       denialCode = 'NO_ACTIVE_SUBSCRIPTION';
       denialMessage = 'Un abonnement actif est requis pour lire ce contenu.';
-    } else if (hasActiveSubscription && ['subscription', 'subscription_or_paid'].includes(accessType)) {
-      denialCode = 'SUBSCRIPTION_UNLOCK_REQUIRED';
-      denialMessage = 'Débloquez ce contenu pour consommer votre quota ou bonus.';
+    } else if (unlock && unlock.lifetime_access === false && !hasActiveSubscription) {
+      denialCode = 'UNLOCK_REQUIRES_ACTIVE_SUBSCRIPTION';
+      denialMessage = 'Renouvelez votre abonnement pour réaccéder à ce contenu.';
     } else if (isPurchasable) {
       denialCode = 'CONTENT_LOCKED_PAYMENT_REQUIRED';
-      denialMessage = 'Ce contenu est verrouille. Debloquez-le avec paiement.';
+      denialMessage = 'Ce contenu est verrouillé. Débloquez-le avec un crédit ou un paiement.';
     } else {
       denialCode = 'CONTENT_LOCKED';
-      denialMessage = 'Ce contenu est verrouille.';
+      denialMessage = 'Ce contenu est verrouillé.';
     }
   }
 

@@ -31,6 +31,11 @@ function normalizePlan(row) {
     bonusType: row.bonus_type,
     bonusQuantityPerUser: row.bonus_quantity_per_user,
     bonusValidityDays: row.bonus_validity_days,
+    creditsPerCycle: Number(row.credits_per_cycle || 0),
+    creditsValidityDays: Number(row.credits_validity_days || 365),
+    creditsGrantLifetimeAccess: Boolean(row.credits_grant_lifetime_access),
+    extraProfilePriceCents: Number(row.extra_profile_price_cents || 0),
+    maxProfiles: row.max_profiles == null ? null : Number(row.max_profiles),
     metadata: row.metadata || {},
   };
 }
@@ -43,7 +48,9 @@ function computeSubscriptionAmountCents(plan, usersLimit) {
   const users = Number(usersLimit || plan.includedUsers || 1);
   const included = Number(plan.includedUsers || 1);
   const extraUsers = Math.max(0, users - included);
-  return Number(plan.basePriceCents) + (extraUsers * Number(plan.extraUserPriceCents || 0));
+  // Prefer extraProfilePriceCents (new family pricing) when set, fallback to legacy extraUserPriceCents.
+  const extraUnitCents = Number(plan.extraProfilePriceCents || plan.extraUserPriceCents || 0);
+  return Number(plan.basePriceCents) + (extraUsers * extraUnitCents);
 }
 
 function getEffectiveProfilesLimit(subscription, plan = null) {
@@ -180,32 +187,19 @@ async function createSubscription({ userId, planId, planCode, usersLimit, provid
     ? overrideAmountCents
     : computeSubscriptionAmountCents(plan, normalizedUsersLimit);
 
+  const planMaxProfiles = plan.maxProfiles != null
+    ? Number(plan.maxProfiles)
+    : Math.max(normalizedUsersLimit, Number(plan.includedUsers || 1));
+
   const subscriptionData = {
     user_id: userId,
     plan_id: plan.id,
     plan_type: plan.slug,
-    plan_snapshot: {
-      id: plan.id,
-      slug: plan.slug,
-      name: plan.name,
-      basePriceCents: plan.basePriceCents,
-      currency: plan.currency,
-      durationDays: plan.durationDays,
-      includedUsers: plan.includedUsers,
-      extraUserPriceCents: plan.extraUserPriceCents,
-      textQuotaPerUser: plan.textQuotaPerUser,
-      audioQuotaPerUser: plan.audioQuotaPerUser,
-      discountPercentPaidBooks: plan.discountPercentPaidBooks,
-      bonusTrigger: plan.bonusTrigger,
-      bonusType: plan.bonusType,
-      bonusQuantityPerUser: plan.bonusQuantityPerUser,
-      bonusValidityDays: plan.bonusValidityDays,
-      metadata: plan.metadata || {},
-    },
+    plan_snapshot: buildPlanSnapshot(plan),
     users_limit: normalizedUsersLimit,
     profiles_limit: normalizedUsersLimit,
     included_profiles: Number(plan.includedUsers || 1),
-    max_profiles: Number(plan.slug === 'family' ? 10 : Math.max(normalizedUsersLimit, Number(plan.includedUsers || 1))),
+    max_profiles: planMaxProfiles,
     amount: toMajorAmount(amountCents),
     currency: plan.currency,
     status: 'INACTIVE',
@@ -480,13 +474,21 @@ function normalizeSnapshotPlan(snapshot) {
     currency: snapshot.currency || 'USD',
     includedUsers: Number(snapshot.includedUsers || snapshot.included_users || 1),
     extraUserPriceCents: Number(snapshot.extraUserPriceCents || snapshot.extra_user_price_cents || 0),
+    extraProfilePriceCents: Number(snapshot.extraProfilePriceCents || snapshot.extra_profile_price_cents || 0),
+    maxProfiles: snapshot.maxProfiles == null && snapshot.max_profiles == null
+      ? null
+      : Number(snapshot.maxProfiles ?? snapshot.max_profiles),
     textQuotaPerUser: Number(snapshot.textQuotaPerUser || snapshot.text_quota_per_user || 0),
     audioQuotaPerUser: Number(snapshot.audioQuotaPerUser || snapshot.audio_quota_per_user || 0),
+    unlimitedCatalog: snapshot.unlimitedCatalog !== false,
     discountPercentPaidBooks: Number(snapshot.discountPercentPaidBooks || snapshot.paid_books_discount_percent || 0),
     bonusTrigger: snapshot.bonusTrigger || snapshot.bonus_trigger || 'none',
     bonusType: snapshot.bonusType || snapshot.bonus_type || 'flex',
     bonusQuantityPerUser: Number(snapshot.bonusQuantityPerUser || snapshot.bonus_quantity_per_user || 0),
     bonusValidityDays: Number(snapshot.bonusValidityDays || snapshot.bonus_validity_days || 365),
+    creditsPerCycle: Number(snapshot.creditsPerCycle || snapshot.credits_per_cycle || 0),
+    creditsValidityDays: Number(snapshot.creditsValidityDays || snapshot.credits_validity_days || 365),
+    creditsGrantLifetimeAccess: Boolean(snapshot.creditsGrantLifetimeAccess ?? snapshot.credits_grant_lifetime_access),
     metadata: snapshot.metadata || {},
   };
 }
@@ -544,13 +546,19 @@ function buildPlanSnapshot(plan) {
     durationDays: Number(plan.durationDays || 30),
     includedUsers: Number(plan.includedUsers || 1),
     extraUserPriceCents: Number(plan.extraUserPriceCents || 0),
+    extraProfilePriceCents: Number(plan.extraProfilePriceCents || 0),
+    maxProfiles: plan.maxProfiles == null ? null : Number(plan.maxProfiles),
     textQuotaPerUser: Number(plan.textQuotaPerUser || 0),
     audioQuotaPerUser: Number(plan.audioQuotaPerUser || 0),
+    unlimitedCatalog: true,
     discountPercentPaidBooks: Number(plan.discountPercentPaidBooks || 0),
     bonusTrigger: plan.bonusTrigger || 'none',
     bonusType: plan.bonusType || 'flex',
     bonusQuantityPerUser: Number(plan.bonusQuantityPerUser || 0),
     bonusValidityDays: Number(plan.bonusValidityDays || 365),
+    creditsPerCycle: Number(plan.creditsPerCycle || 0),
+    creditsValidityDays: Number(plan.creditsValidityDays || 365),
+    creditsGrantLifetimeAccess: Boolean(plan.creditsGrantLifetimeAccess),
     metadata: plan.metadata || {},
   };
 }
@@ -585,7 +593,9 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
       updateData.users_limit = Math.max(nextUsersLimit, Number(nextPlan.includedUsers || 1));
       updateData.profiles_limit = updateData.users_limit;
       updateData.included_profiles = Number(nextPlan.includedUsers || 1);
-      updateData.max_profiles = Number(nextPlan.slug === 'family' ? 10 : updateData.users_limit);
+      updateData.max_profiles = nextPlan.maxProfiles != null
+        ? Number(nextPlan.maxProfiles)
+        : Math.max(updateData.users_limit, Number(nextPlan.includedUsers || 1));
       updateData.amount = toMajorAmount(nextAmountCents);
       updateData.currency = nextPlan.currency;
 
@@ -629,6 +639,82 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
     .single();
 
   if (error) throw error;
+
+  // Grant credits for the new cycle (idempotent: skips if already granted for current period).
+  try {
+    await grantCreditsForCycle(data);
+  } catch (creditErr) {
+    console.warn('grantCreditsForCycle failed:', creditErr?.message || creditErr);
+  }
+
+  return data;
+}
+
+/**
+ * Grant credits for the current cycle of an active subscription.
+ * Idempotent: skips if a credit row was already granted for this period.
+ * Quantity = creditsPerCycle * users_limit (1 credit per profile for family plans).
+ * The credit row carries grants_lifetime_access from the plan snapshot.
+ */
+async function grantCreditsForCycle(subscription) {
+  if (!subscription || subscription.status !== 'ACTIVE') return null;
+
+  const snapshot = normalizeSnapshotPlan(subscription.plan_snapshot) || {};
+  const creditsPerCycle = Number(snapshot.creditsPerCycle || 0);
+  if (creditsPerCycle <= 0) return null;
+
+  const usersLimit = Number(subscription.users_limit || subscription.profiles_limit || 1);
+  const quantity = Math.max(1, creditsPerCycle * usersLimit);
+  const validityDays = Number(snapshot.creditsValidityDays || 365);
+  const grantsLifetime = Boolean(snapshot.creditsGrantLifetimeAccess);
+
+  const periodStart = subscription.current_period_start || new Date().toISOString();
+
+  // Idempotence: skip if already granted in this period.
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('bonus_credits')
+    .select('id')
+    .eq('subscription_id', subscription.id)
+    .eq('source', 'plan_immediate')
+    .gte('granted_at', periodStart)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingErr) {
+    console.warn('grantCreditsForCycle existence check failed:', existingErr.message);
+  }
+  if (existing) return null;
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
+
+  const { data, error } = await supabaseAdmin
+    .from('bonus_credits')
+    .insert({
+      user_id: subscription.user_id,
+      subscription_id: subscription.id,
+      bonus_type: 'flex',
+      quantity_total: quantity,
+      quantity_used: 0,
+      source: 'plan_immediate',
+      granted_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+      grants_lifetime_access: grantsLifetime,
+      metadata: {
+        plan_id: subscription.plan_id,
+        plan_slug: subscription.plan_type,
+        users_limit: usersLimit,
+        credits_per_cycle: creditsPerCycle,
+        cycle_start: periodStart,
+      },
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('grantCreditsForCycle insert error:', error);
+    return null;
+  }
   return data;
 }
 
@@ -964,6 +1050,7 @@ module.exports = {
   computeRenewalAmountForSubscription,
   toMajorAmount,
   applySuccessfulSubscriptionPayment,
+  grantCreditsForCycle,
   getActiveSubscriptionForMember,
   ensureOwnerMembership,
   applyExtraSeat,

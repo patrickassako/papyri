@@ -462,11 +462,24 @@ export default function SubscriptionPage() {
             </Stack>
           </Paper>
 
-          {/* Usage ring cards */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2, mb: 2.5 }}>
-            <RingCard title={t('subscription.textUnlocks')} value={`${textUsed}`} hint={`${textUsed} ${t('common.of')} ${textQuota} ${t('subscription.thisCycle')}`} pct={progressValue(textUsed, textQuota)} />
-            <RingCard title={isFamilyPlan ? t('subscription.activeProfiles') : t('subscription.activeDevices')} value={`${Math.min(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}`} hint={isFamilyPlan ? `${profileCount} ${t('subscription.activeProfiles')} ${t('common.of')} ${usersLimit}` : `${activeMembersCount} ${t('subscription.activeMembers')} ${t('common.of')} ${usersLimit}`} pct={progressValue(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)} />
-            <RingCard title={t('subscription.bonusCredits')} value={`${bonusAvailableTotal}`} hint={t('subscription.bonusCreditsRemaining')} pct={progressValue(bonusAvailableTotal, Math.max(1, usageData.bonus_quota || bonusAvailableTotal || 1))} />
+          {/* Usage ring cards — catalogue illimité, plus de quota texte/audio */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mb: 2.5 }}>
+            <RingCard
+              title={isFamilyPlan ? t('subscription.activeProfiles') : t('subscription.activeDevices')}
+              value={`${Math.min(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}`}
+              hint={isFamilyPlan ? `${profileCount} ${t('subscription.activeProfiles')} ${t('common.of')} ${usersLimit}` : `${activeMembersCount} ${t('subscription.activeMembers')} ${t('common.of')} ${usersLimit}`}
+              pct={progressValue(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}
+            />
+            <RingCard
+              title={t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}
+              value={`${bonusAvailableTotal}`}
+              hint={
+                subscription?.plan_snapshot?.creditsGrantLifetimeAccess
+                  ? t('subscription.creditsLifetimeHint', { defaultValue: 'Accès à vie au livre choisi' })
+                  : t('subscription.creditsBoundHint', { defaultValue: 'Accès tant qu\'abonné actif' })
+              }
+              pct={progressValue(bonusAvailableTotal, Math.max(1, bonusAvailableTotal || 1))}
+            />
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1.4fr' }, gap: 2 }}>
@@ -476,10 +489,14 @@ export default function SubscriptionPage() {
               <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
                 <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>{t('subscription.activePerks')}</Typography>
                 <Stack spacing={1.2}>
+                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.unlimitedCatalog', { defaultValue: 'Catalogue premium illimité' })}</Typography>
                   <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.discountPaidBooks')}: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.textQuota')}: <b>{textQuota}</b></Typography>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.audioQuota')}: <b>{audioQuota}</b></Typography>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.bonusAvailable')}: <b>{bonusAvailableTotal}</b></Typography>
+                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}: <b>{bonusAvailableTotal}</b>
+                    {subscription?.plan_snapshot?.creditsGrantLifetimeAccess
+                      ? ` · ${t('subscription.creditsLifetimeHint', { defaultValue: 'accès à vie' })}`
+                      : ` · ${t('subscription.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné' })}`
+                    }
+                  </Typography>
                   {isFamilyPlan ? (
                     <>
                       <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeProfiles')}: <b>{profileCount}</b></Typography>

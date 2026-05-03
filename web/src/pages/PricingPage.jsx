@@ -29,6 +29,7 @@ import {
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
+import CheckIcon from '@mui/icons-material/Check';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -60,26 +61,56 @@ function planCta(slug, t) {
 }
 
 function planFeatures(plan, formatMoney, t) {
-  const features = [
-    t('pricing.textBooksQuota', { n: plan.textQuotaPerUser || 0 }),
-    t('pricing.audioBooksQuota', { n: plan.audioQuotaPerUser || 0 }),
-    t('pricing.discountPaid', { n: plan.discountPercentPaidBooks || 0 }),
-    t('pricing.validity', { n: plan.durationDays || 30 }),
-  ];
+  const features = [];
 
+  // Catalogue illimité
   if ((plan.includedUsers || 1) > 1) {
-    features.unshift(t('pricing.includedUsers', { n: plan.includedUsers }));
-    features.push(t('pricing.extraUser', {
-      price: formatMoney(
-        plan.localizedExtraUserPriceCents ?? plan.extraUserPriceCents ?? 0,
-        plan.localizedCurrency ?? plan.currency,
-      ),
-    }));
+    features.push(t('pricing.includedUsers', { n: plan.includedUsers }));
+  }
+  features.push(t('pricing.unlimitedCatalog', { defaultValue: 'Catalogue premium illimité' }));
+  features.push(t('pricing.offlineDownload', { defaultValue: 'Téléchargement hors-ligne' }));
+
+  // Crédits
+  const creditsPerCycle = Number(plan.creditsPerCycle || 0);
+  if (creditsPerCycle > 0) {
+    const total = creditsPerCycle * (plan.includedUsers || 1);
+    const lifetime = Boolean(plan.creditsGrantLifetimeAccess);
+    if (lifetime) {
+      features.push(t('pricing.creditsLifetime', {
+        n: total,
+        defaultValue: total > 1
+          ? `${total} crédits valables 12 mois — accès à vie au livre choisi`
+          : `${total} crédit valable 12 mois — accès à vie au livre choisi`,
+      }));
+    } else {
+      features.push(t('pricing.creditsSubscriptionBound', {
+        n: total,
+        defaultValue: total > 1
+          ? `${total} crédits valables 12 mois — accès tant qu'abonné`
+          : `${total} crédit valable 12 mois — accès tant qu'abonné`,
+      }));
+    }
   }
 
-  if (plan.bonusQuantityPerUser > 0) {
-    const trigger = plan.bonusTrigger === 'immediate' ? t('pricing.bonusImmediate') : t('pricing.bonusOnQuota');
-    features.push(`${plan.bonusQuantityPerUser} bonus (${plan.bonusType}) - ${trigger}`);
+  // Réduction sur les livres payants
+  features.push(t('pricing.discountPaid', { n: plan.discountPercentPaidBooks || 0 }));
+
+  // Validité du cycle
+  features.push(t('pricing.validity', { n: plan.durationDays || 30 }));
+
+  // Famille : tarif profil supplémentaire
+  if ((plan.includedUsers || 1) > 1) {
+    const extraCents = plan.localizedExtraProfilePriceCents
+      ?? plan.extraProfilePriceCents
+      ?? plan.localizedExtraUserPriceCents
+      ?? plan.extraUserPriceCents
+      ?? 0;
+    if (extraCents > 0) {
+      features.push(t('pricing.extraProfile', {
+        price: formatMoney(extraCents, plan.localizedCurrency ?? plan.currency),
+        defaultValue: `+${formatMoney(extraCents, plan.localizedCurrency ?? plan.currency)} par profil supplémentaire`,
+      }));
+    }
   }
 
   return features;
@@ -96,6 +127,15 @@ function detectBillingCycle(plan) {
 }
 
 function getPlanFamilyKey(plan) {
+  // Prefer metadata.tier when available (new schema): 'solo' | 'solo-premium' | 'family'.
+  // Fallback: strip cycle suffix from slug.
+  const tier = String(plan?.metadata?.tier || '').toLowerCase();
+  if (tier) {
+    // Map new tiers to legacy keys used across the page (badge/CTA branching).
+    if (tier === 'solo-premium') return 'personal';   // Recommended/highlighted plan
+    if (tier === 'solo') return 'personal-slow';
+    return tier; // 'family' stays 'family'
+  }
   const slug = String(plan.slug || '').toLowerCase();
   return slug
     .replace(/-annual$|-yearly$|-monthly$/g, '')
@@ -172,16 +212,19 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
     : (frontendLocalized ? localCurrency : (plan.currency || 'EUR'));
 
   const basePriceCentsEUR = Number(plan.basePriceCents || 0);
-  const extraUserPriceCentsEUR = Number(plan.extraUserPriceCents || 0);
+  // Prefer extra_profile_price_cents (new schema), fallback to legacy extra_user_price_cents.
+  const extraUnitCentsEUR = Number(plan.extraProfilePriceCents || plan.extraUserPriceCents || 0);
+  const localizedExtraUnitCents = Number(plan.localizedExtraProfilePriceCents || plan.localizedExtraUserPriceCents || 0);
 
   const basePriceCents = backendLocalized
     ? Number(plan.localizedPriceCents || 0)
     : (frontendLocalized && convertFromEUR ? convertFromEUR(basePriceCentsEUR) : basePriceCentsEUR);
 
   const extraUserPriceCents = backendLocalized
-    ? Number(plan.localizedExtraUserPriceCents || 0)
-    : (frontendLocalized && convertFromEUR ? convertFromEUR(extraUserPriceCentsEUR) : extraUserPriceCentsEUR);
+    ? localizedExtraUnitCents
+    : (frontendLocalized && convertFromEUR ? convertFromEUR(extraUnitCentsEUR) : extraUnitCentsEUR);
 
+  const familyMaxProfiles = Number(plan.maxProfiles || MAX_FAMILY_MEMBERS);
   const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
   const computedPriceCents = basePriceCents + extraMembers * extraUserPriceCents;
   const formatDisplayMoney = React.useCallback(
@@ -230,7 +273,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
         <MemberSelector
           count={membersCount}
           min={minMembers}
-          max={MAX_FAMILY_MEMBERS}
+          max={familyMaxProfiles}
           onChange={onMembersCountChange}
         />
       )}
@@ -558,14 +601,18 @@ export default function PricingPage() {
       value: (p) => String(p.includedUsers || 1),
     },
     {
-      key: 'textQuota',
-      label: t('pricing.textBooksQuota', { n: '' }),
-      value: (p) => String(p.textQuotaPerUser || 0),
+      key: 'unlimitedCatalog',
+      label: t('pricing.unlimitedCatalog', { defaultValue: 'Catalogue illimité' }),
+      value: () => <CheckIcon sx={{ color: primary }} />,
     },
     {
-      key: 'audioQuota',
-      label: t('pricing.audioBooksQuota', { n: '' }),
-      value: (p) => String(p.audioQuotaPerUser || 0),
+      key: 'credits',
+      label: t('pricing.creditsLabel', { defaultValue: 'Crédits / cycle' }),
+      value: (p) => {
+        const total = Number(p.creditsPerCycle || 0) * Number(p.includedUsers || 1);
+        if (total <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
+        return total + (p.creditsGrantLifetimeAccess ? ' (à vie)' : '');
+      },
     },
     {
       key: 'discount',
@@ -573,13 +620,15 @@ export default function PricingPage() {
       value: (p) => `${p.discountPercentPaidBooks || 0}%`,
     },
     {
-      key: 'extraUser',
-      label: t('pricing.extraUser', { price: '' }),
+      key: 'extraProfile',
+      label: t('pricing.extraProfileLabel', { defaultValue: 'Profil supplémentaire' }),
       value: (p) => {
-        if (Number(p.extraUserPriceCents || 0) <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
+        const extra = Number(p.extraProfilePriceCents || p.extraUserPriceCents || 0);
+        if (extra <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
+        if (p.localizedExtraProfilePriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraProfilePriceCents, p.localizedCurrency);
         if (p.localizedExtraUserPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraUserPriceCents, p.localizedCurrency);
-        if (isFrontendLocalized) return formatLocalPrice(p.extraUserPriceCents);
-        return formatMinorUnits(p.extraUserPriceCents, p.currency || 'EUR');
+        if (isFrontendLocalized) return formatLocalPrice(extra);
+        return formatMinorUnits(extra, p.currency || 'EUR');
       },
     },
   ];

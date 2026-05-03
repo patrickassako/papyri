@@ -56,6 +56,7 @@ async function getPlans(req, res) {
         localizedSymbol: zoneCurrency.symbol,
         localizedPriceCents: Math.round((plan.basePriceCents || 0) * zoneCurrency.rateToCent),
         localizedExtraUserPriceCents: Math.round((plan.extraUserPriceCents || 0) * zoneCurrency.rateToCent),
+        localizedExtraProfilePriceCents: Math.round((plan.extraProfilePriceCents || 0) * zoneCurrency.rateToCent),
       };
     });
 
@@ -137,7 +138,7 @@ async function getAllMySubscriptions(req, res) {
 async function initiateCheckout(req, res) {
   try {
     const userId = req.user.id;
-    const { planCode, planId, usersLimit, provider = 'flutterwave', promoCode } = req.body;
+    const { planCode, planId, usersLimit, provider = 'flutterwave', promoCode, source } = req.body;
     console.log('[subscriptions.checkout] start', { userId, planCode, planId, usersLimit, provider, promoCode: promoCode || null });
 
     // Validate plan
@@ -250,6 +251,8 @@ async function initiateCheckout(req, res) {
     const redirectBaseUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(requestOrigin || ''))
       ? requestOrigin
       : undefined;
+    // For Android mobile: redirect to custom scheme so the app intercepts the callback
+    const mobileCallbackBase = source === 'mobile' ? 'papyri://payment/callback' : null;
 
     // ---- Flutterwave path ----
     if (resolvedProvider === 'flutterwave') {
@@ -263,6 +266,7 @@ async function initiateCheckout(req, res) {
         usersLimit: subscription.users_limit,
         userId,
         redirectBaseUrl,
+        overrideRedirectUrl: mobileCallbackBase,
       });
 
       await subscriptionsService.createPayment({
@@ -340,6 +344,7 @@ async function initiateCheckout(req, res) {
       stripeCustomerId,
       paymentType: 'subscription_initial',
       redirectBaseUrl,
+      mobileCallbackBase,
     });
 
     await subscriptionsService.createPayment({
@@ -1094,6 +1099,8 @@ async function getMyUsage(req, res) {
       }, {});
     }
 
+    const bonusAvailableTotal = Object.values(bonusSummary).reduce((s, n) => s + Number(n || 0), 0);
+
     return res.status(200).json({
       success: true,
       data: {
@@ -1103,6 +1110,8 @@ async function getMyUsage(req, res) {
         cycle,
         usage,
         bonuses: bonusSummary,
+        bonusAvailableTotal,
+        bonus_available_total: bonusAvailableTotal,
         active_profile: familyContext?.profile || null,
       },
     });
