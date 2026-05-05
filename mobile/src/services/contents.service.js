@@ -81,23 +81,49 @@ export const contentsService = {
    * @param {string} id - ID du contenu
    * @returns {Promise<Object>}
    */
-  async unlockContent(id) {
+  async unlockContent(id, { provider, useCredit } = {}) {
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        ...(provider ? { provider } : {}),
+        ...(useCredit !== undefined ? { useCredit } : {}),
+      }),
     });
 
     const payload = await response.json().catch(() => ({}));
+
+    // 402 = paiement requis (réponse normale du flow)
+    if (response.status === 402) {
+      return {
+        success: false,
+        paymentRequired: true,
+        data: payload?.data || {},
+        message: payload?.error?.message || payload?.message || 'Paiement requis.',
+      };
+    }
+
     if (!response.ok) {
       const error = new Error(payload?.error?.message || `HTTP ${response.status}`);
       error.response = { status: response.status, data: payload };
       throw error;
     }
 
-    return payload;
+    return { success: true, paymentRequired: false, ...payload };
+  },
+
+  /**
+   * Liste les contenus déverrouillés de l'utilisateur (crédit + paiement + admin)
+   * Scoped au profil actif via le header X-Profile-Id automatiquement ajouté par authFetch
+   * @returns {Promise<Array>}
+   */
+  async getMyUnlocks() {
+    const response = await authFetch(`${API_BASE_URL}/api/contents/unlocks/me`);
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data?.data) ? data.data : [];
   },
 
   /**

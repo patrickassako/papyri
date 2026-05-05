@@ -15,9 +15,11 @@ import {
   setPin, removePin, AVATAR_COLORS,
 } from '../services/family.service';
 
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
+
 const tokens = require('../config/tokens');
 
-export default function FamilyScreen({ navigation }) {
+function FamilyScreenInner({ navigation }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -366,6 +368,14 @@ export default function FamilyScreen({ navigation }) {
         />
       )}
     </SafeAreaView>
+  );
+}
+
+export default function FamilyScreen(props) {
+  return (
+    <OwnerProfileGuard>
+      <FamilyScreenInner {...props} />
+    </OwnerProfileGuard>
   );
 }
 

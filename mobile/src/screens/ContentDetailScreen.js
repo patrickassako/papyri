@@ -9,11 +9,13 @@ import {
   Alert,
   Linking,
   Share,
+  Modal,
 } from 'react-native';
 import { Text, ActivityIndicator, ProgressBar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { contentsService } from '../services/contents.service';
 import BookCover from '../components/BookCover';
 import { subscriptionService } from '../services/subscription.service';
@@ -64,6 +66,7 @@ function mapContentPayload(raw) {
 
 export default function ContentDetailScreen({ route, navigation }) {
   const { contentId } = route.params || {};
+  const { t } = useTranslation();
 
   const [content, setContent] = useState(null);
   const [access, setAccess] = useState(null);
@@ -85,6 +88,9 @@ export default function ContentDetailScreen({ route, navigation }) {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadSize, setDownloadSize] = useState(null);
   const [downloadExpiry, setDownloadExpiry] = useState(null);
+
+  // Modal de choix : crédit / Stripe / Flutterwave
+  const [paymentModal, setPaymentModal] = useState({ open: false, busy: '' });
 
   // Détecter la devise de l'utilisateur au montage (ipapi.co → fuseau → locale → EUR)
   useEffect(() => {
@@ -111,7 +117,7 @@ export default function ContentDetailScreen({ route, navigation }) {
         setIsFavorite(true);
       }
     } catch (err) {
-      Alert.alert('Erreur', err.message || 'Impossible de modifier les favoris');
+      Alert.alert(t('common.error'), err.message || t('contentDetail.favoritesError'));
     } finally {
       setFavoriteLoading(false);
     }
@@ -179,7 +185,7 @@ export default function ContentDetailScreen({ route, navigation }) {
             const loaded = await loadFromOffline();
             if (loaded) return;
           }
-          throw contentResult.reason || new Error('Impossible de charger le contenu.');
+          throw contentResult.reason || new Error(t('contentDetail.loadError'));
         }
 
         const normalized = mapContentPayload(contentResult.value);
@@ -201,9 +207,9 @@ export default function ContentDetailScreen({ route, navigation }) {
         if (isNetworkError(err)) {
           const loaded = await loadFromOffline();
           if (loaded) return;
-          if (alive) setError('Pas de connexion internet et ce contenu n\'est pas disponible hors-ligne.');
+          if (alive) setError(t('contentDetail.offlineLoadError'));
         } else {
-          if (alive) setError('Impossible de charger ce contenu.');
+          if (alive) setError(t('contentDetail.loadError'));
         }
       } finally {
         if (alive) setLoading(false);
@@ -213,7 +219,7 @@ export default function ContentDetailScreen({ route, navigation }) {
     if (contentId) {
       load();
     } else {
-      setError('Contenu introuvable.');
+      setError(t('contentDetail.notFound'));
       setLoading(false);
     }
 
@@ -285,7 +291,7 @@ export default function ContentDetailScreen({ route, navigation }) {
   }, [isAudiobook, content?.chapters]);
 
   const handleSubscribe = () => {
-    Alert.alert('Abonnement requis', 'Ouvre le catalogue pour choisir une offre.');
+    Alert.alert(t('contentDetail.subscriptionRequiredTitle'), t('contentDetail.subscriptionRequiredBody'));
     navigation.navigate('Catalog');
   };
 
@@ -319,64 +325,93 @@ export default function ContentDetailScreen({ route, navigation }) {
   const handleLockedPrimaryAction = async () => {
     const denialCode = access?.denial?.code;
     const canPay = access?.is_purchasable === true;
+    const accessType = access?.access_type || content?.access_type || 'subscription';
 
+    // Pas d'abo et catalogue subscription-only → router vers Pricing
     if (denialCode === 'NO_ACTIVE_SUBSCRIPTION' && !canPay) {
       handleSubscribe();
       return;
     }
 
+    // Livre payant ou hybride → ouvrir le modal (crédit / Stripe / Flutterwave)
+    const isPayablePath = accessType === 'paid' || accessType === 'subscription_or_paid' || canPay;
+    if (isPayablePath) {
+      setPaymentModal({ open: true, busy: '' });
+      return;
+    }
+
+    // Catalogue subscription pur avec abo actif → unlock direct
     try {
       setUnlocking(true);
-      const payload = await contentsService.unlockContent(content.id || contentId);
-      const unlockData = payload?.data || {};
-      const source = unlockData?.source;
-
-      if (source === 'quota') {
-        Alert.alert('Contenu débloqué', 'Débloqué via votre quota abonnement.');
-      } else if (source === 'bonus') {
-        Alert.alert('Contenu débloqué', 'Débloqué via vos crédits bonus.');
-      } else {
-        Alert.alert('Contenu débloqué', 'Accès au contenu accordé.');
+      const result = await contentsService.unlockContent(content.id || contentId);
+      if (result?.success) {
+        Alert.alert(t('contentDetail.contentUnlocked'), t('contentDetail.accessGrantedShort'));
+        await refreshAccessAndUsage();
       }
-
-      await refreshAccessAndUsage();
     } catch (err) {
       const status = err?.response?.status;
       const data = err?.response?.data || {};
-      const message = data?.error?.message || 'Impossible de débloquer ce contenu.';
-
-      if (status === 402) {
-        const paymentLink = data?.data?.payment?.payment_link;
-        if (paymentLink) {
-          Alert.alert(
-            'Paiement requis',
-            message,
-            [
-              { text: 'Annuler', style: 'cancel' },
-              {
-                text: 'Payer',
-                onPress: async () => {
-                  try {
-                    await Linking.openURL(paymentLink);
-                  } catch (linkError) {
-                    Alert.alert('Erreur', 'Impossible d’ouvrir le lien de paiement.');
-                  }
-                },
-              },
-            ],
-          );
-          return;
-        }
-      }
-
+      const message = data?.error?.message || t('contentDetail.unlockFailed');
       if (status === 403 && data?.error?.code === 'UNLOCK_NOT_ALLOWED') {
         handleSubscribe();
         return;
       }
-
-      Alert.alert('Accès refusé', message);
+      Alert.alert(t('contentDetail.accessDenied'), message);
     } finally {
       setUnlocking(false);
+    }
+  };
+
+  // Modal handlers : utiliser un crédit (gratuit, débloque immédiatement)
+  const handleUseCredit = async () => {
+    setPaymentModal((s) => ({ ...s, busy: 'credit' }));
+    try {
+      const result = await contentsService.unlockContent(content.id || contentId, { useCredit: true });
+      if (result?.success && !result?.paymentRequired) {
+        const lifetime = result?.data?.lifetime_access !== false;
+        setPaymentModal({ open: false, busy: '' });
+        Alert.alert(
+          t('contentDetail.contentUnlocked'),
+          lifetime
+            ? t('contentDetail.creditUsedLifetime')
+            : t('contentDetail.creditUsedSubscription')
+        );
+        await refreshAccessAndUsage();
+      } else {
+        // Plus de crédit dispo (race) → l'utilisateur doit payer
+        setPaymentModal((s) => ({ ...s, busy: '' }));
+        Alert.alert(t('contentDetail.noCreditTitle'), t('contentDetail.noCreditBody'));
+      }
+    } catch (err) {
+      setPaymentModal((s) => ({ ...s, busy: '' }));
+      Alert.alert(t('common.error'), err?.message || t('contentDetail.creditUseFailed'));
+    }
+  };
+
+  // Modal handlers : payer via Stripe ou Flutterwave (force useCredit: false)
+  const handleChooseProvider = async (provider) => {
+    setPaymentModal((s) => ({ ...s, busy: provider }));
+    try {
+      const result = await contentsService.unlockContent(content.id || contentId, {
+        provider,
+        useCredit: false,
+      });
+      if (result?.paymentRequired) {
+        const paymentLink = result?.data?.payment?.payment_link;
+        if (paymentLink) {
+          setPaymentModal({ open: false, busy: '' });
+          await Linking.openURL(paymentLink);
+        } else {
+          throw new Error(t('contentDetail.paymentLinkUnavailable'));
+        }
+      } else if (result?.success) {
+        // Inattendu mais on gère
+        setPaymentModal({ open: false, busy: '' });
+        await refreshAccessAndUsage();
+      }
+    } catch (err) {
+      setPaymentModal((s) => ({ ...s, busy: '' }));
+      Alert.alert(t('contentDetail.paymentError'), err?.message || t('contentDetail.paymentInitFailed'));
     }
   };
 
@@ -536,6 +571,10 @@ export default function ContentDetailScreen({ route, navigation }) {
   const remainingQuota = hasQuota ? Math.max(0, quotaCount - (Number.isFinite(usedCount) ? usedCount : 0)) : 0;
   const bonusRemaining = Math.max(0, Number(isAudiobook ? bonuses?.audio || 0 : bonuses?.text || 0) + Number(bonuses?.flex || 0));
 
+  // Crédits disponibles pour le profil actif (source de vérité backend)
+  const availableCredits = Number(usageData?.bonusAvailableTotal ?? usageData?.bonus_available_total ?? bonusRemaining ?? 0);
+  const creditsLifetime = Boolean(usageData?.subscription?.plan_snapshot?.creditsGrantLifetimeAccess);
+
   // ── Access type — mirror web logic exactly ──────────────────────────────
   // Backend returns: 'subscription' | 'paid' | 'subscription_or_paid'
   const accessType = access?.access_type || content?.access_type || 'subscription';
@@ -562,21 +601,21 @@ export default function ContentDetailScreen({ route, navigation }) {
 
   // ── Primary action label — mirror web ──────────────────────────────────
   const primaryActionLabel = (() => {
-    if (canOpenContent) return isAudiobook ? 'Écouter' : 'Lire maintenant';
+    if (canOpenContent) return isAudiobook ? t('contentDetail.primaryListen') : t('contentDetail.primaryRead');
     if (hasActiveSubscription) {
       if (accessType === 'paid') {
         return basePriceCents > 0
-          ? `Acheter · ${formatMoney(reducedPriceCents || basePriceCents, pricingCurrency)}`
-          : 'Acheter';
+          ? t('contentDetail.primaryBuyWithPrice', { price: formatMoney(reducedPriceCents || basePriceCents, pricingCurrency) })
+          : t('contentDetail.primaryBuy');
       }
-      return 'Débloquer';
+      return t('contentDetail.primaryUnlock');
     }
     if (isPaidBook) {
       return basePriceCents > 0
-        ? `Acheter · ${formatMoney(basePriceCents, pricingCurrency)}`
-        : 'Acheter';
+        ? t('contentDetail.primaryBuyWithPrice', { price: formatMoney(basePriceCents, pricingCurrency) })
+        : t('contentDetail.primaryBuy');
     }
-    return "S'abonner";
+    return t('contentDetail.primarySubscribe');
   })();
 
   if (loading) {
@@ -598,7 +637,7 @@ export default function ContentDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error || 'Contenu introuvable'}</Text>
+          <Text style={styles.errorText}>{error || t('contentDetail.notFound')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -615,7 +654,7 @@ export default function ContentDetailScreen({ route, navigation }) {
           {hasActiveSubscription && (
             <View style={styles.premiumPill}>
               <MaterialCommunityIcons name="check-decagram" size={13} color="#B5651D" />
-              <Text style={styles.premiumPillText}>ABONNÉ</Text>
+              <Text style={styles.premiumPillText}>{t('contentDetail.subscribed')}</Text>
             </View>
           )}
           <TouchableOpacity style={styles.iconButton} onPress={toggleFavorite} disabled={favoriteLoading}>
@@ -634,11 +673,11 @@ export default function ContentDetailScreen({ route, navigation }) {
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => Alert.alert(
-                'Options',
+                t('contentDetail.options'),
                 null,
                 [
-                  { text: 'Signaler un problème', onPress: handleReport },
-                  { text: 'Annuler', style: 'cancel' },
+                  { text: t('contentDetail.reportProblem'), onPress: handleReport },
+                  { text: t('common.cancel'), style: 'cancel' },
                 ]
               )}
             >
@@ -674,8 +713,8 @@ export default function ContentDetailScreen({ route, navigation }) {
         </View>
 
         <View style={styles.identityArea}>
-          <Text style={styles.title}>{content.title || 'Titre inconnu'}</Text>
-          <Text style={styles.author}>{content.author || 'Auteur inconnu'}</Text>
+          <Text style={styles.title}>{content.title || t('common.unknownTitle')}</Text>
+          <Text style={styles.author}>{content.author || t('common.unknownAuthor')}</Text>
 
           {!isAudiobook && ratingValue > 0 && (
             <View style={styles.ratingRow}>
@@ -738,28 +777,20 @@ export default function ContentDetailScreen({ route, navigation }) {
             <View style={styles.accessCardHeader}>
               <MaterialCommunityIcons name="check-decagram" size={15} color="#1F7A39" />
               <Text style={[styles.accessCardTitle, { color: '#1F7A39' }]}>
-                {isPaidBook && !isSubscriptionBook ? 'Contenu acheté' : 'Accès accordé'}
+                {isPaidBook && !isSubscriptionBook ? t('contentDetail.purchasedContent') : t('contentDetail.accessGranted')}
               </Text>
             </View>
           ) : hasActiveSubscription ? (
             <>
               <View style={styles.accessCardHeader}>
                 <MaterialCommunityIcons name="check-decagram" size={15} color="#B5651D" />
-                <Text style={styles.accessCardTitle}>Abonnement actif</Text>
+                <Text style={styles.accessCardTitle}>{t('contentDetail.activeSubscription')}</Text>
               </View>
               <Text style={styles.accessCardBody}>
                 {isSubscriptionBook
-                  ? 'Débloquez ce livre avec votre abonnement pour consommer votre quota.'
-                  : 'Vous pouvez acheter ce livre avec remise abonnement.'}
+                  ? t('contentDetail.readingIncluded')
+                  : t('contentDetail.creditOrBuyDiscount')}
               </Text>
-              {isSubscriptionBook && hasQuota ? (
-                <Text style={styles.accessCardMeta}>
-                  {'Quota '}{isAudiobook ? 'audio' : 'texte'}{' : '}
-                  <Text style={{ fontWeight: '700' }}>{usedCount}</Text>
-                  {' / '}{quotaCount}
-                  {'  ·  '}{remainingQuota}{' restant'}{remainingQuota > 1 ? 's' : ''}
-                </Text>
-              ) : null}
               {isPaidBook && basePriceCents > 0 ? (
                 discountPercent > 0 && reducedPriceCents < basePriceCents ? (
                   <View style={styles.priceRow}>
@@ -771,7 +802,7 @@ export default function ContentDetailScreen({ route, navigation }) {
                   </View>
                 ) : (
                   <Text style={styles.accessCardMeta}>
-                    {'Prix : '}<Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                    {t('contentDetail.priceLabel')}<Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
                   </Text>
                 )
               ) : null}
@@ -781,17 +812,17 @@ export default function ContentDetailScreen({ route, navigation }) {
               <View style={styles.accessCardHeader}>
                 <MaterialCommunityIcons name="crown-outline" size={15} color="#B5651D" />
                 <Text style={styles.accessCardTitle}>
-                  {subscription ? 'Abonnement inactif' : 'Pas encore abonné'}
+                  {subscription ? t('contentDetail.inactiveSubscription') : t('contentDetail.notSubscribed')}
                 </Text>
               </View>
               <Text style={styles.accessCardBody}>
                 {isSubscriptionBook
-                  ? "Abonnez-vous pour accéder à ce livre et profiter de votre quota de lecture."
-                  : "Abonnez-vous pour bénéficier d'une réduction sur les livres payants."}
+                  ? t('contentDetail.subscribePromptSubscription')
+                  : t('contentDetail.subscribePromptPaid')}
               </Text>
               {isPaidBook && basePriceCents > 0 ? (
                 <Text style={styles.accessCardMeta}>
-                  {'Achat sans réduction : '}
+                  {t('contentDetail.buyWithoutDiscount')}
                   <Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
                 </Text>
               ) : null}
@@ -815,7 +846,7 @@ export default function ContentDetailScreen({ route, navigation }) {
               color="#fff"
             />
             <Text style={styles.primaryButtonText}>
-              {unlocking ? 'Déblocage...' : primaryActionLabel}
+              {unlocking ? t('contentDetail.primaryUnlocking') : primaryActionLabel}
             </Text>
           </TouchableOpacity>
 
@@ -844,19 +875,19 @@ export default function ContentDetailScreen({ route, navigation }) {
                       ? `${Math.round(downloadProgress * 100)}%`
                       : downloadState === 'downloaded'
                         ? [
-                            downloadSize ? `Hors-ligne · ${formatBytes(downloadSize)}` : 'Hors-ligne',
+                            downloadSize ? t('contentDetail.downloadOfflineSize', { size: formatBytes(downloadSize) }) : t('contentDetail.downloadOffline'),
                             downloadExpiry
-                              ? ` · exp. ${downloadExpiry.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}`
+                              ? t('contentDetail.downloadExpiry', { date: downloadExpiry.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) })
                               : '',
                           ].join('')
-                        : 'Télécharger'}
+                        : t('contentDetail.downloadAction')}
                   </Text>
                 </TouchableOpacity>
 
                 {isAudiobook && (
                   <TouchableOpacity style={styles.secondaryButton} onPress={handlePlaylist}>
                     <MaterialCommunityIcons name="playlist-plus" size={18} color="#B5651D" />
-                    <Text style={styles.secondaryButtonText}>Playlist</Text>
+                    <Text style={styles.secondaryButtonText}>{t('contentDetail.playlist')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -881,20 +912,20 @@ export default function ContentDetailScreen({ route, navigation }) {
         {!canOpenContent && bonusRemaining > 0 && hasActiveSubscription && (
           <View style={styles.card}>
             <View style={styles.metaRow}>
-              <Text style={styles.metaKey}>Bonus disponibles</Text>
+              <Text style={styles.metaKey}>{t('contentDetail.bonusAvailable')}</Text>
               <Text style={styles.metaValue}>{bonusRemaining}</Text>
             </View>
           </View>
         )}
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{isAudiobook ? 'Synopsis' : 'À propos de ce livre'}</Text>
+          <Text style={styles.sectionTitle}>{isAudiobook ? t('contentDetail.synopsis') : t('contentDetail.aboutBook')}</Text>
           <View>
             <Text
               style={[styles.description, isLocked && !descriptionExpanded ? styles.descriptionLocked : null]}
               numberOfLines={descriptionExpanded ? undefined : (isLocked ? 5 : 4)}
             >
-              {content.description || 'Description indisponible.'}
+              {content.description || t('contentDetail.noDescription')}
             </Text>
             {isLocked && !descriptionExpanded && (
               <LinearGradient
@@ -905,7 +936,7 @@ export default function ContentDetailScreen({ route, navigation }) {
             )}
           </View>
           <TouchableOpacity onPress={() => setDescriptionExpanded((v) => !v)}>
-            <Text style={styles.linkText}>{descriptionExpanded ? 'Voir moins' : 'Voir plus'}</Text>
+            <Text style={styles.linkText}>{descriptionExpanded ? t('contentDetail.seeLess') : t('contentDetail.seeMore')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -916,12 +947,12 @@ export default function ContentDetailScreen({ route, navigation }) {
                 <MaterialCommunityIcons name="account-voice" size={24} color="#867465" />
               </View>
               <View style={styles.narratorMeta}>
-                <Text style={styles.narratorLabel}>Narration</Text>
-                <Text style={styles.narratorName}>{content.narrator || 'Narrateur inconnu'}</Text>
+                <Text style={styles.narratorLabel}>{t('contentDetail.narration')}</Text>
+                <Text style={styles.narratorName}>{content.narrator || t('contentDetail.unknownNarrator')}</Text>
               </View>
             </View>
             <Text style={styles.narratorQuote}>
-              {content.narrator_bio || 'Une narration immersive pour une expérience d\'écoute complète.'}
+              {content.narrator_bio || t('contentDetail.narratorDefaultBio')}
             </Text>
           </View>
         )}
@@ -929,8 +960,8 @@ export default function ContentDetailScreen({ route, navigation }) {
         {isAudiobook && !isLocked && (
           <View style={styles.card}>
             <View style={styles.chaptersHeader}>
-              <Text style={styles.sectionTitle}>Chapitres</Text>
-              <Text style={styles.chapterCount}>{chapterItems.length} chapitres</Text>
+              <Text style={styles.sectionTitle}>{t('contentDetail.chapters')}</Text>
+              <Text style={styles.chapterCount}>{t('contentDetail.chaptersCount', { n: chapterItems.length })}</Text>
             </View>
             {chapterItems.map((chapter, index) => (
               <TouchableOpacity
@@ -951,22 +982,22 @@ export default function ContentDetailScreen({ route, navigation }) {
 
         {!isAudiobook && !isLocked && (content.publisher || content.published_at || content.isbn) && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Informations techniques</Text>
+            <Text style={styles.sectionTitle}>{t('contentDetail.technicalInfo')}</Text>
             {!!content.publisher && (
               <View style={styles.metaRow}>
-                <Text style={styles.metaKey}>Éditeur</Text>
+                <Text style={styles.metaKey}>{t('contentDetail.publisher')}</Text>
                 <Text style={styles.metaValue}>{content.publisher}</Text>
               </View>
             )}
             {!!content.published_at && (
               <View style={styles.metaRow}>
-                <Text style={styles.metaKey}>Date de parution</Text>
+                <Text style={styles.metaKey}>{t('contentDetail.publishDate')}</Text>
                 <Text style={styles.metaValue}>{formatYear(content.published_at)}</Text>
               </View>
             )}
             {!!content.isbn && (
               <View style={styles.metaRow}>
-                <Text style={styles.metaKey}>ISBN</Text>
+                <Text style={styles.metaKey}>{t('contentDetail.isbn')}</Text>
                 <Text style={styles.metaValue}>{content.isbn}</Text>
               </View>
             )}
@@ -977,19 +1008,19 @@ export default function ContentDetailScreen({ route, navigation }) {
           <View style={styles.lockedStatsCard}>
             {!!content.page_count && (
               <View style={styles.lockedStatCell}>
-                <Text style={styles.lockedStatLabel}>Pages</Text>
+                <Text style={styles.lockedStatLabel}>{t('contentDetail.pages')}</Text>
                 <Text style={styles.lockedStatValue}>{content.page_count}</Text>
               </View>
             )}
             {!!content.duration_seconds && (
               <View style={styles.lockedStatCell}>
-                <Text style={styles.lockedStatLabel}>Durée</Text>
+                <Text style={styles.lockedStatLabel}>{t('contentDetail.duration')}</Text>
                 <Text style={styles.lockedStatValue}>{formatDuration(content.duration_seconds)}</Text>
               </View>
             )}
             {!!content.language && (
               <View style={styles.lockedStatCell}>
-                <Text style={styles.lockedStatLabel}>Langue</Text>
+                <Text style={styles.lockedStatLabel}>{t('contentDetail.language')}</Text>
                 <Text style={styles.lockedStatValue}>{String(content.language).toUpperCase()}</Text>
               </View>
             )}
@@ -997,21 +1028,21 @@ export default function ContentDetailScreen({ route, navigation }) {
         )}
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Options</Text>
+          <Text style={styles.sectionTitle}>{t('contentDetail.options')}</Text>
           <TouchableOpacity style={styles.optionRow} onPress={handleShare}>
             <MaterialCommunityIcons name="share-variant-outline" size={18} color="#B5651D" />
-            <Text style={styles.optionText}>Partager l&apos;œuvre</Text>
+            <Text style={styles.optionText}>{t('contentDetail.share')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.optionRow} onPress={handleReport}>
             <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#c44" />
-            <Text style={[styles.optionText, { color: '#c44' }]}>Signaler un problème</Text>
+            <Text style={[styles.optionText, { color: '#c44' }]}>{t('contentDetail.reportProblem')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Dans le même genre ── */}
         {recommendations.sameGenre.length > 0 && (
           <View style={styles.recSection}>
-            <Text style={styles.recTitle}>Dans le même genre</Text>
+            <Text style={styles.recTitle}>{t('contentDetail.recSameGenre')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recRow}>
               {recommendations.sameGenre.map((item) => (
                 <TouchableOpacity
@@ -1037,7 +1068,7 @@ export default function ContentDetailScreen({ route, navigation }) {
         {/* ── Vous aimerez aussi (même auteur) ── */}
         {recommendations.youllLike.length > 0 && (
           <View style={styles.recSection}>
-            <Text style={styles.recTitle}>Vous aimerez aussi</Text>
+            <Text style={styles.recTitle}>{t('contentDetail.recYoullLike')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recRow}>
               {recommendations.youllLike.map((item) => (
                 <TouchableOpacity
@@ -1060,6 +1091,99 @@ export default function ContentDetailScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
+
+      {/* Modal de choix : crédit / Stripe / Flutterwave */}
+      <Modal
+        visible={paymentModal.open}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !paymentModal.busy && setPaymentModal({ open: false, busy: '' })}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => !paymentModal.busy && setPaymentModal({ open: false, busy: '' })}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.sheetHandle} />
+
+            <Text style={styles.modalTitle}>
+              {access?.has_active_subscription && availableCredits > 0 ? t('contentDetail.modalUnlockBook') : t('contentDetail.modalChoosePayment')}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              {access?.has_active_subscription && availableCredits > 0
+                ? (availableCredits > 1
+                    ? t('contentDetail.modalCreditsHintMany', { n: availableCredits })
+                    : t('contentDetail.modalCreditsHintOne', { n: availableCredits }))
+                : t('contentDetail.modalChooseMethod')}
+            </Text>
+
+            {/* Bouton crédit (vert) — uniquement si abo actif et crédits dispo */}
+            {access?.has_active_subscription && availableCredits > 0 ? (
+              <TouchableOpacity
+                style={[styles.providerBtn, styles.providerBtnCredit, !!paymentModal.busy && styles.providerBtnDisabled]}
+                onPress={handleUseCredit}
+                disabled={!!paymentModal.busy}
+                activeOpacity={0.8}
+              >
+                {paymentModal.busy === 'credit'
+                  ? <ActivityIndicator size="small" color="#fff" style={styles.providerIcon} />
+                  : <Text style={[styles.providerIcon, { fontSize: 26 }]}>🎟️</Text>}
+                <View style={styles.providerInfo}>
+                  <Text style={styles.providerNameCredit}>
+                    {t('contentDetail.modalUseCredit', { n: availableCredits })}
+                  </Text>
+                  <Text style={styles.providerSubCredit}>
+                    {creditsLifetime ? t('contentDetail.modalCreditLifetime') : t('contentDetail.modalCreditSubscription')}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color="#fff" />
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.providerBtn, styles.providerBtnStripe, !!paymentModal.busy && styles.providerBtnDisabled]}
+              onPress={() => handleChooseProvider('stripe')}
+              disabled={!!paymentModal.busy}
+              activeOpacity={0.8}
+            >
+              {paymentModal.busy === 'stripe'
+                ? <ActivityIndicator size="small" color="#5469d4" style={styles.providerIcon} />
+                : <Text style={[styles.providerIcon, { fontSize: 26 }]}>💳</Text>}
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>{t('contentDetail.modalCard')}</Text>
+                <Text style={styles.providerSub}>{t('contentDetail.modalCardSub')}</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#c8c4c0" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.providerBtn, styles.providerBtnFw, !!paymentModal.busy && styles.providerBtnDisabled]}
+              onPress={() => handleChooseProvider('flutterwave')}
+              disabled={!!paymentModal.busy}
+              activeOpacity={0.8}
+            >
+              {paymentModal.busy === 'flutterwave'
+                ? <ActivityIndicator size="small" color="#f9a825" style={styles.providerIcon} />
+                : <Text style={[styles.providerIcon, { fontSize: 26 }]}>📱</Text>}
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>{t('contentDetail.modalMobileMoney')}</Text>
+                <Text style={styles.providerSub}>{t('contentDetail.modalMobileMoneySub')}</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#c8c4c0" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => !paymentModal.busy && setPaymentModal({ open: false, busy: '' })}
+              disabled={!!paymentModal.busy}
+            >
+              <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1586,4 +1710,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9c7e49',
   },
+
+  // Modal de paiement (crédit / Stripe / Flutterwave)
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingBottom: 34, paddingTop: 12,
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 16,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#171412', marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, color: '#8a7d73', marginBottom: 16 },
+
+  providerBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 14, borderWidth: 1.5,
+    padding: 14, marginTop: 10, gap: 12,
+  },
+  providerBtnCredit: { borderColor: '#1F7A39', backgroundColor: '#1F7A39' },
+  providerBtnStripe: { borderColor: '#5469d4', backgroundColor: '#f5f5ff' },
+  providerBtnFw: { borderColor: '#f9a825', backgroundColor: '#fffbf0' },
+  providerBtnDisabled: { opacity: 0.5 },
+  providerIcon: { width: 36, textAlign: 'center' },
+  providerInfo: { flex: 1 },
+  providerName: { fontSize: 15, fontWeight: '700', color: '#171412' },
+  providerNameCredit: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  providerSub: { fontSize: 12, color: '#8a7d73', marginTop: 2 },
+  providerSubCredit: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+
+  cancelBtn: {
+    marginTop: 12, height: 44, alignItems: 'center', justifyContent: 'center',
+  },
+  cancelBtnText: { color: '#8a7d73', fontWeight: '600', fontSize: 14 },
 });

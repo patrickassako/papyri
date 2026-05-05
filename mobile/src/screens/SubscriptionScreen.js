@@ -17,6 +17,7 @@ import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscriptionService } from '../services/subscription.service';
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
 
 const tokens = require('../config/tokens');
 const PENDING_KEY = '@papyri_pending_payment';
@@ -143,7 +144,7 @@ function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange })
 }
 
 /* ─── Écran principal ─────────────────────────────────────────── */
-export default function SubscriptionScreen({ navigation }) {
+function SubscriptionScreenInner({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -330,27 +331,31 @@ export default function SubscriptionScreen({ navigation }) {
               </Text>
             </View>
           </View>
-          <View style={styles.separator} />
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Plan</Text>
-            <Text style={styles.value}>{planName || '—'}</Text>
-          </View>
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Échéance</Text>
-            <Text style={styles.value}>{formatDate(subscription?.current_period_end || subscription?.expires_at)}</Text>
-          </View>
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Montant</Text>
-            <Text style={styles.value}>{formatAmount(subscription?.amount, subscription?.currency)}</Text>
-          </View>
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>Places</Text>
-            <Text style={styles.value}>{Number(subscription?.users_limit || 1)}</Text>
-          </View>
+          {hasSubscription ? (
+            <>
+              <View style={styles.separator} />
+              <View style={styles.rowBetween}>
+                <Text style={styles.label}>Plan</Text>
+                <Text style={styles.value}>{planName || '—'}</Text>
+              </View>
+              <View style={styles.rowBetween}>
+                <Text style={styles.label}>Échéance</Text>
+                <Text style={styles.value}>{formatDate(subscription?.current_period_end || subscription?.expires_at)}</Text>
+              </View>
+              <View style={styles.rowBetween}>
+                <Text style={styles.label}>Montant</Text>
+                <Text style={styles.value}>{formatAmount(subscription?.amount, subscription?.currency)}</Text>
+              </View>
+              <View style={styles.rowBetween}>
+                <Text style={styles.label}>Places</Text>
+                <Text style={styles.value}>{Number(subscription?.users_limit || 1)}</Text>
+              </View>
+            </>
+          ) : null}
         </View>
 
-        {/* Crédits */}
-        {hasSubscription ? (
+        {/* Crédits — uniquement si abo actif */}
+        {isActive ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Mes crédits</Text>
             <View style={styles.rowBetween}>
@@ -553,6 +558,14 @@ export default function SubscriptionScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+export default function SubscriptionScreen(props) {
+  return (
+    <OwnerProfileGuard>
+      <SubscriptionScreenInner {...props} />
+    </OwnerProfileGuard>
   );
 }
 

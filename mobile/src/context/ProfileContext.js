@@ -44,8 +44,14 @@ export function ProfileProvider({ children }) {
     setActiveProfileState(null);
   };
 
+  /**
+   * True si aucun profil actif (compte solo) OU si le profil actif est le profil principal.
+   * Sert à autoriser les sections owner-only : abonnement, préférences, gestion famille.
+   */
+  const isOwnerContext = !activeProfile || Boolean(activeProfile?.is_owner_profile);
+
   return (
-    <ProfileContext.Provider value={{ activeProfile, switchProfile, clearProfile, profileLoaded }}>
+    <ProfileContext.Provider value={{ activeProfile, switchProfile, clearProfile, profileLoaded, isOwnerContext }}>
       {children}
     </ProfileContext.Provider>
   );

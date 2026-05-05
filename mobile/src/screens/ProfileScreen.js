@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   View,
   ScrollView,
@@ -77,7 +78,7 @@ function getSubStatusColor(status) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function ProfileScreen({ navigation }) {
+function ProfileScreenInner({ navigation }) {
   const { t, i18n } = useTranslation();
 
   // ── Data state ──
@@ -877,6 +878,14 @@ function PassField({ label, value, onChange, show, onToggle }) {
         />
       }
     />
+  );
+}
+
+export default function ProfileScreen(props) {
+  return (
+    <OwnerProfileGuard>
+      <ProfileScreenInner {...props} />
+    </OwnerProfileGuard>
   );
 }
 
