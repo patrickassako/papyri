@@ -68,6 +68,73 @@ async function getManagedFamilySubscription(userId) {
   return subscription;
 }
 
+/**
+ * Ensure the main "Profil principal" exists for the subscription owner.
+ * Idempotent: thanks to the unique partial index on (subscription_id) WHERE is_owner_profile=true,
+ * concurrent inserts will conflict — we treat that as a no-op success.
+ * Returns the owner profile (created or existing).
+ */
+async function ensureOwnerFamilyProfile(subscription) {
+  if (!subscription || !isFamilySubscription(subscription)) return null;
+
+  const { data: existing } = await supabaseAdmin
+    .from('family_profiles')
+    .select('*')
+    .eq('subscription_id', subscription.id)
+    .eq('is_owner_profile', true)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (existing) return sanitizeProfile(existing);
+
+  // Pick a friendly name from profiles.full_name or auth.users.email
+  let displayName = 'Profil principal';
+  try {
+    const { data: profileRow } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', subscription.user_id)
+      .maybeSingle();
+    if (profileRow?.full_name) {
+      displayName = String(profileRow.full_name).trim().split(/\s+/)[0] || displayName;
+    } else if (profileRow?.email) {
+      displayName = String(profileRow.email).split('@')[0] || displayName;
+    }
+  } catch (_) {}
+
+  const { data, error } = await supabaseAdmin
+    .from('family_profiles')
+    .insert({
+      subscription_id: subscription.id,
+      owner_user_id: subscription.user_id,
+      name: displayName,
+      is_owner_profile: true,
+      is_kid: false,
+      pin_enabled: false,
+      is_active: true,
+      position: 0,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      // Concurrent insert created it — fetch and return.
+      const { data: concurrent } = await supabaseAdmin
+        .from('family_profiles')
+        .select('*')
+        .eq('subscription_id', subscription.id)
+        .eq('is_owner_profile', true)
+        .is('deleted_at', null)
+        .maybeSingle();
+      return sanitizeProfile(concurrent);
+    }
+    console.error('ensureOwnerFamilyProfile error:', error);
+    return null;
+  }
+  return sanitizeProfile(data);
+}
+
 async function countActiveProfiles(subscriptionId) {
   const { count, error } = await supabaseAdmin
     .from('family_profiles')
@@ -370,6 +437,18 @@ async function resolveProfileForUser(userId, requestedProfileId = null) {
 
   if (error) throw error;
 
+  // Safety net: if a family subscription is active but has no owner profile yet
+  // (e.g. activated before this code was deployed), create it lazily on first access.
+  if (!data) {
+    const created = await ensureOwnerFamilyProfile(subscription);
+    return {
+      subscription,
+      profile: created,
+      profileId: created?.id || null,
+      isFamilyContext: true,
+    };
+  }
+
   return {
     subscription,
     profile: sanitizeProfile(data),
@@ -380,6 +459,7 @@ async function resolveProfileForUser(userId, requestedProfileId = null) {
 
 module.exports = {
   isFamilySubscription,
+  ensureOwnerFamilyProfile,
   getManagedFamilySubscription,
   listProfilesForOwner,
   getProfileForOwner,

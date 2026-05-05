@@ -156,11 +156,11 @@ export default function MyListPage() {
           if (alive) setSubscriptionData({ type: 'none', endDate: '' });
         }
 
-        const [historyRes, playlistRes, ebookListRes, paymentHistoryRes] = await Promise.allSettled([
+        const [historyRes, playlistRes, ebookListRes, unlocksRes] = await Promise.allSettled([
           authFetch(`${API_URL}/reading-history?page=1&limit=100`),
           authFetch(`${API_URL}/api/reading/audio/playlist`),
           authFetch(`${API_URL}/api/reading/ebook/list`),
-          subscriptionsService.getPaymentHistory(),
+          contentsService.getMyUnlocks(),
         ]);
 
         let historyItems = [];
@@ -230,52 +230,35 @@ export default function MyListPage() {
           }
         }
 
-        const activeProfileId = getActiveProfileId();
-        if (paymentHistoryRes.status === 'fulfilled') {
-          const payments = Array.isArray(paymentHistoryRes.value?.payments) ? paymentHistoryRes.value.payments : [];
-          const purchasedPayments = payments.filter((payment) => {
-            const meta = payment?.metadata || {};
-            const paymentProfileId = meta.profile_id || null;
-            if (payment?.status !== 'succeeded' || meta.payment_type !== 'content_unlock' || !meta.content_id) {
-              return false;
-            }
-            return activeProfileId ? paymentProfileId === activeProfileId : !paymentProfileId;
+        // Unlocks include credit-based, paid, and admin-grant unlocks.
+        // Backend already scopes to the active profile via X-Profile-Id header.
+        if (unlocksRes.status === 'fulfilled') {
+          const unlocks = Array.isArray(unlocksRes.value) ? unlocksRes.value : [];
+          const purchasedItems = unlocks
+            .filter((u) => u?.contents?.id)
+            .map((u) => ({
+              id: u.contents.id,
+              content_id: u.contents.id,
+              title: u.contents.title || t('common.unknownTitle'),
+              author: u.contents.author || t('common.unknownAuthor'),
+              cover_url: u.contents.cover_url || null,
+              content_type: u.contents.content_type || null,
+              format: u.contents.format || null,
+              progress_percent: 0,
+              unlock_source: u.source,
+              lifetime_access: u.lifetime_access !== false,
+            }));
+
+          // Deduplicate
+          const seenPurchased = new Set();
+          const dedupedPurchased = purchasedItems.filter((item) => {
+            const key = String(item.id);
+            if (seenPurchased.has(key)) return false;
+            seenPurchased.add(key);
+            return true;
           });
 
-          const uniqueContentIds = Array.from(new Set(purchasedPayments.map((payment) => payment.metadata.content_id)));
-          const knownItems = new Map(
-            [...historyItems, ...combinedFavorites]
-              .filter((item) => item?.content_id || item?.id)
-              .map((item) => [String(item.content_id || item.id), item])
-          );
-
-          const missingIds = uniqueContentIds.filter((id) => !knownItems.has(String(id)));
-          let fetchedItems = [];
-
-          if (missingIds.length > 0) {
-            const fetched = await Promise.allSettled(
-              missingIds.map((id) => contentsService.getContentById(id))
-            );
-
-            fetchedItems = fetched
-              .filter((result) => result.status === 'fulfilled' && result.value?.id)
-              .map((result) => ({
-                id: result.value.id,
-                content_id: result.value.id,
-                title: result.value.title || t('common.unknownTitle'),
-                author: result.value.author || t('common.unknownAuthor'),
-                cover_url: result.value.cover_url || null,
-                content_type: result.value.content_type || null,
-                format: result.value.format || null,
-                progress_percent: 0,
-              }));
-          }
-
-          const purchasedItems = uniqueContentIds
-            .map((id) => knownItems.get(String(id)) || fetchedItems.find((item) => String(item.id) === String(id)))
-            .filter(Boolean);
-
-          if (alive) setPurchased(purchasedItems);
+          if (alive) setPurchased(dedupedPurchased);
         }
 
       } catch (err) {

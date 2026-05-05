@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   Alert,
   Avatar,
@@ -110,7 +111,7 @@ function RingCard({ title, value, hint, pct }) {
   );
 }
 
-export default function SubscriptionPage() {
+function SubscriptionPageInner() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
@@ -462,51 +463,62 @@ export default function SubscriptionPage() {
             </Stack>
           </Paper>
 
-          {/* Usage ring cards — catalogue illimité, plus de quota texte/audio */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mb: 2.5 }}>
-            <RingCard
-              title={isFamilyPlan ? t('subscription.activeProfiles') : t('subscription.activeDevices')}
-              value={`${Math.min(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}`}
-              hint={isFamilyPlan ? `${profileCount} ${t('subscription.activeProfiles')} ${t('common.of')} ${usersLimit}` : `${activeMembersCount} ${t('subscription.activeMembers')} ${t('common.of')} ${usersLimit}`}
-              pct={progressValue(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}
-            />
-            <RingCard
-              title={t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}
-              value={`${bonusAvailableTotal}`}
-              hint={
-                subscription?.plan_snapshot?.creditsGrantLifetimeAccess
-                  ? t('subscription.creditsLifetimeHint', { defaultValue: 'Accès à vie au livre choisi' })
-                  : t('subscription.creditsBoundHint', { defaultValue: 'Accès tant qu\'abonné actif' })
-              }
-              pct={progressValue(bonusAvailableTotal, Math.max(1, bonusAvailableTotal || 1))}
-            />
-          </Box>
+          {/* Usage ring cards — only when subscription is active */}
+          {hasActive ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mb: 2.5 }}>
+              <RingCard
+                title={isFamilyPlan ? t('subscription.activeProfiles') : t('subscription.activeDevices')}
+                value={`${Math.min(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}`}
+                hint={isFamilyPlan ? `${profileCount} ${t('subscription.activeProfiles')} ${t('common.of')} ${usersLimit}` : `${activeMembersCount} ${t('subscription.activeMembers')} ${t('common.of')} ${usersLimit}`}
+                pct={progressValue(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}
+              />
+              <RingCard
+                title={t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}
+                value={`${bonusAvailableTotal}`}
+                hint={
+                  subscription?.plan_snapshot?.creditsGrantLifetimeAccess
+                    ? t('subscription.creditsLifetimeHint', { defaultValue: 'Accès à vie au livre choisi' })
+                    : t('subscription.creditsBoundHint', { defaultValue: 'Accès tant qu\'abonné actif' })
+                }
+                pct={progressValue(bonusAvailableTotal, Math.max(1, bonusAvailableTotal || 1))}
+              />
+            </Box>
+          ) : null}
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1.4fr' }, gap: 2 }}>
             {/* Left panel */}
             <Stack spacing={2}>
-              {/* Active perks */}
-              <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
-                <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>{t('subscription.activePerks')}</Typography>
-                <Stack spacing={1.2}>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.unlimitedCatalog', { defaultValue: 'Catalogue premium illimité' })}</Typography>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.discountPaidBooks')}: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
-                  <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}: <b>{bonusAvailableTotal}</b>
-                    {subscription?.plan_snapshot?.creditsGrantLifetimeAccess
-                      ? ` · ${t('subscription.creditsLifetimeHint', { defaultValue: 'accès à vie' })}`
-                      : ` · ${t('subscription.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné' })}`
-                    }
-                  </Typography>
-                  {isFamilyPlan ? (
-                    <>
-                      <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeProfiles')}: <b>{profileCount}</b></Typography>
-                      <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.availableProfiles')}: <b>{seatsRemaining}</b></Typography>
-                    </>
-                  ) : (
-                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeDevicesCount')}: <b>{activeMembersCount}</b></Typography>
-                  )}
-                </Stack>
-              </Paper>
+              {/* Active perks — only when subscription is active */}
+              {hasActive ? (
+                <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
+                  <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>{t('subscription.activePerks')}</Typography>
+                  <Stack spacing={1.2}>
+                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.unlimitedCatalog', { defaultValue: 'Catalogue premium illimité' })}</Typography>
+                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.discountPaidBooks')}: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
+                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}: <b>{bonusAvailableTotal}</b>
+                      {subscription?.plan_snapshot?.creditsGrantLifetimeAccess
+                        ? ` · ${t('subscription.creditsLifetimeHint', { defaultValue: 'accès à vie' })}`
+                        : ` · ${t('subscription.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné' })}`
+                      }
+                    </Typography>
+                    {isFamilyPlan ? (
+                      <>
+                        <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeProfiles')}: <b>{profileCount}</b></Typography>
+                        <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.availableProfiles')}: <b>{seatsRemaining}</b></Typography>
+                      </>
+                    ) : (
+                      <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.activeDevicesCount')}: <b>{activeMembersCount}</b></Typography>
+                    )}
+                  </Stack>
+                </Paper>
+              ) : (
+                <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd', textAlign: 'center' }}>
+                  <Typography sx={{ color: '#8a8175' }}>{t('subscription.inactiveDesc')}</Typography>
+                  <Button variant="contained" sx={{ mt: 2, bgcolor: '#f1a10a', textTransform: 'none', '&:hover': { bgcolor: '#d9900a' } }} onClick={() => navigate('/pricing')}>
+                    {t('pricing.subscribeNow')}
+                  </Button>
+                </Paper>
+              )}
             </Stack>
 
             {/* Right panel — invoices */}
@@ -727,5 +739,13 @@ export default function SubscriptionPage() {
       </Dialog>
       <MobileBottomNav />
     </Box>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <OwnerProfileGuard>
+      <SubscriptionPageInner />
+    </OwnerProfileGuard>
   );
 }

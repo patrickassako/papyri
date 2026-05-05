@@ -276,7 +276,9 @@ async function unlockContent(req, res) {
 
     if (subscription && useCreditOptIn && ['paid', 'subscription_or_paid'].includes(content.access_type)) {
       const nowIso = new Date().toISOString();
-      const { data: credits, error: creditsError } = await supabaseAdmin
+      // Family plans: only consume credits attributed to the active profile.
+      // Solo plans: profile_id is NULL and effectiveProfileId is null too.
+      let creditsQuery = supabaseAdmin
         .from('bonus_credits')
         .select('*')
         .eq('user_id', subscription.user_id)
@@ -284,6 +286,10 @@ async function unlockContent(req, res) {
         .gt('expires_at', nowIso)
         .order('expires_at', { ascending: true })
         .limit(20);
+      creditsQuery = effectiveProfileId
+        ? creditsQuery.eq('profile_id', effectiveProfileId)
+        : creditsQuery.is('profile_id', null);
+      const { data: credits, error: creditsError } = await creditsQuery;
 
       if (creditsError) throw creditsError;
 
@@ -849,6 +855,53 @@ async function getContentRecommendations(req, res) {
   }
 }
 
+/**
+ * GET /api/contents/unlocks/me
+ * List all content unlocks for current user, scoped to active profile when present.
+ * Returns the joined content for "my library" / purchased books view.
+ */
+async function getMyUnlocks(req, res) {
+  try {
+    const userId = req.user.id;
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const effectiveProfileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
+
+    let query = supabaseAdmin
+      .from('content_unlocks')
+      .select(`
+        id, content_id, source, unlocked_at, lifetime_access,
+        base_price_cents, paid_amount_cents, currency, discount_applied_percent,
+        bonus_credit_id, payment_id, profile_id,
+        contents:content_id (
+          id, title, author, cover_url, content_type, format, language, duration_seconds
+        )
+      `)
+      .eq('user_id', userId)
+      .order('unlocked_at', { ascending: false })
+      .limit(200);
+
+    query = effectiveProfileId
+      ? query.eq('profile_id', effectiveProfileId)
+      : query.is('profile_id', null);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      data: data || [],
+      count: (data || []).length,
+    });
+  } catch (error) {
+    console.error('❌ Get my unlocks error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'FAILED_TO_GET_UNLOCKS',
+      message: error.message,
+    });
+  }
+}
+
 module.exports = {
   listContents,
   getContent,
@@ -856,6 +909,7 @@ module.exports = {
   getContentAccess,
   unlockContent,
   verifyUnlockPayment,
+  getMyUnlocks,
   listCategories,
   getCategory,
   createContent,

@@ -1085,19 +1085,24 @@ async function getMyUsage(req, res) {
         : await subscriptionsService.ensureMemberCycleUsage(membership.subscription, cycle, userId))
       : null;
 
-    let bonusSummary = {};
-    if (isFamilyProfileContext && usage) {
-      bonusSummary = {
-        flex: Math.max(0, Number(usage.bonus_quota || 0) - Number(usage.bonus_used_count || 0)),
-      };
-    } else {
-      const bonuses = await subscriptionsService.getBonusCredits(userId);
-      bonusSummary = bonuses.reduce((acc, item) => {
-        const available = Math.max(0, Number(item.quantity_total) - Number(item.quantity_used));
-        acc[item.bonus_type] = (acc[item.bonus_type] || 0) + available;
-        return acc;
-      }, {});
-    }
+    // Safety net: backfill missing credits for active subscriptions (idempotent).
+    // Catches abos activated before the per-profile credit logic was fully deployed.
+    try {
+      await subscriptionsService.grantCreditsForCycle(membership.subscription);
+    } catch (_) {}
+
+    // Credits are scoped to the active profile for family plans (1 credit per profile).
+    // For solo plans, profile_id IS NULL and the active profile context is not set.
+    const ownerUserId = membership.subscription.user_id;
+    const bonuses = await subscriptionsService.getBonusCredits(ownerUserId, {
+      scopeToProfile: true,
+      profileId: isFamilyProfileContext ? familyContext.profileId : null,
+    });
+    const bonusSummary = bonuses.reduce((acc, item) => {
+      const available = Math.max(0, Number(item.quantity_total) - Number(item.quantity_used));
+      acc[item.bonus_type] = (acc[item.bonus_type] || 0) + available;
+      return acc;
+    }, {});
 
     const bonusAvailableTotal = Object.values(bonusSummary).reduce((s, n) => s + Number(n || 0), 0);
 
@@ -1136,33 +1141,17 @@ async function getMyBonuses(req, res) {
     const membership = await subscriptionsService.getActiveSubscriptionForMember(userId);
     const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
 
-    let normalized = [];
-
-    if (membership && familyContext?.isFamilyContext && familyContext?.profileId) {
-      const cycle = await subscriptionsService.ensureCurrentCycle(membership.subscription);
-      const usage = cycle
-        ? await subscriptionsService.ensureProfileCycleUsage(membership.subscription, cycle, familyContext.profileId)
-        : null;
-
-      if (usage && (includeExpired || new Date(cycle.period_end) > new Date())) {
-        normalized = [{
-          id: `profile-flex-${usage.id}`,
-          bonus_type: 'flex',
-          quantity_total: Number(usage.bonus_quota || 0),
-          quantity_used: Number(usage.bonus_used_count || 0),
-          available: Math.max(0, Number(usage.bonus_quota || 0) - Number(usage.bonus_used_count || 0)),
-          expires_at: cycle.period_end,
-          profile_id: familyContext.profileId,
-          scope: 'profile',
-        }];
-      }
-    } else {
-      const bonuses = await subscriptionsService.getBonusCredits(userId, { includeExpired });
-      normalized = bonuses.map((item) => ({
-        ...item,
-        available: Math.max(0, Number(item.quantity_total) - Number(item.quantity_used)),
-      }));
-    }
+    // Credits are scoped per-profile for family plans, NULL profile_id for solo plans.
+    const ownerUserId = membership?.subscription?.user_id || userId;
+    const bonuses = await subscriptionsService.getBonusCredits(ownerUserId, {
+      includeExpired,
+      scopeToProfile: true,
+      profileId: familyContext?.isFamilyContext ? familyContext.profileId : null,
+    });
+    const normalized = bonuses.map((item) => ({
+      ...item,
+      available: Math.max(0, Number(item.quantity_total) - Number(item.quantity_used)),
+    }));
 
     return res.status(200).json({
       success: true,

@@ -103,6 +103,8 @@ export default function ContentDetailPage() {
   const [accessActionError, setAccessActionError] = useState('');
   const [callbackNotice, setCallbackNotice] = useState('');
   const [paymentDialog, setPaymentDialog] = useState({ open: false, providerBusy: '' });
+  const [availableCredits, setAvailableCredits] = useState(0);
+  const [creditsLifetime, setCreditsLifetime] = useState(false);
   const [lockLostNoticeOpen, setLockLostNoticeOpen] = useState(false);
   const [profileReloadKey, setProfileReloadKey] = useState(0);
 
@@ -286,9 +288,15 @@ export default function ContentDetailPage() {
         }
 
         if (usageResult.status === 'fulfilled') {
-          setUsageInfo(usageResult.value?.data?.usage || null);
+          const usageData = usageResult.value?.data || {};
+          setUsageInfo(usageData.usage || null);
+          const total = Number(usageData.bonusAvailableTotal ?? usageData.bonus_available_total ?? 0);
+          setAvailableCredits(total);
+          setCreditsLifetime(Boolean(usageData.subscription?.plan_snapshot?.creditsGrantLifetimeAccess));
         } else {
           setUsageInfo(null);
+          setAvailableCredits(0);
+          setCreditsLifetime(false);
         }
       } catch (ctxError) {
         console.error('Erreur contexte utilisateur:', ctxError);
@@ -389,10 +397,10 @@ export default function ContentDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenario, isPaidBook, isAudiobook, inEbookList, t]);
 
-  const doUnlock = async (provider) => {
+  const doUnlock = async (provider, options = {}) => {
     setAccessActionLoading(true);
     try {
-      const result = await contentsService.unlockContent(id, { provider });
+      const result = await contentsService.unlockContent(id, { provider, ...options });
 
       if (result.paymentRequired) {
         const paymentLink = result?.data?.payment?.payment_link;
@@ -447,7 +455,39 @@ export default function ContentDetailPage() {
 
   const handleChoosePaymentProvider = async (provider) => {
     setPaymentDialog((prev) => ({ ...prev, providerBusy: provider }));
-    await doUnlock(provider);
+    // Force payment path: do not consume a credit even if available.
+    await doUnlock(provider, { useCredit: false });
+  };
+
+  const handleUseCredit = async () => {
+    setPaymentDialog((prev) => ({ ...prev, providerBusy: 'credit' }));
+    setAccessActionError('');
+    try {
+      const result = await contentsService.unlockContent(id, { useCredit: true });
+      if (result.success && !result.paymentRequired) {
+        setAccessInfo((prev) => ({
+          ...(prev || {}),
+          unlocked: true,
+          can_read: true,
+          unlock: result.data?.unlock || null,
+        }));
+        setAvailableCredits((n) => Math.max(0, n - 1));
+        setPaymentDialog({ open: false, providerBusy: '' });
+        setCallbackNotice(
+          result.data?.lifetime_access
+            ? 'Crédit utilisé — accès à vie débloqué.'
+            : 'Crédit utilisé — accès débloqué tant que votre abonnement est actif.'
+        );
+      } else {
+        // Backend ran out of credits between page load and click — fall back to payment path.
+        setPaymentDialog((prev) => ({ ...prev, providerBusy: '' }));
+        setAccessActionError('Aucun crédit disponible. Choisissez un mode de paiement.');
+        setAvailableCredits(0);
+      }
+    } catch (err) {
+      setPaymentDialog((prev) => ({ ...prev, providerBusy: '' }));
+      setAccessActionError(err?.message || 'Impossible d\'utiliser le crédit.');
+    }
   };
 
   const handlePrimaryAccessAction = async () => {
@@ -472,9 +512,10 @@ export default function ContentDetailPage() {
       return;
     }
 
-    const needsProviderChoice = accessType === 'paid'
-      || (accessType === 'subscription_or_paid' && !hasActiveSubscription);
-    if (needsProviderChoice) {
+    // Pour livres payants : si l'utilisateur a un abo actif et un crédit dispo,
+    // proposer le choix crédit / paiement. Sinon proposer juste les modes de paiement.
+    const isPayablePath = accessType === 'paid' || accessType === 'subscription_or_paid';
+    if (isPayablePath) {
       setPaymentDialog({ open: true, providerBusy: '' });
       return;
     }
@@ -807,15 +848,9 @@ export default function ContentDetailPage() {
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     {isSubscriptionBook
-                      ? 'Débloquez ce livre avec votre abonnement pour consommer votre quota.'
-                      : 'Vous pouvez acheter ce livre avec remise abonnement.'}
+                      ? 'Lecture incluse — catalogue premium illimité.'
+                      : 'Vous pouvez utiliser un crédit ou acheter ce livre avec remise abonnement.'}
                   </Typography>
-                  {isSubscriptionBook ? (
-                    <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem' }}>
-                      Quota {isAudiobook ? 'audio' : 'texte'}: <strong>{quotaUsed}</strong> / <strong>{quotaTotal}</strong>
-                      {' '}({quotaRemaining} restant{quotaRemaining > 1 ? 's' : ''})
-                    </Typography>
-                  ) : null}
                   {/* Prix avec réduction abonné — uniquement si le livre est payant ET que la réduction est effective */}
                   {isPaidBook && basePriceCents > 0 && discountPercent > 0 && reducedPriceCents < basePriceCents ? (() => {
                     const pBase = formatDisplayedPrice(basePriceCents);
@@ -1197,13 +1232,48 @@ export default function ContentDetailPage() {
         PaperProps={{ sx: { borderRadius: 3, maxWidth: 420, width: '100%' } }}
       >
         <DialogTitle sx={{ pb: 0.5, fontWeight: 800, color: '#1c160d' }}>
-          Choisir le mode de paiement
+          {hasActiveSubscription && availableCredits > 0 ? 'Débloquer ce livre' : 'Choisir le mode de paiement'}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#7b6b51', fontSize: '0.92rem', mb: 2 }}>
-            Sélectionnez votre méthode pour acheter ce livre.
+            {hasActiveSubscription && availableCredits > 0
+              ? `Vous disposez de ${availableCredits} crédit${availableCredits > 1 ? 's' : ''}. Utilisez-en un pour ce livre, ou payez normalement.`
+              : 'Sélectionnez votre méthode pour acheter ce livre.'}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            {/* Option crédit — uniquement si abonnement actif + crédit dispo */}
+            {hasActiveSubscription && availableCredits > 0 ? (
+              <Button
+                fullWidth
+                variant="contained"
+                disabled={Boolean(paymentDialog.providerBusy)}
+                onClick={handleUseCredit}
+                sx={{
+                  borderRadius: 3,
+                  p: 1.5,
+                  textTransform: 'none',
+                  justifyContent: 'space-between',
+                  bgcolor: '#1F7A39',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#176028' },
+                  '&.Mui-disabled': { bgcolor: '#a4c5ae', color: '#fff' },
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                  <Box component="span" sx={{ fontSize: '1.1rem' }}>🎟️</Box>
+                  <Box sx={{ textAlign: 'left' }}>
+                    <Typography sx={{ fontWeight: 700, color: '#fff' }}>
+                      Utiliser un crédit ({availableCredits} dispo)
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.85)' }}>
+                      {creditsLifetime ? 'Accès à vie au livre' : 'Accès tant que votre abonnement est actif'}
+                    </Typography>
+                  </Box>
+                </Box>
+                {paymentDialog.providerBusy === 'credit' ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : null}
+              </Button>
+            ) : null}
+
             <Button
               fullWidth
               variant="outlined"

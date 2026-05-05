@@ -69,7 +69,19 @@ export const contentsService = {
    * @param {string} id - ID du contenu
    * @returns {Promise<Object>}
    */
-  async unlockContent(id, { provider } = {}) {
+  /**
+   * Liste les contenus déverrouillés de l'utilisateur (crédits + paiements + admin grants)
+   * Scoped au profil actif via le header X-Profile-Id
+   * @returns {Promise<Array>}
+   */
+  async getMyUnlocks() {
+    const response = await authFetch(`${API_BASE_URL}/api/contents/unlocks/me`);
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data?.data) ? data.data : [];
+  },
+
+  async unlockContent(id, { provider, useCredit } = {}) {
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock`, {
       method: 'POST',
       headers: {
@@ -77,6 +89,7 @@ export const contentsService = {
       },
       body: JSON.stringify({
         ...(provider ? { provider } : {}),
+        ...(useCredit !== undefined ? { useCredit } : {}),
       }),
     });
 

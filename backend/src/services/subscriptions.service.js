@@ -622,9 +622,22 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
   }
 
   if (isActiveAndNotExpired(subscription)) {
-    const currentEnd = new Date(subscription.current_period_end);
-    const nextPeriodEnd = await calculatePeriodEnd(effectiveSubscription, currentEnd);
-    updateData.current_period_end = nextPeriodEnd.toISOString();
+    // Idempotence: when verify-payment AND webhook both call this for the same payment,
+    // they arrive seconds apart. Don't extend the period if the current activation is
+    // very recent — that would double-bill the customer in days.
+    const currentStart = new Date(subscription.current_period_start);
+    const ageSeconds = Number.isFinite(currentStart.getTime())
+      ? (now.getTime() - currentStart.getTime()) / 1000
+      : Infinity;
+
+    if (ageSeconds < 120) {
+      // Recent activation — preserve period as-is, just touch updated_at.
+      // No need to set current_period_start / current_period_end.
+    } else {
+      const currentEnd = new Date(subscription.current_period_end);
+      const nextPeriodEnd = await calculatePeriodEnd(effectiveSubscription, currentEnd);
+      updateData.current_period_end = nextPeriodEnd.toISOString();
+    }
   } else {
     const nextPeriodEnd = await calculatePeriodEnd(effectiveSubscription, now);
     updateData.current_period_start = now.toISOString();
@@ -640,7 +653,16 @@ async function applySuccessfulSubscriptionPayment(subscriptionId) {
 
   if (error) throw error;
 
-  // Grant credits for the new cycle (idempotent: skips if already granted for current period).
+  // IMPORTANT: ordre obligatoire pour les abos famille —
+  // 1. créer le profil principal (sinon grantCreditsForCycle ne trouve aucun profil)
+  // 2. attribuer les crédits (1 par profil pour les plans famille)
+  try {
+    const familyProfilesService = require('./family-profiles.service');
+    await familyProfilesService.ensureOwnerFamilyProfile(data);
+  } catch (ownerErr) {
+    console.warn('ensureOwnerFamilyProfile failed:', ownerErr?.message || ownerErr);
+  }
+
   try {
     await grantCreditsForCycle(data);
   } catch (creditErr) {
@@ -664,37 +686,57 @@ async function grantCreditsForCycle(subscription) {
   if (creditsPerCycle <= 0) return null;
 
   const usersLimit = Number(subscription.users_limit || subscription.profiles_limit || 1);
-  const quantity = Math.max(1, creditsPerCycle * usersLimit);
+  const isFamily = usersLimit > 1 || Number(snapshot.includedUsers || 1) > 1;
   const validityDays = Number(snapshot.creditsValidityDays || 365);
   const grantsLifetime = Boolean(snapshot.creditsGrantLifetimeAccess);
 
-  const periodStart = subscription.current_period_start || new Date().toISOString();
+  const cycleKey = subscription.current_period_end || subscription.current_period_start;
 
-  // Idempotence: skip if already granted in this period.
-  const { data: existing, error: existingErr } = await supabaseAdmin
+  // Family plans: one credit row per profile.
+  // Solo plans: one credit row of qty = creditsPerCycle, profile_id = NULL.
+  let targetProfileIds = [null];
+  if (isFamily) {
+    const { data: profiles } = await supabaseAdmin
+      .from('family_profiles')
+      .select('id, is_owner_profile, position, created_at')
+      .eq('subscription_id', subscription.id)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('is_owner_profile', { ascending: false })
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    targetProfileIds = (profiles || []).map((p) => p.id);
+    if (targetProfileIds.length === 0) {
+      // No profiles yet (race with ensureOwnerFamilyProfile) — defer; will be granted
+      // on next subscription read via the safety net.
+      return null;
+    }
+  }
+
+  // Idempotence: identify which (cycle_start, profile_id) tuples already exist
+  // and only insert the missing ones. The unique partial index protects from races.
+  const { data: existing } = await supabaseAdmin
     .from('bonus_credits')
-    .select('id')
+    .select('profile_id, metadata')
     .eq('subscription_id', subscription.id)
     .eq('source', 'plan_immediate')
-    .gte('granted_at', periodStart)
-    .limit(1)
-    .maybeSingle();
+    .filter('metadata->>cycle_start', 'eq', cycleKey);
 
-  if (existingErr) {
-    console.warn('grantCreditsForCycle existence check failed:', existingErr.message);
-  }
-  if (existing) return null;
+  const alreadyGranted = new Set(
+    (existing || []).map((row) => row.profile_id || '__null__')
+  );
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
-
-  const { data, error } = await supabaseAdmin
-    .from('bonus_credits')
-    .insert({
+  const inserts = targetProfileIds
+    .filter((profileId) => !alreadyGranted.has(profileId || '__null__'))
+    .map((profileId) => ({
       user_id: subscription.user_id,
       subscription_id: subscription.id,
+      profile_id: profileId,
       bonus_type: 'flex',
-      quantity_total: quantity,
+      quantity_total: creditsPerCycle,
       quantity_used: 0,
       source: 'plan_immediate',
       granted_at: now.toISOString(),
@@ -705,13 +747,20 @@ async function grantCreditsForCycle(subscription) {
         plan_slug: subscription.plan_type,
         users_limit: usersLimit,
         credits_per_cycle: creditsPerCycle,
-        cycle_start: periodStart,
+        cycle_start: cycleKey,
       },
-    })
-    .select()
-    .single();
+    }));
+
+  if (inserts.length === 0) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('bonus_credits')
+    .insert(inserts)
+    .select();
 
   if (error) {
+    // 23505 = unique_violation (concurrent insert won the race) — treat as no-op.
+    if (error.code === '23505') return null;
     console.error('grantCreditsForCycle insert error:', error);
     return null;
   }
@@ -1013,7 +1062,7 @@ async function ensureProfileCycleUsage(subscription, cycle, profileId) {
   return fallback;
 }
 
-async function getBonusCredits(userId, { includeExpired = false } = {}) {
+async function getBonusCredits(userId, { includeExpired = false, profileId, scopeToProfile = false } = {}) {
   let query = supabaseAdmin
     .from('bonus_credits')
     .select('*')
@@ -1022,6 +1071,12 @@ async function getBonusCredits(userId, { includeExpired = false } = {}) {
 
   if (!includeExpired) {
     query = query.gt('expires_at', new Date().toISOString());
+  }
+
+  // When scoped to a specific profile (family plans), only return credits for that profile.
+  // When scopeToProfile is true but profileId is null (solo), filter to profile_id IS NULL.
+  if (scopeToProfile) {
+    query = profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
   }
 
   const { data, error } = await query;

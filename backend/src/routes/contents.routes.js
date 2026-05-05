@@ -25,6 +25,7 @@ router.get(
   contentsController.getContentFileUrl
 );
 router.get('/contents/:id/access', authenticate, contentsController.getContentAccess);
+router.get('/contents/unlocks/me', authenticate, contentsController.getMyUnlocks);
 router.post('/contents/:id/unlock', authenticate, contentsController.unlockContent);
 router.post('/contents/:id/unlock/verify-payment', authenticate, contentsController.verifyUnlockPayment);
 

@@ -98,6 +98,13 @@ export async function resolveProfileRequirement() {
     const active = getActiveProfile();
     const matching = active?.id ? profiles.find((profile) => profile.id === active.id) : null;
     if (!matching) {
+      // Auto-select when only one profile exists (typically the owner profile right
+      // after subscription activation, before extra profiles are created).
+      // Skip auto-select if the profile has a PIN — user must enter it.
+      if (profiles.length === 1 && !profiles[0]?.pin_enabled) {
+        setActiveProfile(profiles[0]);
+        return { needsSelection: false, isFamily: true, profiles, activeProfile: profiles[0] };
+      }
       clearActiveProfile();
       return { needsSelection: true, isFamily: true, profiles };
     }
