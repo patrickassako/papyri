@@ -458,8 +458,15 @@ function SubscriptionPageInner() {
               >
                 {t('subscription.reactivate')}
               </Button>
-              <Button disabled={busy || !subscription} variant="outlined" color="warning" sx={{ textTransform: 'none' }} onClick={() => runAction(() => subscriptionsService.cancel({ immediately: false }), t('subscription.cancelAtEndActivated'))}>{t('subscription.cancelAtEnd')}</Button>
-              <Button disabled={busy || !subscription} variant="outlined" color="error" sx={{ textTransform: 'none' }} onClick={() => runAction(() => subscriptionsService.cancel({ immediately: true }), t('subscription.cancelledNow'))}>{t('subscription.cancelNow')}</Button>
+              <Button
+                disabled={busy || !subscription || subscription?.cancel_at_period_end}
+                variant="outlined"
+                color="error"
+                sx={{ textTransform: 'none' }}
+                onClick={() => runAction(() => subscriptionsService.cancel({ immediately: false }), t('subscription.cancelAtEndActivated'))}
+              >
+                {t('subscription.cancelSubscription', { defaultValue: 'Annuler l\'abonnement' })}
+              </Button>
             </Stack>
           </Paper>
 
