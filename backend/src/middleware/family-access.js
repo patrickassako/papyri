@@ -38,6 +38,53 @@ async function rejectKidProfile(req, res, next) {
   return next();
 }
 
+/**
+ * Restrict to owner-context only:
+ * - solo subscription (no family) → allowed
+ * - family subscription with active owner profile → allowed
+ * - family subscription with non-owner profile → 403
+ *
+ * Used to gate sensitive endpoints: subscription management, family profile
+ * mutations, account preferences.
+ */
+async function requireOwnerProfile(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'UNAUTHORIZED', message: 'Non authentifie.' },
+    });
+  }
+
+  let familyContext = { subscription: null, profile: null, profileId: null, isFamilyContext: false };
+  try {
+    familyContext = await familyProfilesService.resolveProfileForUser(
+      req.user.id,
+      req.headers['x-profile-id'] || null,
+    );
+  } catch (err) {
+    console.warn('[requireOwnerProfile] resolveProfileForUser error:', err.message);
+  }
+
+  req.familyContext = familyContext;
+
+  // Solo subs are always allowed (no family context).
+  if (!familyContext?.isFamilyContext) return next();
+
+  // Family sub: only the owner profile can perform sensitive actions.
+  if (!familyContext?.profile?.is_owner_profile) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'OWNER_PROFILE_REQUIRED',
+        message: 'Cette action est reservee au profil principal.',
+      },
+    });
+  }
+
+  return next();
+}
+
 module.exports = {
   rejectKidProfile,
+  requireOwnerProfile,
 };

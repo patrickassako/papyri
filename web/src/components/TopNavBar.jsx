@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -29,6 +29,7 @@ import LanguageToggle from './LanguageToggle';
 import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 import * as authService from '../services/auth.service';
 import { useTranslation } from 'react-i18next';
+import { isOwnerContext } from '../config/profileStorage';
 
 export default function TopNavBar({
   user,
@@ -42,7 +43,14 @@ export default function TopNavBar({
   const { t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isOwner, setIsOwner] = useState(() => isOwnerContext());
   const menuOpen = Boolean(anchorEl);
+
+  useEffect(() => {
+    const handleProfileChange = () => setIsOwner(isOwnerContext());
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
 
   const navLinks = [
     { label: t('nav.library'), path: '/catalogue', icon: AutoStoriesOutlinedIcon },
@@ -276,7 +284,7 @@ export default function TopNavBar({
         <Box sx={{ px: 1.2, py: 1.2 }}>
           {[
             { label: t('common.dashboard'), path: '/dashboard', icon: DashboardOutlinedIcon },
-            { label: t('common.profile'), path: '/profile', icon: PersonOutlinedIcon },
+            ...(isOwner ? [{ label: t('common.profile'), path: '/profile', icon: PersonOutlinedIcon }] : []),
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -367,10 +375,12 @@ export default function TopNavBar({
           <ListItemText primary={t('common.notifications')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
 
-        <MenuItem onClick={() => handleMenuNav('/profile')} sx={menuItemSx}>
-          <ListItemIcon><PersonOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-          <ListItemText primary={t('common.profile')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
-        </MenuItem>
+        {isOwner && (
+          <MenuItem onClick={() => handleMenuNav('/profile')} sx={menuItemSx}>
+            <ListItemIcon><PersonOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
+            <ListItemText primary={t('common.profile')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
+          </MenuItem>
+        )}
 
         <Divider sx={{ borderColor: '#f0e8dc' }} />
 

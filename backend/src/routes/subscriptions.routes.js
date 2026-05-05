@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const subscriptionsController = require('../controllers/subscriptions.controller');
 const { authenticate } = require('../middleware/auth');
-const { rejectKidProfile } = require('../middleware/family-access');
+const { rejectKidProfile, requireOwnerProfile } = require('../middleware/family-access');
 
 /**
  * GET /api/subscriptions/plans
@@ -43,7 +43,7 @@ router.post('/promo/validate', authenticate, rejectKidProfile, subscriptionsCont
  * @protected
  * @body {planCode?: string, planId?: string, usersLimit?: number, provider?: string, promoCode?: string}
  */
-router.post('/checkout', authenticate, rejectKidProfile, subscriptionsController.initiateCheckout);
+router.post('/checkout', authenticate, requireOwnerProfile, subscriptionsController.initiateCheckout);
 
 /**
  * POST /api/subscriptions/buy-extra-seat
@@ -51,7 +51,7 @@ router.post('/checkout', authenticate, rejectKidProfile, subscriptionsController
  * @protected
  * @body {provider?: 'stripe' | 'flutterwave'}
  */
-router.post('/buy-extra-seat', authenticate, rejectKidProfile, subscriptionsController.buyExtraSeat);
+router.post('/buy-extra-seat', authenticate, requireOwnerProfile, subscriptionsController.buyExtraSeat);
 
 /**
  * POST /api/subscriptions/cancel
@@ -59,14 +59,14 @@ router.post('/buy-extra-seat', authenticate, rejectKidProfile, subscriptionsCont
  * @protected
  * @body {immediately?: boolean}
  */
-router.post('/cancel', authenticate, rejectKidProfile, subscriptionsController.cancelSubscription);
+router.post('/cancel', authenticate, requireOwnerProfile, subscriptionsController.cancelSubscription);
 
 /**
  * POST /api/subscriptions/reactivate
  * Reactivate a Stripe subscription scheduled for cancellation (cancel_at_period_end=true)
  * @protected
  */
-router.post('/reactivate', authenticate, rejectKidProfile, subscriptionsController.reactivateSubscription);
+router.post('/reactivate', authenticate, requireOwnerProfile, subscriptionsController.reactivateSubscription);
 
 /**
  * GET /api/subscriptions/payment-history
@@ -96,14 +96,14 @@ router.post('/verify-stripe-session', authenticate, rejectKidProfile, subscripti
  * Initiate manual renewal checkout for active subscription
  * @protected
  */
-router.post('/renew', authenticate, rejectKidProfile, subscriptionsController.initiateRenewalCheckout);
+router.post('/renew', authenticate, requireOwnerProfile, subscriptionsController.initiateRenewalCheckout);
 
 /**
  * POST /api/subscriptions/resume
  * Resume subscription cancellation (cancel_at_period_end=false)
  * @protected
  */
-router.post('/resume', authenticate, rejectKidProfile, subscriptionsController.resumeSubscription);
+router.post('/resume', authenticate, requireOwnerProfile, subscriptionsController.resumeSubscription);
 
 /**
  * POST /api/subscriptions/change-plan
@@ -111,7 +111,7 @@ router.post('/resume', authenticate, rejectKidProfile, subscriptionsController.r
  * @protected
  * @body {planId?: string, planCode?: string, usersLimit?: number}
  */
-router.post('/change-plan', authenticate, rejectKidProfile, subscriptionsController.schedulePlanChange);
+router.post('/change-plan', authenticate, requireOwnerProfile, subscriptionsController.schedulePlanChange);
 
 /**
  * GET /api/subscriptions/cycle/current
@@ -147,14 +147,14 @@ router.get('/members', authenticate, rejectKidProfile, subscriptionsController.g
  * @protected
  * @body {userId: string}
  */
-router.post('/members', authenticate, rejectKidProfile, subscriptionsController.addMember);
+router.post('/members', authenticate, requireOwnerProfile, subscriptionsController.addMember);
 
 /**
  * DELETE /api/subscriptions/members/:userId
  * Remove member from active subscription
  * @protected
  */
-router.delete('/members/:userId', authenticate, rejectKidProfile, subscriptionsController.removeMember);
+router.delete('/members/:userId', authenticate, requireOwnerProfile, subscriptionsController.removeMember);
 
 /**
  * PATCH /api/subscriptions/users-limit
@@ -162,7 +162,7 @@ router.delete('/members/:userId', authenticate, rejectKidProfile, subscriptionsC
  * @protected
  * @body {usersLimit: number}
  */
-router.patch('/users-limit', authenticate, rejectKidProfile, subscriptionsController.updateUsersLimit);
+router.patch('/users-limit', authenticate, requireOwnerProfile, subscriptionsController.updateUsersLimit);
 
 /**
  * GET /api/subscriptions/payments/:paymentId/invoice

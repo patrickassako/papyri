@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   Box,
   Typography,
@@ -88,7 +89,7 @@ function getStrength(password) {
 /* ══════════════════════════════════════════════════════════════
    SecurityPage
 ══════════════════════════════════════════════════════════════ */
-export default function SecurityPage() {
+function SecurityPageInner() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [user, setUser] = useState(null);
@@ -654,5 +655,13 @@ export default function SecurityPage() {
       </Snackbar>
       <MobileBottomNav />
     </Box>
+  );
+}
+
+export default function SecurityPage() {
+  return (
+    <OwnerProfileGuard>
+      <SecurityPageInner />
+    </OwnerProfileGuard>
   );
 }

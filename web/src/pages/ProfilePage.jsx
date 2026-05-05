@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   Box,
   Typography,
@@ -122,7 +123,7 @@ function formatMemberSince(createdAt, t, locale = 'fr-FR') {
   return t('profile.memberSince', { date: label.charAt(0).toUpperCase() + label.slice(1) });
 }
 
-export default function ProfilePage() {
+function ProfilePageInner() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
@@ -1308,5 +1309,13 @@ export default function ProfilePage() {
       </Snackbar>
       <MobileBottomNav />
     </Box>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <OwnerProfileGuard>
+      <ProfilePageInner />
+    </OwnerProfileGuard>
   );
 }

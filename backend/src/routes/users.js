@@ -6,7 +6,7 @@ const formidable = require('express-formidable');
 const { supabase, supabaseAdmin } = require('../config/database');
 const config = require('../config/env');
 const { verifyJWT } = require('../middleware/auth');
-const { rejectKidProfile } = require('../middleware/family-access');
+const { rejectKidProfile, requireOwnerProfile } = require('../middleware/family-access');
 const r2Service = require('../services/r2.service');
 
 /**
@@ -125,7 +125,7 @@ router.get('/me', verifyJWT, async (req, res, next) => {
  * PATCH /users/me
  * Protected endpoint - Update current user profile
  */
-router.patch('/me', verifyJWT, rejectKidProfile, async (req, res, next) => {
+router.patch('/me', verifyJWT, requireOwnerProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { full_name, language, avatar_url } = req.body;
@@ -199,7 +199,7 @@ router.patch('/me', verifyJWT, rejectKidProfile, async (req, res, next) => {
 router.post(
   '/me/avatar',
   verifyJWT,
-  rejectKidProfile,
+  requireOwnerProfile,
   formidable({ multiples: false, maxFileSize: 5 * 1024 * 1024 }),
   async (req, res, next) => {
     try {
@@ -299,7 +299,7 @@ router.post(
  * PUT /users/me/password
  * Protected endpoint - Change password
  */
-router.put('/me/password', verifyJWT, rejectKidProfile, async (req, res, next) => {
+router.put('/me/password', verifyJWT, requireOwnerProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { current_password, new_password } = req.body;
@@ -444,7 +444,7 @@ function parseUserAgent(ua) {
  * DELETE /users/me/sessions
  * Protected — Révoque toutes les sessions (déconnexion globale)
  */
-router.delete('/me/sessions', verifyJWT, rejectKidProfile, async (req, res, next) => {
+router.delete('/me/sessions', verifyJWT, requireOwnerProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
     // Supabase admin: sign out user from all sessions
@@ -459,7 +459,7 @@ router.delete('/me/sessions', verifyJWT, rejectKidProfile, async (req, res, next
  * GET /users/me/data-export  (RGPD — droit d'accès & portabilité)
  * Retourne toutes les données personnelles de l'utilisateur en JSON
  */
-router.get('/me/data-export', verifyJWT, rejectKidProfile, async (req, res, next) => {
+router.get('/me/data-export', verifyJWT, requireOwnerProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -502,7 +502,7 @@ router.get('/me/data-export', verifyJWT, rejectKidProfile, async (req, res, next
  * DELETE /users/me  (RGPD — droit à l'effacement)
  * Supprime le compte et toutes les données associées
  */
-router.delete('/me', verifyJWT, rejectKidProfile, async (req, res, next) => {
+router.delete('/me', verifyJWT, requireOwnerProfile, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -576,7 +576,7 @@ router.post('/me/onboarding-complete', verifyJWT, async (req, res, next) => {
  * POST /users/me/gdpr-request
  * RGPD — soumettre une demande (deletion | export | rectification)
  */
-router.post('/me/gdpr-request', verifyJWT, rejectKidProfile, express.json(), async (req, res, next) => {
+router.post('/me/gdpr-request', verifyJWT, requireOwnerProfile, express.json(), async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { request_type = 'deletion', user_message } = req.body;

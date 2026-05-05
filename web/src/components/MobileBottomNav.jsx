@@ -31,8 +31,15 @@ export default function MobileBottomNav() {
     { label: t('mobileNav.subscription'), icon: PaymentOutlined, route: '/subscription' },
     { label: t('mobileNav.settings'), icon: SettingsOutlined, route: '/profile', matchRoutes: ['/profile', '/devices', '/security'] },
   ].filter((item) => {
-    if (!activeProfile?.is_kid) return true;
-    return !['/subscription', '/profile'].includes(item.route);
+    // Kid profiles
+    if (activeProfile?.is_kid) {
+      return !['/subscription', '/profile'].includes(item.route);
+    }
+    // Non-owner family profiles: hide subscription + settings (which leads to profile/devices/security)
+    if (activeProfile && activeProfile.is_owner_profile === false) {
+      return !['/subscription', '/profile'].includes(item.route);
+    }
+    return true;
   });
 
   return (

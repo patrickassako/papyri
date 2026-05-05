@@ -18,6 +18,17 @@ export function getActiveProfileId() {
   return getActiveProfile()?.id || null;
 }
 
+/**
+ * True si aucun profil actif n'est sélectionné (= compte solo) OU si le profil actif
+ * est le profil principal (owner). Sert à autoriser la gestion famille / abonnement /
+ * préférences uniquement depuis le profil owner.
+ */
+export function isOwnerContext() {
+  const profile = getActiveProfile();
+  if (!profile) return true; // pas de famille, pas de restriction
+  return Boolean(profile.is_owner_profile);
+}
+
 export function setActiveProfile(profile) {
   if (!profile?.id) return;
   localStorage.setItem(ACTIVE_PROFILE_KEY, JSON.stringify(profile));
