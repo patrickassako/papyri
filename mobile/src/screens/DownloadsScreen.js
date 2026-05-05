@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import {
   getDownloadedContents,
   deleteDownloadedContent,
@@ -25,17 +26,19 @@ import {
 
 const tokens = require('../config/tokens');
 
-function formatExpiry(dateString) {
+function formatExpiry(dateString, t, locale) {
   if (!dateString) return null;
   const d = new Date(dateString);
   const diff = Math.ceil((d - Date.now()) / (1000 * 60 * 60 * 24));
-  if (diff <= 0) return 'Expiré';
-  if (diff === 1) return 'Expire demain';
-  if (diff <= 7) return `Expire dans ${diff} j`;
-  return `Expire le ${d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}`;
+  if (diff <= 0) return t('downloads.expired');
+  if (diff === 1) return t('downloads.expiresTomorrow');
+  if (diff <= 7) return t('downloads.expiresInDays', { n: diff });
+  return t('downloads.expiresOn', { date: d.toLocaleDateString(locale, { day: '2-digit', month: 'short' }) });
 }
 
 export default function DownloadsScreen({ navigation }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   const [downloads, setDownloads] = useState([]);
   const [storageUsed, setStorageUsed] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -72,12 +75,12 @@ export default function DownloadsScreen({ navigation }) {
 
   const handleDelete = (item) => {
     Alert.alert(
-      'Supprimer le téléchargement',
-      `Supprimer "${item.title}" du stockage hors-ligne ?`,
+      t('downloads.deleteTitle'),
+      t('downloads.deleteConfirm', { title: item.title }),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Supprimer',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             await deleteDownloadedContent(item.contentId);
@@ -104,7 +107,7 @@ export default function DownloadsScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={tokens.colors.onSurface.light} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Téléchargements</Text>
+          <Text style={styles.headerTitle}>{t('downloads.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.center}>
@@ -129,7 +132,7 @@ export default function DownloadsScreen({ navigation }) {
       {!online && (
         <View style={styles.offlineBanner}>
           <MaterialCommunityIcons name="wifi-off" size={16} color="#fff" />
-          <Text style={styles.offlineBannerText}>Mode hors-ligne — lectures disponibles ci-dessous</Text>
+          <Text style={styles.offlineBannerText}>{t('downloads.offlineBanner')}</Text>
         </View>
       )}
 
@@ -142,7 +145,9 @@ export default function DownloadsScreen({ navigation }) {
           <View style={styles.storageRow}>
             <MaterialCommunityIcons name="harddisk" size={16} color={tokens.colors.primary} />
             <Text style={styles.storageText}>
-              {formatBytes(storageUsed)} utilisés · {downloads.length} fichier{downloads.length > 1 ? 's' : ''}
+              {downloads.length > 1
+                ? t('downloads.storageUsageMany', { size: formatBytes(storageUsed), count: downloads.length })
+                : t('downloads.storageUsageOne', { size: formatBytes(storageUsed), count: downloads.length })}
             </Text>
           </View>
         )}
@@ -151,20 +156,18 @@ export default function DownloadsScreen({ navigation }) {
         {downloads.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="download-off-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyTitle}>Aucun contenu téléchargé</Text>
-            <Text style={styles.emptySubtitle}>
-              Téléchargez des livres ou livres audio depuis la page détail pour les lire sans connexion.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('downloads.emptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('downloads.emptySubtitle')}</Text>
             <TouchableOpacity style={styles.catalogBtn} onPress={() => navigation.navigate('Catalog')}>
-              <Text style={styles.catalogBtnText}>Parcourir le catalogue</Text>
+              <Text style={styles.catalogBtnText}>{t('downloads.browseCatalog')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           downloads.map((item) => {
             const isAudio = item.type === 'audiobook';
-            const expiryLabel = formatExpiry(item.expiresAt);
-            const expiryColor = expiryLabel === 'Expiré' ? '#ef5350'
-              : expiryLabel?.includes('demain') || expiryLabel?.includes('dans 1') ? '#FF8F00'
+            const expiryLabel = formatExpiry(item.expiresAt, t, locale);
+            const expiryColor = expiryLabel === t('downloads.expired') ? '#ef5350'
+              : expiryLabel === t('downloads.expiresTomorrow') || expiryLabel === t('downloads.expiresInDays', { n: 1 }) ? '#FF8F00'
               : '#9E9E9E';
 
             return (
@@ -203,12 +206,12 @@ export default function DownloadsScreen({ navigation }) {
                   {!!item.author && (
                     <Text style={styles.cardAuthor} numberOfLines={1}>{item.author}</Text>
                   )}
-                  <Text style={styles.cardMeta}>{isAudio ? 'Livre audio' : 'Ebook'} · {formatBytes(item.fileSize || 0)}</Text>
+                  <Text style={styles.cardMeta}>{isAudio ? t('downloads.audiobook') : t('downloads.ebook')} · {formatBytes(item.fileSize || 0)}</Text>
                   {expiryLabel && (
                     <Text style={[styles.cardExpiry, { color: expiryColor }]}>{expiryLabel}</Text>
                   )}
                   <Text style={styles.cardDate}>
-                    Téléchargé le {new Date(item.downloadedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                    {t('downloads.downloadedOn', { date: new Date(item.downloadedAt).toLocaleDateString(locale, { day: '2-digit', month: 'short' }) })}
                   </Text>
                 </View>
 

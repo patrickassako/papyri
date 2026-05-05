@@ -15,6 +15,7 @@ import {
   Surface,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { readingService } from '../services/reading.service';
 import { authFetch } from '../services/auth.service';
 import API_URL from '../config/api';
@@ -25,12 +26,14 @@ import { useProfile } from '../context/ProfileContext';
 
 const tokens = require('../config/tokens');
 
-const FILTERS = [
-  { key: 'all', label: 'Tous' },
-  { key: 'ebook', label: 'Ebooks' },
-  { key: 'audiobook', label: 'Audio' },
-  { key: 'completed', label: 'Terminés' },
-];
+function buildFilters(t) {
+  return [
+    { key: 'all', label: t('history.filters.all') },
+    { key: 'ebook', label: t('history.filters.ebooks') },
+    { key: 'audiobook', label: t('history.filters.audiobooks') },
+    { key: 'completed', label: t('history.filters.completed') },
+  ];
+}
 
 function formatTime(seconds) {
   if (!seconds || seconds <= 0) return '0m';
@@ -41,11 +44,12 @@ function formatTime(seconds) {
 }
 
 function StatsBar({ stats, loading }) {
+  const { t } = useTranslation();
   const cards = [
-    { label: 'Livres lus', value: loading ? '…' : String(stats?.total_books ?? 0), icon: 'book-open-variant' },
-    { label: 'Temps total', value: loading ? '…' : formatTime(stats?.total_time_seconds), icon: 'clock-outline' },
-    { label: 'Série', value: loading ? '…' : `${stats?.streak_days ?? 0}j`, icon: 'fire' },
-    { label: 'Terminés', value: loading ? '…' : String(stats?.completed ?? 0), icon: 'check-circle-outline' },
+    { label: t('history.stats.booksRead'), value: loading ? '…' : String(stats?.total_books ?? 0), icon: 'book-open-variant' },
+    { label: t('history.stats.totalTime'), value: loading ? '…' : formatTime(stats?.total_time_seconds), icon: 'clock-outline' },
+    { label: t('history.stats.streak'), value: loading ? '…' : t('history.stats.streakDays', { n: stats?.streak_days ?? 0 }), icon: 'fire' },
+    { label: t('history.stats.completed'), value: loading ? '…' : String(stats?.completed ?? 0), icon: 'check-circle-outline' },
   ];
 
   return (
@@ -67,6 +71,8 @@ function StatsBar({ stats, loading }) {
 }
 
 function FilterTabs({ active, onChange }) {
+  const { t } = useTranslation();
+  const filters = buildFilters(t);
   return (
     <ScrollView
       horizontal
@@ -74,7 +80,7 @@ function FilterTabs({ active, onChange }) {
       contentContainerStyle={styles.filterRow}
       style={styles.filterTabsWrap}
     >
-      {FILTERS.map((f) => {
+      {filters.map((f) => {
         const isActive = active === f.key;
         return (
           <TouchableOpacity
@@ -93,6 +99,7 @@ function FilterTabs({ active, onChange }) {
 }
 
 export default function HistoryScreen({ navigation }) {
+  const { t } = useTranslation();
   const { activeProfile } = useProfile();
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 0 });
@@ -137,7 +144,7 @@ export default function HistoryScreen({ navigation }) {
         navigation.replace('Login');
         return;
       }
-      setError(err.message || 'Erreur lors du chargement');
+      setError(err.message || t('history.loadError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -207,18 +214,18 @@ export default function HistoryScreen({ navigation }) {
 
   const renderEmpty = () => {
     if (loading) return null;
+    const filters = buildFilters(t);
+    const currentFilterLabel = filters.find((f) => f.key === filter)?.label || '';
     return (
       <View style={styles.emptyContainer}>
         <MaterialCommunityIcons name="bookshelf" size={56} color={tokens.colors.primaryLight} style={{ marginBottom: 16 }} />
         <Text variant="titleMedium" style={styles.emptyTitle}>
           {filter === 'all'
-            ? 'Aucun contenu dans votre historique'
-            : `Aucun contenu "${FILTERS.find(f => f.key === filter)?.label}" trouvé`}
+            ? t('history.emptyAll')
+            : t('history.emptyFiltered', { filter: currentFilterLabel })}
         </Text>
         <Text variant="bodyMedium" style={styles.emptyText}>
-          {filter === 'all'
-            ? 'Commencez à lire ou écouter pour que vos contenus apparaissent ici'
-            : 'Essayez un autre filtre'}
+          {filter === 'all' ? t('history.emptyHintAll') : t('history.emptyHintFiltered')}
         </Text>
         {filter === 'all' && (
           <Button
@@ -227,7 +234,7 @@ export default function HistoryScreen({ navigation }) {
             style={styles.emptyButton}
             buttonColor={tokens.colors.primary}
           >
-            Découvrir le catalogue
+            {t('history.discoverCatalog')}
           </Button>
         )}
       </View>
@@ -246,11 +253,13 @@ export default function HistoryScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>Mon Historique</Text>
+        <Text variant="headlineMedium" style={styles.title}>{t('history.title')}</Text>
         <Text variant="bodySmall" style={styles.subtitle}>
           {pagination.total > 0
-            ? `${pagination.total} contenu${pagination.total > 1 ? 's' : ''} lu${pagination.total > 1 ? 's' : ''}`
-            : 'Vos lectures et écoutes récentes'}
+            ? (pagination.total > 1
+                ? t('history.subtitleCountMany', { n: pagination.total })
+                : t('history.subtitleCountOne', { n: pagination.total }))
+            : t('history.subtitleEmpty')}
         </Text>
       </View>
 
@@ -284,7 +293,7 @@ export default function HistoryScreen({ navigation }) {
         visible={!!error}
         onDismiss={() => setError(null)}
         duration={4000}
-        action={{ label: 'Réessayer', onPress: () => fetchHistory(1) }}
+        action={{ label: t('common.retry'), onPress: () => fetchHistory(1) }}
       >
         {error}
       </Snackbar>
