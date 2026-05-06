@@ -475,13 +475,13 @@ export default function ContentDetailPage() {
         setPaymentDialog({ open: false, providerBusy: '' });
         setCallbackNotice(
           result.data?.lifetime_access
-            ? 'Crédit utilisé — accès à vie débloqué.'
-            : 'Crédit utilisé — accès débloqué tant que votre abonnement est actif.'
+            ? t('content.creditUsedLifetime')
+            : t('content.creditUsedSubscription')
         );
       } else {
         // Backend ran out of credits between page load and click — fall back to payment path.
         setPaymentDialog((prev) => ({ ...prev, providerBusy: '' }));
-        setAccessActionError('Aucun crédit disponible. Choisissez un mode de paiement.');
+        setAccessActionError(t('content.noCreditAvailable'));
         setAvailableCredits(0);
       }
     } catch (err) {
@@ -848,8 +848,8 @@ export default function ContentDetailPage() {
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     {isSubscriptionBook
-                      ? 'Lecture incluse — catalogue premium illimité.'
-                      : 'Vous pouvez utiliser un crédit ou acheter ce livre avec remise abonnement.'}
+                      ? t('content.readingIncluded')
+                      : t('content.creditOrBuyDiscount')}
                   </Typography>
                   {/* Prix avec réduction abonné — uniquement si le livre est payant ET que la réduction est effective */}
                   {isPaidBook && basePriceCents > 0 && discountPercent > 0 && reducedPriceCents < basePriceCents ? (() => {
@@ -1232,13 +1232,15 @@ export default function ContentDetailPage() {
         PaperProps={{ sx: { borderRadius: 3, maxWidth: 420, width: '100%' } }}
       >
         <DialogTitle sx={{ pb: 0.5, fontWeight: 800, color: '#1c160d' }}>
-          {hasActiveSubscription && availableCredits > 0 ? 'Débloquer ce livre' : 'Choisir le mode de paiement'}
+          {hasActiveSubscription && availableCredits > 0 ? t('content.modalUnlockBook') : t('content.modalChoosePayment')}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#7b6b51', fontSize: '0.92rem', mb: 2 }}>
             {hasActiveSubscription && availableCredits > 0
-              ? `Vous disposez de ${availableCredits} crédit${availableCredits > 1 ? 's' : ''}. Utilisez-en un pour ce livre, ou payez normalement.`
-              : 'Sélectionnez votre méthode pour acheter ce livre.'}
+              ? (availableCredits > 1
+                  ? t('content.modalCreditsHintMany', { n: availableCredits })
+                  : t('content.modalCreditsHintOne', { n: availableCredits }))
+              : t('content.modalChooseMethod')}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
             {/* Option crédit — uniquement si abonnement actif + crédit dispo */}
@@ -1263,10 +1265,10 @@ export default function ContentDetailPage() {
                   <Box component="span" sx={{ fontSize: '1.1rem' }}>🎟️</Box>
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography sx={{ fontWeight: 700, color: '#fff' }}>
-                      Utiliser un crédit ({availableCredits} dispo)
+                      {t('content.modalUseCredit', { n: availableCredits })}
                     </Typography>
                     <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.85)' }}>
-                      {creditsLifetime ? 'Accès à vie au livre' : 'Accès tant que votre abonnement est actif'}
+                      {creditsLifetime ? t('content.modalCreditLifetime') : t('content.modalCreditSubscription')}
                     </Typography>
                   </Box>
                 </Box>
@@ -1292,7 +1294,7 @@ export default function ContentDetailPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
                 <Box component="span" sx={{ fontSize: '1.1rem' }}>💳</Box>
                 <Box sx={{ textAlign: 'left' }}>
-                  <Typography sx={{ fontWeight: 700, color: '#5469d4' }}>Carte bancaire</Typography>
+                  <Typography sx={{ fontWeight: 700, color: '#5469d4' }}>{t('content.modalCard')}</Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: '#8a8a8a' }}>{t('content.stripeSecure')}</Typography>
                 </Box>
               </Box>
@@ -1317,8 +1319,8 @@ export default function ContentDetailPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
                 <Box component="span" sx={{ fontSize: '1.1rem' }}>📱</Box>
                 <Box sx={{ textAlign: 'left' }}>
-                  <Typography sx={{ fontWeight: 700, color: '#e65100' }}>Mobile Money</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#8a8a8a' }}>Paiement via Flutterwave</Typography>
+                  <Typography sx={{ fontWeight: 700, color: '#e65100' }}>{t('content.modalMobileMoney')}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#8a8a8a' }}>{t('content.modalFlutterwaveSub')}</Typography>
                 </Box>
               </Box>
               {paymentDialog.providerBusy === 'flutterwave' ? <CircularProgress size={18} sx={{ color: '#e65100' }} /> : null}
