@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
 import { useTranslation } from 'react-i18next';
+import LanguageToggle from '../components/LanguageToggle';
 
 export default function RegisterScreen({ navigation }) {
   const { t } = useTranslation();
@@ -100,7 +101,7 @@ export default function RegisterScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Back button */}
+          {/* Back button + language toggle */}
           <View style={styles.headerRow}>
             <IconButton
               icon="arrow-left"
@@ -109,6 +110,7 @@ export default function RegisterScreen({ navigation }) {
               onPress={() => navigation.goBack()}
               style={styles.backButton}
             />
+            <LanguageToggle compact />
           </View>
 
           {/* Card */}
@@ -304,6 +306,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
   backButton: { margin: 0 },

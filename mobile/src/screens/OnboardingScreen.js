@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import LanguageToggle from '../components/LanguageToggle';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -162,8 +163,9 @@ export default function OnboardingScreen({ navigation }) {
       <View style={styles.decorativeTop} />
       <View style={styles.decorativeBottom} />
 
-      {/* Skip Button */}
+      {/* Header: language toggle (left) + Skip Button (right) */}
       <View style={styles.header}>
+        <LanguageToggle compact />
         <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
           <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
         </TouchableOpacity>
@@ -244,7 +246,8 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 8

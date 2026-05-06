@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
 import { useTranslation } from 'react-i18next';
+import LanguageToggle from '../components/LanguageToggle';
 
 export default function LoginScreen({ navigation }) {
   const { t } = useTranslation();
@@ -61,6 +62,11 @@ export default function LoginScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Top: language toggle */}
+          <View style={styles.topBar}>
+            <LanguageToggle compact />
+          </View>
+
           {/* White Card */}
           <View style={styles.card}>
             {/* Logo Papyri */}
@@ -206,6 +212,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 40,
     justifyContent: 'center'
+  },
+  topBar: {
+    alignItems: 'flex-end',
+    marginBottom: 12,
   },
   card: {
     backgroundColor: '#fff',
