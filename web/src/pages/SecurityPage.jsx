@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   Box,
   Typography,
@@ -37,6 +36,7 @@ import * as authService from '../services/auth.service';
 import { supabase } from '../config/supabase';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
+import { isOwnerContext, getActiveProfile } from '../config/profileStorage';
 
 const primary = tokens.colors.primary;
 const bgLight = tokens.colors.backgrounds.light;
@@ -89,11 +89,22 @@ function getStrength(password) {
 /* ══════════════════════════════════════════════════════════════
    SecurityPage
 ══════════════════════════════════════════════════════════════ */
-function SecurityPageInner() {
+export default function SecurityPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [user, setUser] = useState(null);
   const [snack, setSnack] = useState({ open: false, msg: '', severity: 'success' });
+  const [isOwner, setIsOwner] = useState(() => isOwnerContext());
+  const [activeProfileInfo, setActiveProfileInfo] = useState(() => getActiveProfile());
+
+  useEffect(() => {
+    const handleProfileChange = () => {
+      setIsOwner(isOwnerContext());
+      setActiveProfileInfo(getActiveProfile());
+    };
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
 
   /* password */
   const [pwdForm, setPwdForm] = useState({ current: '', next: '', confirm: '' });
@@ -325,7 +336,8 @@ function SecurityPageInner() {
           ))}
         </Box>
 
-        {/* ── Mot de passe ─────────────────────────────── */}
+        {/* ── Mot de passe (owner-only) ─────────────────── */}
+        {isOwner ? (
         <SectionCard
           icon={<LockOutlinedIcon />}
           title={t('security.passwordSection')}
@@ -383,6 +395,7 @@ function SecurityPageInner() {
             </Button>
           </Box>
         </SectionCard>
+        ) : null}
 
         {/* ── Double authentification ────────────────── */}
         <SectionCard
@@ -658,10 +671,3 @@ function SecurityPageInner() {
   );
 }
 
-export default function SecurityPage() {
-  return (
-    <OwnerProfileGuard>
-      <SecurityPageInner />
-    </OwnerProfileGuard>
-  );
-}

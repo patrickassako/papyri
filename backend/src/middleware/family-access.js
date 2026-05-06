@@ -84,7 +84,51 @@ async function requireOwnerProfile(req, res, next) {
   return next();
 }
 
+/**
+ * Allow if owner OR if the targeted profileId (req.params.profileId) is the
+ * currently active profile (a non-owner member can edit their own family profile).
+ */
+async function requireOwnerOrSelfProfile(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'UNAUTHORIZED', message: 'Non authentifie.' },
+    });
+  }
+
+  let familyContext = { subscription: null, profile: null, profileId: null, isFamilyContext: false };
+  try {
+    familyContext = await familyProfilesService.resolveProfileForUser(
+      req.user.id,
+      req.headers['x-profile-id'] || null,
+    );
+  } catch (err) {
+    console.warn('[requireOwnerOrSelfProfile] resolve error:', err.message);
+  }
+
+  req.familyContext = familyContext;
+
+  // Solo subs always allowed.
+  if (!familyContext?.isFamilyContext) return next();
+
+  // Owner: allowed.
+  if (familyContext?.profile?.is_owner_profile) return next();
+
+  // Self: targeted profileId matches the active profile.
+  const targetProfileId = req.params?.profileId;
+  if (targetProfileId && targetProfileId === familyContext.profileId) return next();
+
+  return res.status(403).json({
+    success: false,
+    error: {
+      code: 'OWNER_OR_SELF_REQUIRED',
+      message: 'Vous ne pouvez modifier que votre propre profil.',
+    },
+  });
+}
+
 module.exports = {
   rejectKidProfile,
   requireOwnerProfile,
+  requireOwnerOrSelfProfile,
 };

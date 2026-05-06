@@ -35,9 +35,10 @@ export default function MobileBottomNav() {
     if (activeProfile?.is_kid) {
       return !['/subscription', '/profile'].includes(item.route);
     }
-    // Non-owner family profiles: hide subscription + settings (which leads to profile/devices/security)
+    // Non-owner family profiles: hide subscription. Profile/Settings stays accessible
+    // (read-only for sensitive actions).
     if (activeProfile && activeProfile.is_owner_profile === false) {
-      return !['/subscription', '/profile'].includes(item.route);
+      return item.route !== '/subscription';
     }
     return true;
   });

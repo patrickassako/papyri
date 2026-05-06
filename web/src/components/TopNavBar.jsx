@@ -284,7 +284,7 @@ export default function TopNavBar({
         <Box sx={{ px: 1.2, py: 1.2 }}>
           {[
             { label: t('common.dashboard'), path: '/dashboard', icon: DashboardOutlinedIcon },
-            ...(isOwner ? [{ label: t('common.profile'), path: '/profile', icon: PersonOutlinedIcon }] : []),
+            { label: t('common.profile'), path: '/profile', icon: PersonOutlinedIcon },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -375,12 +375,10 @@ export default function TopNavBar({
           <ListItemText primary={t('common.notifications')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
         </MenuItem>
 
-        {isOwner && (
-          <MenuItem onClick={() => handleMenuNav('/profile')} sx={menuItemSx}>
-            <ListItemIcon><PersonOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
-            <ListItemText primary={t('common.profile')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
-          </MenuItem>
-        )}
+        <MenuItem onClick={() => handleMenuNav('/profile')} sx={menuItemSx}>
+          <ListItemIcon><PersonOutlinedIcon sx={{ fontSize: 18, color: '#9c7e49' }} /></ListItemIcon>
+          <ListItemText primary={t('common.profile')} primaryTypographyProps={{ fontSize: '0.875rem' }} />
+        </MenuItem>
 
         <Divider sx={{ borderColor: '#f0e8dc' }} />
 

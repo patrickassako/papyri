@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   View,
   ScrollView,
@@ -43,6 +42,7 @@ import {
 } from '../services/notifications.service';
 import { logout } from '../services/auth.service';
 import { changeLanguage, SUPPORTED_LANGUAGES } from '../i18n';
+import { useProfile } from '../context/ProfileContext';
 import BottomNavBar from '../components/BottomNavBar';
 import { getProxiedImageUrl } from '../utils/imageProxy';
 
@@ -78,8 +78,9 @@ function getSubStatusColor(status) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-function ProfileScreenInner({ navigation }) {
+export default function ProfileScreen({ navigation }) {
   const { t, i18n } = useTranslation();
+  const { isOwnerContext: isOwner, activeProfile } = useProfile();
 
   // ── Data state ──
   const [user, setUser] = useState(null);
@@ -360,7 +361,7 @@ function ProfileScreenInner({ navigation }) {
       >
         {/* ── HEADER ─────────────────────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity activeOpacity={0.8} onPress={handleAvatarPress}>
+          <TouchableOpacity activeOpacity={0.8} onPress={isOwner ? handleAvatarPress : undefined} disabled={!isOwner}>
             <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
               {user?.avatar_url ? (
                 <Image
@@ -457,19 +458,23 @@ function ProfileScreenInner({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('profile.myAccount')}</Text>
           <View style={styles.listCard}>
-            <ListRow
-              icon="account-edit-outline"
-              title={t('profile.editProfile')}
-              value={user?.full_name || '—'}
-              onPress={() => { setEditName(user?.full_name || ''); setEditNameVisible(true); }}
-            />
-            <Divider style={styles.rowDivider} />
-            <ListRow
-              icon="lock-outline"
-              title={t('profile.changePassword')}
-              onPress={() => { setPassForm({ current: '', next: '', confirm: '' }); setPassError(''); setChangePassVisible(true); }}
-            />
-            <Divider style={styles.rowDivider} />
+            {isOwner ? (
+              <>
+                <ListRow
+                  icon="account-edit-outline"
+                  title={t('profile.editProfile')}
+                  value={user?.full_name || '—'}
+                  onPress={() => { setEditName(user?.full_name || ''); setEditNameVisible(true); }}
+                />
+                <Divider style={styles.rowDivider} />
+                <ListRow
+                  icon="lock-outline"
+                  title={t('profile.changePassword')}
+                  onPress={() => { setPassForm({ current: '', next: '', confirm: '' }); setPassError(''); setChangePassVisible(true); }}
+                />
+                <Divider style={styles.rowDivider} />
+              </>
+            ) : null}
             <ListRow
               icon="devices"
               title={t('profile.myDevices')}
@@ -531,13 +536,17 @@ function ProfileScreenInner({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('profile.familyAccounts')}</Text>
           <View style={styles.listCard}>
-            <ListRow
-              icon="account-group-outline"
-              title={t('profile.manageProfiles')}
-              onPress={() => navigation.navigate('Family')}
-              chevron
-            />
-            <Divider style={styles.rowDivider} />
+            {isOwner ? (
+              <>
+                <ListRow
+                  icon="account-group-outline"
+                  title={t('profile.manageProfiles')}
+                  onPress={() => navigation.navigate('Family')}
+                  chevron
+                />
+                <Divider style={styles.rowDivider} />
+              </>
+            ) : null}
             <ListRow
               icon="account-switch-outline"
               title={t('profile.switchProfile')}
@@ -601,35 +610,37 @@ function ProfileScreenInner({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* ── ZONE DE DANGER ─────────────────────────────────── */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.dangerToggle}
-            onPress={() => setDangerExpanded(v => !v)}
-          >
-            <MaterialCommunityIcons
-              name={dangerExpanded ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color="#9ca3af"
-            />
-            <Text style={styles.dangerToggleText}>{t('profile.dangerZone')}</Text>
-          </TouchableOpacity>
+        {/* ── ZONE DE DANGER (owner uniquement) ──────────────── */}
+        {isOwner ? (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.dangerToggle}
+              onPress={() => setDangerExpanded(v => !v)}
+            >
+              <MaterialCommunityIcons
+                name={dangerExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color="#9ca3af"
+              />
+              <Text style={styles.dangerToggleText}>{t('profile.dangerZone')}</Text>
+            </TouchableOpacity>
 
-          {dangerExpanded && (
-            <View style={styles.dangerCard}>
-              <Text style={styles.dangerDesc}>
-                {t('profile.deleteAccount')} — action irréversible.
-              </Text>
-              <TouchableOpacity
-                style={styles.dangerBtn}
-                onPress={() => { setDeleteConfirm(''); setDeleteDialogVisible(true); }}
-              >
-                <MaterialCommunityIcons name="delete-forever-outline" size={18} color="#ef4444" />
-                <Text style={styles.dangerBtnText}>{t('profile.deleteAccount')}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+            {dangerExpanded && (
+              <View style={styles.dangerCard}>
+                <Text style={styles.dangerDesc}>
+                  {t('profile.deleteAccount')} — action irréversible.
+                </Text>
+                <TouchableOpacity
+                  style={styles.dangerBtn}
+                  onPress={() => { setDeleteConfirm(''); setDeleteDialogVisible(true); }}
+                >
+                  <MaterialCommunityIcons name="delete-forever-outline" size={18} color="#ef4444" />
+                  <Text style={styles.dangerBtnText}>{t('profile.deleteAccount')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ) : null}
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -881,13 +892,6 @@ function PassField({ label, value, onChange, show, onToggle }) {
   );
 }
 
-export default function ProfileScreen(props) {
-  return (
-    <OwnerProfileGuard>
-      <ProfileScreenInner {...props} />
-    </OwnerProfileGuard>
-  );
-}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 

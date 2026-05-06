@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import OwnerProfileGuard from '../components/OwnerProfileGuard';
 import {
   Box,
   Typography,
@@ -45,6 +44,7 @@ import { authFetch } from '../services/auth.service';
 import { getPreferences as getNotifPrefs, updatePreferences as updateNotifPrefs } from '../services/notifications.service';
 import UserSpaceSidebar from '../components/UserSpaceSidebar';
 import MobileBottomNav from '../components/MobileBottomNav';
+import { isOwnerContext, getActiveProfile } from '../config/profileStorage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -123,11 +123,22 @@ function formatMemberSince(createdAt, t, locale = 'fr-FR') {
   return t('profile.memberSince', { date: label.charAt(0).toUpperCase() + label.slice(1) });
 }
 
-function ProfilePageInner() {
+export default function ProfilePage() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const locale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   const [user, setUser] = useState(null);
+  const [isOwner, setIsOwner] = useState(() => isOwnerContext());
+  const [activeProfileInfo, setActiveProfileInfo] = useState(() => getActiveProfile());
+
+  useEffect(() => {
+    const handleProfileChange = () => {
+      setIsOwner(isOwnerContext());
+      setActiveProfileInfo(getActiveProfile());
+    };
+    window.addEventListener('papyri:profile-changed', handleProfileChange);
+    return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
+  }, []);
   const [exportLoading, setExportLoading]       = useState(false);
   const [gdprRequestSent, setGdprRequestSent]   = useState(false);
   const [gdprLoading, setGdprLoading]           = useState(false);
@@ -645,48 +656,52 @@ function ProfilePageInner() {
                   >
                     {user?.full_name?.[0]?.toUpperCase() || 'U'}
                   </Avatar>
-                  {/* Camera overlay on hover */}
-                  <Box
-                    className="camera-overlay"
-                    onClick={openAvatarDialog}
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      borderRadius: '50%',
-                      bgcolor: 'rgba(0,0,0,0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: 0,
-                      transition: 'opacity 0.2s',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <PhotoCameraOutlined sx={{ color: '#fff', fontSize: 32 }} />
-                  </Box>
-                  {/* Edit badge */}
-                  <Box
-                    onClick={openAvatarDialog}
-                    sx={{
-                      position: 'absolute',
-                      bottom: 4,
-                      right: 4,
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      bgcolor: surfaceDefault,
-                      border: `2px solid ${surfaceVariant}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                    }}
-                  >
-                    <EditOutlined sx={{ fontSize: 16, color: textMain }} />
-                  </Box>
+                  {isOwner ? (
+                    <>
+                      {/* Camera overlay on hover */}
+                      <Box
+                        className="camera-overlay"
+                        onClick={openAvatarDialog}
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: '50%',
+                          bgcolor: 'rgba(0,0,0,0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: 0,
+                          transition: 'opacity 0.2s',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <PhotoCameraOutlined sx={{ color: '#fff', fontSize: 32 }} />
+                      </Box>
+                      {/* Edit badge */}
+                      <Box
+                        onClick={openAvatarDialog}
+                        sx={{
+                          position: 'absolute',
+                          bottom: 4,
+                          right: 4,
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          bgcolor: surfaceDefault,
+                          border: `2px solid ${surfaceVariant}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                        }}
+                      >
+                        <EditOutlined sx={{ fontSize: 16, color: textMain }} />
+                      </Box>
+                    </>
+                  ) : null}
                 </Box>
               </Box>
 
@@ -749,12 +764,18 @@ function ProfilePageInner() {
                 <Box>
                   <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: textMain, mb: 0.5 }}>
                     {t('profile.fullName')}
+                    {!isOwner && (
+                      <Typography component="span" sx={{ ml: 1, fontSize: '0.7rem', color: textMuted, fontStyle: 'italic' }}>
+                        — {t('profile.ownerOnly', { defaultValue: 'profil principal uniquement' })}
+                      </Typography>
+                    )}
                   </Typography>
                   <TextField
                     fullWidth
                     size="small"
                     value={profileForm.full_name}
                     onChange={handleFormChange('full_name')}
+                    disabled={!isOwner}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: '8px',
@@ -831,31 +852,40 @@ function ProfilePageInner() {
                   </TextField>
                 </Box>
 
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleSave}
-                  disabled={saving}
-                  sx={{
-                    bgcolor: primary,
-                    color: '#fff',
-                    borderRadius: '8px',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    py: 1.2,
-                    boxShadow: 'none',
-                    '&:hover': {
-                      bgcolor: primaryDark,
-                      boxShadow: '0 4px 12px rgba(181,101,29,0.3)',
-                    },
-                    '&:disabled': {
-                      bgcolor: `${primary}80`,
+                {isOwner ? (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={handleSave}
+                    disabled={saving}
+                    sx={{
+                      bgcolor: primary,
                       color: '#fff',
-                    },
-                  }}
-                >
-                  {saving ? t('common.loading') : t('profile.saveChanges')}
-                </Button>
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      py: 1.2,
+                      boxShadow: 'none',
+                      '&:hover': {
+                        bgcolor: primaryDark,
+                        boxShadow: '0 4px 12px rgba(181,101,29,0.3)',
+                      },
+                      '&:disabled': {
+                        bgcolor: `${primary}80`,
+                        color: '#fff',
+                      },
+                    }}
+                  >
+                    {saving ? t('common.loading') : t('profile.saveChanges')}
+                  </Button>
+                ) : (
+                  <Typography sx={{ fontSize: '0.8rem', color: textMuted, fontStyle: 'italic', textAlign: 'center', py: 1 }}>
+                    {t('profile.ownerOnlyHint', {
+                      profileName: activeProfileInfo?.name || '',
+                      defaultValue: `Connecté en tant que "${activeProfileInfo?.name || ''}". Modifiez le compte principal depuis le profil principal.`,
+                    })}
+                  </Typography>
+                )}
               </Box>
             </Paper>
 
@@ -966,14 +996,16 @@ function ProfilePageInner() {
                 >
                   {exportLoading ? t('common.loading') : t('profile.downloadData')}
                 </Button>
-                <Button
-                  fullWidth variant="outlined" size="small"
-                  disabled={gdprLoading || gdprRequestSent}
-                  onClick={handleGdprRequest}
-                  sx={{ mb: 1, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderColor: '#dc2626', color: '#dc2626', '&:hover': { bgcolor: '#fee2e2' } }}
-                >
-                  {gdprLoading ? t('common.loading') : gdprRequestSent ? t('profile.gdprRequestSent') : t('profile.deleteAccount')}
-                </Button>
+                {isOwner ? (
+                  <Button
+                    fullWidth variant="outlined" size="small"
+                    disabled={gdprLoading || gdprRequestSent}
+                    onClick={handleGdprRequest}
+                    sx={{ mb: 1, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderColor: '#dc2626', color: '#dc2626', '&:hover': { bgcolor: '#fee2e2' } }}
+                  >
+                    {gdprLoading ? t('common.loading') : gdprRequestSent ? t('profile.gdprRequestSent') : t('profile.deleteAccount')}
+                  </Button>
+                ) : null}
               </Box>
               <Box sx={{ pb: 2 }} />
             </Paper>
@@ -1312,10 +1344,3 @@ function ProfilePageInner() {
   );
 }
 
-export default function ProfilePage() {
-  return (
-    <OwnerProfileGuard>
-      <ProfilePageInner />
-    </OwnerProfileGuard>
-  );
-}
