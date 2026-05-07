@@ -558,54 +558,6 @@ export default function ProfilePage() {
           ))}
         </Box>
 
-        <Paper
-          elevation={0}
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            p: 1.25,
-            mb: 2.5,
-            borderRadius: '12px',
-            border: `1px solid ${surfaceVariant}`,
-          }}
-        >
-          <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
-            {t('common.settings')}
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
-            {[
-              { label: t('common.profile'), icon: SettingsOutlined, active: true, onClick: () => navigate('/profile') },
-              { label: t('common.devices'), icon: DevicesOutlined, onClick: () => navigate('/devices') },
-              { label: t('common.security'), icon: LockOutlined, onClick: () => navigate('/security') },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <Button
-                  key={item.label}
-                  onClick={item.onClick}
-                  sx={{
-                    minWidth: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 0.5,
-                    borderRadius: '12px',
-                    py: 1.1,
-                    px: 0.75,
-                    textTransform: 'none',
-                    color: item.active ? primary : textMain,
-                    bgcolor: item.active ? `${primary}12` : surfaceVariant,
-                    '&:hover': { bgcolor: item.active ? `${primary}18` : `${primary}0D` },
-                  }}
-                >
-                  <Icon sx={{ fontSize: 20 }} />
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, lineHeight: 1.1, textAlign: 'center' }}>
-                    {item.label}
-                  </Typography>
-                </Button>
-              );
-            })}
-          </Box>
-        </Paper>
-
         {/* Two-column layout */}
         <Grid container spacing={3}>
           {/* Left Column (4/12) */}

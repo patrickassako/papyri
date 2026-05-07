@@ -355,8 +355,14 @@ export default function DashboardPage() {
 
         if (usageRes.status === 'fulfilled' && usageRes.value.ok) {
           const payload = await safeJson(usageRes.value);
-          if (aliveRef.current && payload?.data?.usage) {
-            setUsage(payload.data.usage);
+          if (aliveRef.current && payload?.data) {
+            // Store the whole usage payload so we can read bonusAvailableTotal
+            // alongside the legacy usage row.
+            setUsage({
+              ...(payload.data.usage || {}),
+              bonusAvailableTotal: Number(payload.data.bonusAvailableTotal ?? payload.data.bonus_available_total ?? 0),
+              creditsGrantLifetimeAccess: Boolean(payload.data.subscription?.plan_snapshot?.creditsGrantLifetimeAccess),
+            });
           }
         } else if (aliveRef.current && activeProfile?.is_kid) {
           setUsage(null);
@@ -528,56 +534,28 @@ export default function DashboardPage() {
           })}
         </Box>
 
-        {!activeProfile?.is_kid && usage && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: { xs: 1.5, md: 2.5 }, mb: 3 }}>
-            {[
-              {
-                label: t('dashboard.ebookCredits'),
-                icon: MenuBookOutlined,
-                color: tokens.colors.primary,
-                used: Number(usage.text_unlocked_count || 0),
-                quota: Number(usage.text_quota || 0),
-              },
-              {
-                label: t('dashboard.audiobookCredits'),
-                icon: HeadphonesOutlined,
-                color: tokens.colors.secondary,
-                used: Number(usage.audio_unlocked_count || 0),
-                quota: Number(usage.audio_quota || 0),
-              },
-            ].map((credit) => {
-              const CreditIcon = credit.icon;
-              const remaining = Math.max(0, credit.quota - credit.used);
-              const pct = credit.quota > 0 ? Math.min(100, Math.round((credit.used / credit.quota) * 100)) : 0;
-              return (
-                <Paper key={credit.label} elevation={0} sx={{ p: 2.5, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                    <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: `${credit.color}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <CreditIcon sx={{ color: credit.color, fontSize: 20 }} />
-                    </Box>
-                    <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {credit.label}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, mb: 1 }}>
-                    <Typography variant="h4" sx={{ fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
-                      {remaining}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#9c7e49' }}>/ {credit.quota} {i18n.language?.startsWith('en') ? 'remaining' : 'restants'}</Typography>
-                  </Box>
-                  <LinearProgress
-                    variant="determinate"
-                    value={pct}
-                    sx={{
-                      height: 6,
-                      borderRadius: 3,
-                      bgcolor: `${credit.color}1A`,
-                      '& .MuiLinearProgress-bar': { borderRadius: 3, bgcolor: credit.color },
-                    }}
-                  />
-                </Paper>
-              );
-            })}
+        {!activeProfile?.is_kid && usage && hasActiveSubscription && (
+          <Box sx={{ mb: 3 }}>
+            <Paper elevation={0} sx={{ p: 2.5, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: `${tokens.colors.primary}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MenuBookOutlined sx={{ color: tokens.colors.primary, fontSize: 20 }} />
+                </Box>
+                <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {t('dashboard.creditsRemaining', { defaultValue: 'Crédits restants' })}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.5 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
+                  {Number(usage.bonusAvailableTotal || 0)}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#9c7e49' }}>
+                  {usage.creditsGrantLifetimeAccess
+                    ? t('dashboard.creditsLifetimeHint', { defaultValue: 'accès à vie au livre choisi' })
+                    : t('dashboard.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné actif' })}
+                </Typography>
+              </Box>
+            </Paper>
           </Box>
         )}
 
@@ -753,7 +731,7 @@ export default function DashboardPage() {
                             width: '100%',
                             aspectRatio: '1/1',
                             borderRadius: '6px',
-                            bgcolor: intensity > 0 ? `rgba(181, 101, 29, ${0.15 + intensity * 0.7})` : tokens.colors.surfaces.light.variant,
+                            bgcolor: intensity > 0 ? `rgba(181, 101, 29, ${0.4 + intensity * 0.6})` : tokens.colors.surfaces.light.variant,
                             mb: 0.5,
                           }}
                         />

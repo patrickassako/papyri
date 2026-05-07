@@ -22,7 +22,6 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import PhoneAndroidOutlinedIcon from '@mui/icons-material/PhoneAndroidOutlined';
 import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
-import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
@@ -123,11 +122,6 @@ export default function SecurityPage() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaLoading, setMfaLoading] = useState(false);
   const [mfaError, setMfaError] = useState('');
-
-  /* delete account */
-  const [deleteDialog, setDeleteDialog] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const notify = (msg, severity = 'success') => setSnack({ open: true, msg, severity });
 
@@ -280,20 +274,6 @@ export default function SecurityPage() {
   };
 
   /* ── Delete account ──────────────────────────── */
-  const handleDeleteAccount = async () => {
-    if (deleteConfirm !== 'SUPPRIMER') return;
-    setDeleteLoading(true);
-    try {
-      await authService.authFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/users/me`, { method: 'DELETE' });
-      await authService.logout();
-      navigate('/');
-    } catch (err) {
-      notify(t('security.deleteAccountError'), 'error');
-      setDeleteLoading(false);
-      setDeleteDialog(false);
-    }
-  };
-
   const strength = getStrength(pwdForm.next);
 
   return (
@@ -519,24 +499,6 @@ export default function SecurityPage() {
           {mfaError && <Alert severity="error" sx={{ mt: 2.5, borderRadius: '10px', fontSize: '0.82rem' }}>{mfaError}</Alert>}
         </SectionCard>
 
-        {/* ── Supprimer le compte ────────────────────── */}
-        <SectionCard
-          icon={<DeleteForeverOutlinedIcon />}
-          title={t('security.deleteAccountTitle')}
-          subtitle={t('security.deleteAccountSubtitle')}
-        >
-          <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '10px', fontSize: '0.82rem' }}>
-            {t('security.deleteAccountWarning')}
-          </Alert>
-          <Button
-            variant="outlined"
-            startIcon={<DeleteForeverOutlinedIcon />}
-            onClick={() => setDeleteDialog(true)}
-            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#c0392b', color: '#c0392b', '&:hover': { bgcolor: '#fdf0ef', borderColor: '#c0392b' } }}
-          >
-            {t('security.deleteMyAccount')}
-          </Button>
-        </SectionCard>
       </Box>
 
       {/* ════ Dialog: setup 2FA ════════════════════════════════ */}
@@ -628,37 +590,6 @@ export default function SecurityPage() {
             sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#c0392b', '&:hover': { bgcolor: '#a93226' } }}
           >
             {mfaLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('security.deactivate')}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ════ Dialog: delete account ═══════════════════════════ */}
-      <Dialog open={deleteDialog} onClose={() => { setDeleteDialog(false); setDeleteConfirm(''); }} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#c0392b' }}>{t('security.deleteDialogTitle')}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Alert severity="error" sx={{ borderRadius: '10px' }}>
-            {t('security.deleteDialogWarning')}
-          </Alert>
-          <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
-            {t('security.deleteDialogHint')}
-          </Typography>
-          <TextField
-            fullWidth
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder="SUPPRIMER"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => { setDeleteDialog(false); setDeleteConfirm(''); }} sx={{ borderRadius: '8px', textTransform: 'none', color: textMuted }}>{t('common.cancel')}</Button>
-          <Button
-            variant="contained"
-            onClick={handleDeleteAccount}
-            disabled={deleteConfirm !== 'SUPPRIMER' || deleteLoading}
-            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#c0392b', '&:hover': { bgcolor: '#a93226' } }}
-          >
-            {deleteLoading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('security.deleteForever')}
           </Button>
         </DialogActions>
       </Dialog>
