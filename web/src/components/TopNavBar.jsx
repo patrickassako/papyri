@@ -30,6 +30,7 @@ import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 import * as authService from '../services/auth.service';
 import { useTranslation } from 'react-i18next';
 import { isOwnerContext } from '../config/profileStorage';
+import AppDrawer from './AppDrawer';
 
 export default function TopNavBar({
   user,
@@ -224,6 +225,15 @@ export default function TopNavBar({
         </Box>
       </Box>
 
+      <AppDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        isAuthenticated={Boolean(user)}
+        user={user}
+      />
+
+      {/* Old in-line drawer kept for reference, hidden behind a never-true flag */}
+      {false && (
       <Drawer
         anchor="left"
         open={mobileNavOpen}
@@ -312,6 +322,7 @@ export default function TopNavBar({
           })}
         </Box>
       </Drawer>
+      )}
 
       {/* Profile dropdown menu */}
       <Menu

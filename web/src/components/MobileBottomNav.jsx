@@ -5,18 +5,26 @@ import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined';
 import AnalyticsOutlined from '@mui/icons-material/AnalyticsOutlined';
 import PaymentOutlined from '@mui/icons-material/PaymentOutlined';
-import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import MenuOutlined from '@mui/icons-material/MenuOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import SwitchAccountOutlined from '@mui/icons-material/SwitchAccountOutlined';
 import tokens from '../config/tokens';
 import { useTranslation } from 'react-i18next';
 import { getActiveProfile } from '../config/profileStorage';
+import * as authService from '../services/auth.service';
+import AppDrawer from './AppDrawer';
 
 export default function MobileBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
   const [activeProfile, setActiveProfile] = useState(() => getActiveProfile());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    authService.getUser().then((u) => setUser(u || null)).catch(() => setUser(null));
+  }, []);
 
   useEffect(() => {
     const handleProfileChange = (event) => setActiveProfile(event?.detail || null);
@@ -29,14 +37,14 @@ export default function MobileBottomNav() {
     { label: t('mobileNav.library'), icon: AutoStoriesOutlined, route: '/my-list' },
     { label: t('mobileNav.stats'), icon: AnalyticsOutlined, route: '/history' },
     { label: t('mobileNav.subscription'), icon: PaymentOutlined, route: '/subscription' },
-    { label: t('mobileNav.settings'), icon: SettingsOutlined, route: '/profile', matchRoutes: ['/profile', '/devices', '/security'] },
+    // 5e item : ouvre le drawer global (préférences, sécurité, déconnexion, etc.)
+    { label: t('mobileNav.menu', { defaultValue: 'Menu' }), icon: MenuOutlined, action: 'drawer' },
   ].filter((item) => {
     // Kid profiles
     if (activeProfile?.is_kid) {
       return !['/subscription', '/profile'].includes(item.route);
     }
-    // Non-owner family profiles: hide subscription. Profile/Settings stays accessible
-    // (read-only for sensitive actions).
+    // Non-owner family profiles: hide subscription. Menu drawer stays accessible.
     if (activeProfile && activeProfile.is_owner_profile === false) {
       return item.route !== '/subscription';
     }
@@ -125,14 +133,24 @@ export default function MobileBottomNav() {
       >
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.matchRoutes
-            ? item.matchRoutes.some((route) => location.pathname === route || location.pathname.startsWith(`${route}/`))
-            : location.pathname === item.route
-              || (item.route !== '/dashboard' && location.pathname.startsWith(item.route));
+          const isAction = Boolean(item.action);
+          const isActive = isAction
+            ? false
+            : (item.matchRoutes
+              ? item.matchRoutes.some((route) => location.pathname === route || location.pathname.startsWith(`${route}/`))
+              : location.pathname === item.route
+                || (item.route !== '/dashboard' && location.pathname.startsWith(item.route)));
+          const handleClick = () => {
+            if (item.action === 'drawer') {
+              setDrawerOpen(true);
+            } else if (item.route) {
+              navigate(item.route);
+            }
+          };
           return (
             <Box
-              key={item.route}
-              onClick={() => navigate(item.route)}
+              key={item.label}
+              onClick={handleClick}
               sx={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -152,6 +170,13 @@ export default function MobileBottomNav() {
           );
         })}
       </Box>
+
+      <AppDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        isAuthenticated={Boolean(user)}
+        user={user}
+      />
     </>
   );
 }

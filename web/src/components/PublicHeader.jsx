@@ -1,15 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Button,
   Container,
+  IconButton,
   Stack,
   Typography,
 } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import papyriWordmark from '../assets/papyri-wordmark-150x50.png';
 import LanguageToggle from './LanguageToggle';
+import AppDrawer from './AppDrawer';
 
 const primary = '#f4a825';
 
@@ -18,9 +21,11 @@ export default function PublicHeader({
   isAuthenticated = false,
   authenticatedCtaPath = '/dashboard',
   background = '#f8f7f5',
+  user = null,
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const navTextSx = (isActive) => ({
     fontSize: '0.9rem',
@@ -49,6 +54,15 @@ export default function PublicHeader({
       }}
     >
       <Container maxWidth="lg" sx={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.2, minWidth: 0 }}>
+        {/* Hamburger (mobile only) */}
+        <IconButton
+          aria-label={t('nav.openMenu', { defaultValue: 'Ouvrir le menu' })}
+          onClick={() => setDrawerOpen(true)}
+          sx={{ display: { xs: 'inline-flex', md: 'none' }, color: '#1c160d', mr: 0.4 }}
+        >
+          <MenuIcon />
+        </IconButton>
+
         <Box
           component="img"
           src={papyriWordmark}
@@ -98,6 +112,13 @@ export default function PublicHeader({
           </Button>
         </Stack>
       </Container>
+
+      <AppDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        isAuthenticated={isAuthenticated}
+        user={user}
+      />
     </Box>
   );
 }
