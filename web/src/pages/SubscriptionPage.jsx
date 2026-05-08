@@ -465,7 +465,7 @@ function SubscriptionPageInner() {
                 sx={{ textTransform: 'none' }}
                 onClick={() => runAction(() => subscriptionsService.cancel({ immediately: false }), t('subscription.cancelAtEndActivated'))}
               >
-                {t('subscription.cancelSubscription', { defaultValue: 'Annuler l\'abonnement' })}
+                {t('subscription.cancelSubscription')}
               </Button>
             </Stack>
           </Paper>
@@ -480,12 +480,12 @@ function SubscriptionPageInner() {
                 pct={progressValue(isFamilyPlan ? profileCount : activeMembersCount, usersLimit)}
               />
               <RingCard
-                title={t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}
+                title={t('subscription.creditsRemaining')}
                 value={`${bonusAvailableTotal}`}
                 hint={
                   subscription?.plan_snapshot?.creditsGrantLifetimeAccess
-                    ? t('subscription.creditsLifetimeHint', { defaultValue: 'Accès à vie au livre choisi' })
-                    : t('subscription.creditsBoundHint', { defaultValue: 'Accès tant qu\'abonné actif' })
+                    ? t('subscription.creditsLifetimeHint')
+                    : t('subscription.creditsBoundHint')
                 }
                 pct={progressValue(bonusAvailableTotal, Math.max(1, bonusAvailableTotal || 1))}
               />
@@ -500,12 +500,12 @@ function SubscriptionPageInner() {
                 <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd' }}>
                   <Typography sx={{ fontWeight: 800, color: '#262626', mb: 2 }}>{t('subscription.activePerks')}</Typography>
                   <Stack spacing={1.2}>
-                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.unlimitedCatalog', { defaultValue: 'Catalogue premium illimité' })}</Typography>
+                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.unlimitedCatalog')}</Typography>
                     <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.discountPaidBooks')}: <b>{subscription?.plan_snapshot?.discountPercentPaidBooks || 30}%</b></Typography>
-                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.creditsRemaining', { defaultValue: 'Crédits restants' })}: <b>{bonusAvailableTotal}</b>
+                    <Typography sx={{ color: '#4f4f4f' }}>- {t('subscription.creditsRemaining')}: <b>{bonusAvailableTotal}</b>
                       {subscription?.plan_snapshot?.creditsGrantLifetimeAccess
-                        ? ` · ${t('subscription.creditsLifetimeHint', { defaultValue: 'accès à vie' })}`
-                        : ` · ${t('subscription.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné' })}`
+                        ? ` · ${t('subscription.creditsLifetimeHint')}`
+                        : ` · ${t('subscription.creditsBoundHint')}`
                       }
                     </Typography>
                     {isFamilyPlan ? (
@@ -522,7 +522,7 @@ function SubscriptionPageInner() {
                 <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid #ece7dd', textAlign: 'center' }}>
                   <Typography sx={{ color: '#8a8175' }}>{t('subscription.inactiveDesc')}</Typography>
                   <Button variant="contained" sx={{ mt: 2, bgcolor: '#f1a10a', textTransform: 'none', '&:hover': { bgcolor: '#d9900a' } }} onClick={() => navigate('/pricing')}>
-                    {t('pricing.subscribeNow')}
+                    {t('subscription.subscribeNow')}
                   </Button>
                 </Paper>
               )}
@@ -532,7 +532,7 @@ function SubscriptionPageInner() {
             <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid #ece7dd', overflow: 'hidden', alignSelf: 'start' }}>
               <Box sx={{ p: { xs: 2, md: 2.5 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #efefef' }}>
                 <Typography sx={{ fontWeight: 800, color: '#262626' }}>{t('subscription.billingHistory')}</Typography>
-                <Typography sx={{ color: '#f1a10a', fontWeight: 700 }}>{t('landing.viewAll')}</Typography>
+                <Typography sx={{ color: '#f1a10a', fontWeight: 700 }}>{t('common.seeAll')}</Typography>
               </Box>
               <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1.5 }}>
                 <Stack spacing={1}>
@@ -737,7 +737,7 @@ function SubscriptionPageInner() {
                 : <Box component="span" sx={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>📱</Box>
               }
               <Stack alignItems="flex-start" spacing={0.2} sx={{ flex: 1 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#e65100' }}>{t('pricing.mobileMoney')}</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#e65100' }}>{t('subscription.mobileMoney')}</Typography>
                 <Typography sx={{ fontSize: '0.78rem', color: '#888' }}>{t('subscription.mobileMoneyDesc')}</Typography>
               </Stack>
             </Button>
