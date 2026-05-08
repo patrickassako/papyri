@@ -145,7 +145,7 @@ export default function ContentDetailScreen({ route, navigation }) {
       if (offlineEntry && alive) {
         setContent({
           id: contentId,
-          title: offlineEntry.title || 'Contenu',
+          title: offlineEntry.title || t('contentDetail.fallbackTitle'),
           author: offlineEntry.author || '',
           cover_url: offlineEntry.cover_url || null,
           content_type: offlineEntry.type || 'audiobook',
@@ -284,9 +284,9 @@ export default function ContentDetailScreen({ route, navigation }) {
     }
 
     return [
-      { id: 'c1', title: 'Introduction', duration: 1800 },
-      { id: 'c2', title: 'Le départ', duration: 2400 },
-      { id: 'c3', title: 'Retour aux sources', duration: 2600 },
+      { id: 'c1', title: t('contentDetail.chapterIntro'), duration: 1800 },
+      { id: 'c2', title: t('contentDetail.chapterDeparture'), duration: 2400 },
+      { id: 'c3', title: t('contentDetail.chapterReturn'), duration: 2600 },
     ];
   }, [isAudiobook, content?.chapters]);
 
@@ -429,12 +429,12 @@ export default function ContentDetailScreen({ route, navigation }) {
     // If already downloaded, confirm delete
     if (downloadState === 'downloaded') {
       Alert.alert(
-        'Supprimer le fichier',
-        'Supprimer ce contenu du stockage local ?',
+        t('contentDetail.deleteFile'),
+        t('contentDetail.deleteOfflineConfirm'),
         [
-          { text: 'Annuler', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Supprimer',
+            text: t('common.delete'),
             style: 'destructive',
             onPress: async () => {
               await deleteDownloadedContent(content.id || contentId).catch(() => {});
@@ -465,14 +465,14 @@ export default function ContentDetailScreen({ route, navigation }) {
           const signedUrl = payload?.data?.url || payload?.url || null;
           if (!signedUrl) {
             setDownloadState('idle');
-            Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
+            Alert.alert(t('contentDetail.downloadTitle'), t('contentDetail.urlUnavailable'));
             return;
           }
           await downloadContent({
             contentId: cid,
             url: signedUrl,
             format: 'audio',
-            title: content.title || 'Contenu',
+            title: content.title || t('contentDetail.fallbackTitle'),
             author: content.author || '',
             cover_url: content.cover_url || '',
             type: 'audiobook',
@@ -487,7 +487,7 @@ export default function ContentDetailScreen({ route, navigation }) {
               const data = await readingService.getChapterFileUrl(cid, chapterId);
               return data?.url || null;
             },
-            title: content.title || 'Contenu',
+            title: content.title || t('contentDetail.fallbackTitle'),
             author: content.author || '',
             cover_url: content.cover_url || '',
             duration_seconds: content.duration_seconds || 0,
@@ -500,14 +500,14 @@ export default function ContentDetailScreen({ route, navigation }) {
         const signedUrl = payload?.data?.url || payload?.url || null;
         if (!signedUrl) {
           setDownloadState('idle');
-          Alert.alert('Téléchargement', 'URL indisponible pour ce contenu.');
+          Alert.alert(t('contentDetail.downloadTitle'), t('contentDetail.urlUnavailable'));
           return;
         }
         await downloadContent({
           contentId: cid,
           url: signedUrl,
           format: content.format || 'epub',
-          title: content.title || 'Contenu',
+          title: content.title || t('contentDetail.fallbackTitle'),
           author: content.author || '',
           cover_url: content.cover_url || '',
           type: 'ebook',
@@ -526,22 +526,22 @@ export default function ContentDetailScreen({ route, navigation }) {
     } catch (err) {
       console.error('Download error:', err);
       setDownloadState('idle');
-      Alert.alert('Erreur', 'Téléchargement échoué. Veuillez réessayer.');
+      Alert.alert(t('common.error'), t('contentDetail.downloadFailed'));
     }
   };
 
   const handlePlaylist = () => {
-    Alert.alert('Playlist', 'Ajouté à votre playlist audio.');
+    Alert.alert(t('contentDetail.playlist'), t('contentDetail.playlistAdded'));
   };
 
   const handleShare = async () => {
     try {
-      const title = content?.title || 'Découvrez ce contenu sur Papyri';
-      const author = content?.author ? ` de ${content.author}` : '';
+      const title = content?.title || t('contentDetail.shareDefaultTitle');
+      const author = content?.author ? t('contentDetail.byAuthor', { author: content.author }) : '';
       const bookUrl = `https://www.papyrihub.net/catalogue/${contentId}`;
       await Share.share({
         title,
-        message: `Découvrez "${title}"${author} sur Papyri — Bibliothèque Numérique Privée.\n\n${bookUrl}`,
+        message: t('contentDetail.shareMessage', { title, author, url: bookUrl }),
         url: bookUrl,
       });
     } catch {
@@ -550,17 +550,20 @@ export default function ContentDetailScreen({ route, navigation }) {
   };
 
   const handleReport = () => {
-    const subject = encodeURIComponent(`Signalement : ${content?.title || contentId}`);
+    const subject = encodeURIComponent(t('contentDetail.reportSubject', { title: content?.title || contentId }));
     const body = encodeURIComponent(
-      `Bonjour,\n\nJe souhaite signaler un problème avec le contenu suivant :\n- Titre : ${content?.title || ''}\n- ID : ${content?.id || contentId}\n\nDescription du problème :\n`
+      t('contentDetail.reportBody', { title: content?.title || '', id: content?.id || contentId })
     );
     Linking.openURL(`mailto:contact@papyrihub.com?subject=${subject}&body=${body}`).catch(() =>
-      Alert.alert('Erreur', "Impossible d'ouvrir le client mail.")
+      Alert.alert(t('common.error'), t('contentDetail.mailClientError'))
     );
   };
 
   const denialCode = access?.denial?.code;
-  const denialMessage = access?.denial?.message || null;
+  // Prefer i18n message based on denial code; fallback to backend message (always FR).
+  const denialMessage = denialCode
+    ? t(`contentDetail.denial.${denialCode}`, { defaultValue: access?.denial?.message || '' })
+    : (access?.denial?.message || null);
 
   // Usage data
   const activeUsage = usageData?.usage || null;

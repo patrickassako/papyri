@@ -67,16 +67,16 @@ function formatDate(iso) {
   });
 }
 
-function formatLanguage(language) {
+function formatLanguage(language, t) {
   if (!language) return '-';
-  if (language === 'fr') return 'Francais';
-  if (language === 'en') return 'Anglais';
+  if (language === 'fr') return t ? t('content.languageFr') : 'Français';
+  if (language === 'en') return t ? t('content.languageEn') : 'English';
   return language;
 }
 
-function formatType(type) {
-  if (type === 'audiobook') return 'Livre audio';
-  if (type === 'ebook') return 'E-book';
+function formatType(type, t) {
+  if (type === 'audiobook') return t ? t('content.audiobook') : 'Audiobook';
+  if (type === 'ebook') return t ? t('content.ebook') : 'Book';
   return '-';
 }
 
@@ -85,7 +85,7 @@ export default function ContentDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [content, setContent] = useState(null);
   const [recommendations, setRecommendations] = useState({ sameGenre: [], youllLike: [] });
@@ -143,7 +143,7 @@ export default function ContentDetailPage() {
         setRecommendations(recs);
       } catch (err) {
         console.error('Erreur chargement contenu:', err);
-        setError('Impossible de charger ce contenu. Veuillez réessayer.');
+        setError(t('content.loadError'));
       } finally {
         setRelatedLoading(false);
         setLoading(false);
@@ -192,7 +192,7 @@ export default function ContentDetailPage() {
       if (status !== 'successful') {
         if (active) {
           setCallbackNotice('');
-          setAccessActionError('Paiement non confirmé. Vous pouvez relancer le déblocage.');
+          setAccessActionError(t('content.paymentNotConfirmed'));
           setSearchParams({}, { replace: true });
         }
         return;
@@ -221,11 +221,11 @@ export default function ContentDetailPage() {
           unlocked: true,
           unlock: verified?.unlock || null,
         }));
-        setCallbackNotice('Paiement confirmé. Contenu débloqué.');
+        setCallbackNotice(t('content.paymentConfirmed'));
       } catch (verifyError) {
         if (!active) return;
         setCallbackNotice('');
-        setAccessActionError(verifyError.message || 'Impossible de vérifier le paiement.');
+        setAccessActionError(verifyError.message || t('content.verifyError'));
       } finally {
         if (active) {
           setSearchParams({}, { replace: true });
@@ -409,7 +409,7 @@ export default function ContentDetailPage() {
           window.location.href = paymentLink;
           return;
         }
-        throw new Error('Lien de paiement indisponible.');
+        throw new Error(t('content.paymentLinkUnavailable'));
       }
 
       if (result.success) {
@@ -446,7 +446,7 @@ export default function ContentDetailPage() {
       }
     } catch (unlockError) {
       console.error('Erreur de déblocage:', unlockError);
-      setAccessActionError(unlockError.message || 'Impossible de débloquer ce contenu.');
+      setAccessActionError(unlockError.message || t('content.unlockFailed'));
     } finally {
       setAccessActionLoading(false);
       setPaymentDialog((prev) => ({ ...prev, providerBusy: '' }));
@@ -486,7 +486,7 @@ export default function ContentDetailPage() {
       }
     } catch (err) {
       setPaymentDialog((prev) => ({ ...prev, providerBusy: '' }));
-      setAccessActionError(err?.message || 'Impossible d\'utiliser le crédit.');
+      setAccessActionError(err?.message || t('content.creditUseFailed'));
     }
   };
 
@@ -528,21 +528,21 @@ export default function ContentDetailPage() {
       if (isAudiobook) {
         await readingService.addToAudioPlaylist(id);
         setAccessActionError('');
-        setCallbackNotice('Livre audio ajouté à votre playlist.');
+        setCallbackNotice(t('content.audiobookAddedToPlaylist'));
       } else {
         setEbookListLoading(true);
         if (inEbookList) {
           await readingService.removeFromEbookList(id);
           setInEbookList(false);
-          setCallbackNotice('Retiré de votre liste de lecture.');
+          setCallbackNotice(t('content.removedFromList'));
         } else {
           await readingService.addToEbookList(id);
           setInEbookList(true);
-          setCallbackNotice('Ajouté à votre liste de lecture.');
+          setCallbackNotice(t('content.addedToList'));
         }
       }
     } catch (err) {
-      setAccessActionError(err?.message || 'Impossible de modifier votre liste.');
+      setAccessActionError(err?.message || t('content.listUpdateError'));
     } finally {
       setEbookListLoading(false);
     }
@@ -558,7 +558,7 @@ export default function ContentDetailPage() {
 
   const handleShare = useCallback(async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : `/catalogue/${id}`;
-    const title = content?.title || 'Papyri';
+    const title = content?.title || t('content.shareDefaultTitle');
     const text = content?.author
       ? `Decouvrez "${content.title}" de ${content.author} sur Papyri.`
       : `Decouvrez "${title}" sur Papyri.`;
@@ -571,7 +571,7 @@ export default function ContentDetailPage() {
 
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
-        setCallbackNotice('Lien du livre copie.');
+        setCallbackNotice(t('content.linkCopied'));
         return;
       }
 
@@ -606,7 +606,7 @@ export default function ContentDetailPage() {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error || 'Contenu introuvable'}
+          {error || t('content.notFoundShort')}
         </Alert>
         <Button onClick={() => navigate('/catalogue')} variant="outlined">
           {t('common.back')}
@@ -645,7 +645,7 @@ export default function ContentDetailPage() {
             Bibliotheque
           </Typography>
           <ChevronRight size={14} />
-          <Typography sx={{ fontSize: 'inherit' }}>{categories[0] || 'Detail'}</Typography>
+          <Typography sx={{ fontSize: 'inherit' }}>{categories[0] || t('content.detail')}</Typography>
           <ChevronRight size={14} />
           <Typography sx={{ fontSize: 'inherit', color: '#1c160d', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: { xs: '160px', md: 'none' } }}>{content.title}</Typography>
         </Box>
@@ -693,7 +693,7 @@ export default function ContentDetailPage() {
                 }}
               />
               <Chip
-                label={formatType(content.content_type)}
+                label={formatType(content.content_type, t)}
                 sx={{
                   bgcolor: '#f4efe7',
                   color: '#1c160d',
@@ -703,7 +703,7 @@ export default function ContentDetailPage() {
                 }}
               />
               <Chip
-                label={formatLanguage(content.language)}
+                label={formatLanguage(content.language, t)}
                 sx={{
                   bgcolor: '#f4efe7',
                   color: '#1c160d',
@@ -729,7 +729,7 @@ export default function ContentDetailPage() {
                   '&:hover': { bgcolor: '#e18f08' }
                 }}
               >
-                {accessActionLoading ? 'Traitement...' : primaryActionLabel}
+                {accessActionLoading ? t('content.processing') : primaryActionLabel}
               </Button>
               <Button
                 fullWidth
@@ -797,8 +797,8 @@ export default function ContentDetailPage() {
             >
               {[
                 { label: t('content.format'), value: content.format ? content.format.toUpperCase() : '-' },
-                { label: t('content.language'), value: formatLanguage(content.language) },
-                { label: isAudiobook ? 'Audio' : 'Taille', value: isAudiobook ? formatDuration(content.duration_seconds) : formatSize(content.file_size_bytes) },
+                { label: t('content.language'), value: formatLanguage(content.language, t) },
+                { label: isAudiobook ? t('content.audio') : t('content.size'), value: isAudiobook ? formatDuration(content.duration_seconds) : formatSize(content.file_size_bytes) },
               ].map((item) => (
                 <Box key={item.label} sx={{ p: 1.2, borderRadius: 3, border: '1px solid #f0e7d8', bgcolor: '#fffdfa' }}>
                   <Typography sx={{ color: '#9c7e49', fontSize: '0.62rem', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>{item.label}</Typography>
@@ -819,32 +819,34 @@ export default function ContentDetailPage() {
             >
               {authContextLoading ? (
                 <Typography sx={{ color: '#7a6a4e', fontSize: '0.95rem' }}>
-                  Vérification de l'accès en cours...
+                  {t('content.checkingAccess')}
                 </Typography>
               ) : scenario === 'guest' ? (
                 <Box>
                   <Typography sx={{ fontWeight: 700 }}>
-                    Vous êtes en mode visiteur.
+                    {t('content.guestModeTitle')}
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     {isSubscriptionBook
-                      ? 'Connectez-vous ou prenez un abonnement pour accéder à ce livre.'
-                      : 'Connectez-vous pour acheter ce livre.'}
+                      ? t('content.guestSubscriptionHint')
+                      : t('content.guestPaidHint')}
                   </Typography>
                   {isPaidBook && basePriceCents > 0 ? (() => {
                     const p = formatDisplayedPrice(basePriceCents);
+                    const localPrice = `${p.local}${p.eur ? ` (≈ ${p.eur})` : ''}`;
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}>
-                        Prix: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}. Avec un abonnement actif, vous bénéficiez de
-                        {' '}<strong>{defaultDiscountPercent}%</strong> de réduction.
-                      </Typography>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}
+                        dangerouslySetInnerHTML={{
+                          __html: t('content.guestPriceHint', { price: localPrice, discount: defaultDiscountPercent }),
+                        }}
+                      />
                     );
                   })() : null}
                 </Box>
               ) : scenario === 'active_subscriber' ? (
                 <Box>
                   <Typography sx={{ fontWeight: 700 }}>
-                    Abonnement actif détecté.
+                    {t('content.activeSubscriberDetected')}
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
                     {isSubscriptionBook
@@ -871,32 +873,34 @@ export default function ContentDetailPage() {
                     );
                   })() : isPaidBook && basePriceCents > 0 && discountPercent === 0 ? (() => {
                     const pBase = formatDisplayedPrice(basePriceCents);
+                    const local = `${pBase.local}${pBase.eur ? ` (≈ ${pBase.eur})` : ''}`;
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}>
-                        Prix: <strong>{pBase.local}</strong>{pBase.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {pBase.eur})</span> : ''}
-                      </Typography>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}
+                        dangerouslySetInnerHTML={{ __html: t('content.priceLabel', { price: local }) }}
+                      />
                     );
                   })() : null}
                 </Box>
               ) : (
                 <Box>
                   <Typography sx={{ fontWeight: 700 }}>
-                    Abonnement inactif ou expiré.
+                    {t('content.inactiveSubscriptionTitle')}
                   </Typography>
                   <Typography sx={{ mt: 0.8, color: '#5f513d', fontSize: '0.95rem' }}>
-                    Prenez un abonnement pour accéder aux livres inclus et profiter de la réduction sur les livres payants.
+                    {t('content.inactiveSubscriptionHint')}
                   </Typography>
                   {isPaidBook && basePriceCents > 0 ? (() => {
                     const p = formatDisplayedPrice(basePriceCents);
+                    const local = `${p.local}${p.eur ? ` (≈ ${p.eur})` : ''}`;
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}>
-                        Achat sans réduction: <strong>{p.local}</strong>{p.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.85em' }}> (≈ {p.eur})</span> : ''}.
-                      </Typography>
+                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}
+                        dangerouslySetInnerHTML={{ __html: t('content.buyWithoutDiscount', { price: local }) }}
+                      />
                     );
                   })() : null}
                   {hasAnySubscription ? (
                     <Typography sx={{ mt: 0.8, color: '#9c7e49', fontSize: '0.86rem' }}>
-                      Votre abonnement précédent n'est plus actif.
+                      {t('content.previousSubscriptionInactive')}
                     </Typography>
                   ) : null}
                 </Box>
@@ -917,19 +921,19 @@ export default function ContentDetailPage() {
             <Box sx={{ mt: 2.5, py: 2, borderTop: '1px solid #f4efe7', borderBottom: '1px solid #f4efe7', display: { xs: 'none', md: 'flex' }, gap: 4, flexWrap: 'wrap' }}>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{content.format ? content.format.toUpperCase() : '-'}</Typography>
-                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>FORMAT</Typography>
+                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>{t('content.labelFormat')}</Typography>
               </Box>
               <Box>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{formatLanguage(content.language)}</Typography>
-                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>LANGUE</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{formatLanguage(content.language, t)}</Typography>
+                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>{t('content.labelLanguage')}</Typography>
               </Box>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{isAudiobook ? formatDuration(content.duration_seconds) : '-'}</Typography>
-                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>AUDIO</Typography>
+                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>{t('content.labelAudio')}</Typography>
               </Box>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{formatSize(content.file_size_bytes)}</Typography>
-                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>TAILLE</Typography>
+                <Typography sx={{ mt: 0.35, color: '#9c7e49', fontSize: '0.64rem', letterSpacing: '0.1em' }}>{t('content.labelSize')}</Typography>
               </Box>
             </Box>
 
@@ -955,7 +959,7 @@ export default function ContentDetailPage() {
             )}
 
             <Box sx={{ mt: 3.3 }}>
-              <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 0.95 }}>Synopsis</Typography>
+              <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 0.95 }}>{t('content.synopsis')}</Typography>
               {content.description ? (
                 <Box
                   sx={{
@@ -976,7 +980,7 @@ export default function ContentDetailPage() {
                 />
               ) : (
                 <Typography sx={{ mt: 1.3, color: '#4d3f2b', fontSize: { xs: '0.98rem', md: '1.08rem' }, lineHeight: 1.7, maxWidth: 740 }}>
-                  Aucune description disponible pour ce livre.
+                  {t('content.noDescriptionAvailable')}
                 </Typography>
               )}
             </Box>
@@ -996,31 +1000,31 @@ export default function ContentDetailPage() {
               >
                 <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#e2d6c2', border: '2px solid #f29e0d' }} />
                 <Box>
-                  <Typography sx={{ fontSize: '0.62rem', letterSpacing: '0.12em', color: '#9c7e49', fontWeight: 700 }}>VERSION AUDIO</Typography>
+                  <Typography sx={{ fontSize: '0.62rem', letterSpacing: '0.12em', color: '#9c7e49', fontWeight: 700 }}>{t('content.audioVersion')}</Typography>
                   <Typography sx={{ fontSize: '1.14rem', fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                    Narrateur: {content.narrator || 'Non renseigne'}
+                    {t('content.narratorLabel')}: {content.narrator || t('content.narratorUnknown')}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49' }}>Duree: {formatDuration(content.duration_seconds)}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9c7e49' }}>{t('content.durationLabel')}: {formatDuration(content.duration_seconds)}</Typography>
                 </Box>
               </Box>
             )}
 
             <Box sx={{ mt: 3, maxWidth: 740 }}>
               <Typography sx={{ color: '#9c7e49', fontSize: '0.84rem', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                Publication: {formatDate(content.published_at)}
-                {content.rights_holder?.name ? ` - Editeur: ${content.rights_holder.name}` : ''}
+                {t('content.publicationLabel')}: {formatDate(content.published_at)}
+                {content.rights_holder?.name ? ` - ${t('content.editorLabel')}: ${content.rights_holder.name}` : ''}
               </Typography>
             </Box>
 
             {/* ── Avis des lecteurs ── */}
             <Box sx={{ mt: 4.2, maxWidth: 740 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 2 }}>
-                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>Avis des lecteurs</Typography>
+                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>{t('content.reviewsTitle')}</Typography>
                 {reviewStats && Number(reviewStats.review_count) > 0 && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Rating value={Number(reviewStats.average_rating)} precision={0.1} readOnly size="small" sx={{ color: tokens.colors.primary }} />
                     <Typography sx={{ color: '#9c7e49', fontSize: '0.85rem' }}>
-                      {Number(reviewStats.average_rating).toFixed(1)} ({reviewStats.review_count} avis)
+                      {Number(reviewStats.average_rating).toFixed(1)} ({t('content.reviewsCount', { count: reviewStats.review_count })})
                     </Typography>
                   </Box>
                 )}
@@ -1030,12 +1034,12 @@ export default function ContentDetailPage() {
               {isAuthenticated && (
                 <Box sx={{ bgcolor: '#faf6f0', borderRadius: '14px', p: 2.5, mb: 3 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 1.5, color: '#1c160d' }}>
-                    {myReview ? 'Modifier mon avis' : 'Donner mon avis'}
+                    {myReview ? t('content.editMyReview') : t('content.writeMyReview')}
                   </Typography>
                   {reviewError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: '10px' }}>{reviewError}</Alert>}
                   {reviewSuccess && <Alert severity="success" sx={{ mb: 1.5, borderRadius: '10px' }}>{reviewSuccess}</Alert>}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                    <Typography sx={{ fontSize: '0.85rem', color: '#6d5a3e' }}>Note :</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#6d5a3e' }}>{t('content.reviewRatingLabel')}</Typography>
                     <Rating
                       value={reviewForm.rating}
                       onChange={(_, v) => setReviewForm(f => ({ ...f, rating: v || 0 }))}
@@ -1044,7 +1048,7 @@ export default function ContentDetailPage() {
                     />
                   </Box>
                   <TextField
-                    placeholder="Partagez votre expérience de lecture… (optionnel)"
+                    placeholder={t('content.reviewBodyPlaceholder')}
                     value={reviewForm.body}
                     onChange={e => setReviewForm(f => ({ ...f, body: e.target.value }))}
                     multiline
@@ -1066,9 +1070,9 @@ export default function ContentDetailPage() {
                           setMyReview(res.review);
                           setReviews(prev => {
                             const filtered = prev.filter(r => r.id !== res.review.id);
-                            return [{ ...res.review, profiles: { full_name: 'Moi' } }, ...filtered];
+                            return [{ ...res.review, profiles: { full_name: t('content.anonymousReader') } }, ...filtered];
                           });
-                          setReviewSuccess('Votre avis a été enregistré.');
+                          setReviewSuccess(t('content.reviewSaved'));
                         } catch (e) { setReviewError(e.message); }
                         finally { setReviewSubmitting(false); }
                       }}
@@ -1085,12 +1089,12 @@ export default function ContentDetailPage() {
                             setMyReview(null);
                             setReviewForm({ rating: 0, body: '' });
                             setReviews(prev => prev.filter(r => r.user_id !== null));
-                            setReviewSuccess('Avis supprimé.');
+                            setReviewSuccess(t('content.reviewDeleted'));
                           } catch (e) { setReviewError(e.message); }
                         }}
                         sx={{ textTransform: 'none', color: '#9c7e49', fontSize: '0.8rem' }}
                       >
-                        Supprimer
+                        {t('content.reviewDelete')}
                       </Button>
                     )}
                   </Box>
@@ -1105,7 +1109,7 @@ export default function ContentDetailPage() {
                 </Box>
               ) : reviews.length === 0 ? (
                 <Typography sx={{ color: '#9c7e49', fontSize: '0.9rem' }}>
-                  Aucun avis pour ce contenu. Soyez le premier à donner votre avis !
+                  {t('content.reviewsEmpty')}
                 </Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1117,11 +1121,11 @@ export default function ContentDetailPage() {
                       <Box sx={{ flex: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                           <Typography sx={{ fontWeight: 700, fontSize: '0.87rem', color: '#1c160d' }}>
-                            {r.profiles?.full_name || 'Lecteur'}
+                            {r.profiles?.full_name || t('content.anonymousReader')}
                           </Typography>
                           <Rating value={r.rating} readOnly size="small" sx={{ color: tokens.colors.primary }} />
                           <Typography sx={{ color: '#9c7e49', fontSize: '0.75rem' }}>
-                            {new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {new Date(r.created_at).toLocaleDateString(i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </Typography>
                         </Box>
                         {r.body && (
@@ -1188,7 +1192,7 @@ export default function ContentDetailPage() {
             {/* ── Vous aimerez aussi (même auteur) ── */}
             {!relatedLoading && recommendations.youllLike.length > 0 && (
               <Box sx={{ mt: 4 }}>
-                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>Vous aimerez aussi</Typography>
+                <Typography sx={{ fontFamily: 'Newsreader, serif', fontWeight: 700, fontSize: '2.15rem' }}>{t('content.youllLike')}</Typography>
                 <Box sx={{ mt: 1.8, display: 'flex', gap: 2, overflowX: 'auto', pb: 1 }}>
                   {recommendations.youllLike.map((book) => (
                     <Box
