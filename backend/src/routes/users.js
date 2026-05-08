@@ -632,4 +632,37 @@ router.get('/me/gdpr-requests', verifyJWT, rejectKidProfile, async (req, res, ne
   }
 });
 
+/**
+ * POST /users/me/gdpr-request/cancel
+ * RGPD — annule la demande de suppression en cours (deletion + status pending).
+ * L'utilisateur peut annuler tant que la demande n'a pas été traitée.
+ */
+router.post('/me/gdpr-request/cancel', verifyJWT, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Mark the latest pending deletion request as cancelled.
+    const { data, error } = await supabaseAdmin
+      .from('gdpr_requests')
+      .update({
+        status: 'cancelled',
+        processed_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('request_type', 'deletion')
+      .eq('status', 'pending')
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Aucune demande de suppression en cours.' });
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

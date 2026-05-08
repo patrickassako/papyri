@@ -11,6 +11,7 @@ import * as authService from './services/auth.service';
 import * as familyService from './services/family.service';
 import CookieConsent from './components/CookieConsent';
 import { getActiveProfile, getActiveProfileId } from './config/profileStorage';
+import PendingDeletionGate from './components/PendingDeletionGate';
 
 const Register = lazy(() => import('./pages/Register'));
 const Login = lazy(() => import('./pages/Login'));
@@ -176,7 +177,7 @@ function ProtectedRoute({ children, allowKid = true }) {
     return <Navigate to="/profiles/select" replace state={{ from: `${location.pathname}${location.search || ''}` }} />;
   }
 
-  return children;
+  return <PendingDeletionGate>{children}</PendingDeletionGate>;
 }
 
 function ProtectedPublisherRoute({ children }) {
