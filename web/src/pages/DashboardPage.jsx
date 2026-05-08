@@ -538,30 +538,6 @@ export default function DashboardPage() {
           })}
         </Box>
 
-        {!activeProfile?.is_kid && usage && hasActiveSubscription && (
-          <Box sx={{ mb: 3 }}>
-            <Paper elevation={0} sx={{ p: 2.5, borderRadius: '12px', border: `1px solid ${tokens.colors.surfaces.light.variant}`, bgcolor: '#fff' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: `${tokens.colors.primary}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <MenuBookOutlined sx={{ color: tokens.colors.primary, fontSize: 20 }} />
-                </Box>
-                <Typography variant="caption" sx={{ color: '#9c7e49', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {t('dashboard.creditsRemaining', { defaultValue: 'Crédits restants' })}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.5 }}>
-                <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.onBackground.light, lineHeight: 1 }}>
-                  {Number(usage.bonusAvailableTotal || 0)}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#9c7e49' }}>
-                  {usage.creditsGrantLifetimeAccess
-                    ? t('dashboard.creditsLifetimeHint', { defaultValue: 'accès à vie au livre choisi' })
-                    : t('dashboard.creditsBoundHint', { defaultValue: 'accès tant qu\'abonné actif' })}
-                </Typography>
-              </Box>
-            </Paper>
-          </Box>
-        )}
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: { xs: 2, md: 2.5 } }}>
           <Box sx={{ minWidth: 0 }}>
