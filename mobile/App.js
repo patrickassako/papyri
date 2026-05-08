@@ -3,7 +3,7 @@ import TrackPlayer from 'react-native-track-player';
 import React, { useState, useEffect, useRef } from 'react';
 
 TrackPlayer.registerPlaybackService(() => require('./src/services/trackPlayer.service'));
-import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Linking, DeviceEventEmitter } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -38,6 +38,7 @@ import LegalScreen from './src/screens/LegalScreen';
 import FamilyScreen from './src/screens/FamilyScreen';
 import ProfileSelectorScreen from './src/screens/ProfileSelectorScreen';
 import PaymentCallbackScreen from './src/screens/PaymentCallbackScreen';
+import PendingDeletionGate from './src/components/PendingDeletionGate';
 
 const Stack = createNativeStackNavigator();
 
@@ -88,6 +89,40 @@ export default function App() {
       checkAuthStatus();
     }
   }, [fontsLoaded]);
+
+  // Listen for auth-lost events (logout, 401, no token) and reset to Login.
+  // Without this, the app could show authenticated screens with no token,
+  // leading to crashes on every API call.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(authService.AUTH_LOST_EVENT, () => {
+      setIsAuthenticated(false);
+      const nav = navigationRef?.current;
+      if (nav?.isReady?.()) {
+        nav.reset({ index: 0, routes: [{ name: 'Login' }] });
+      }
+    });
+    return () => sub.remove();
+  }, [navigationRef]);
+
+  // Defensive auth check whenever the app comes back to foreground.
+  useEffect(() => {
+    const handleAppStateChange = async (nextState) => {
+      if (nextState !== 'active') return;
+      try {
+        const stillAuth = await authService.isAuthenticated();
+        if (!stillAuth && isAuthenticated) {
+          setIsAuthenticated(false);
+          const nav = navigationRef?.current;
+          if (nav?.isReady?.()) {
+            nav.reset({ index: 0, routes: [{ name: 'Login' }] });
+          }
+        }
+      } catch (_) {}
+    };
+    const { AppState } = require('react-native');
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [isAuthenticated, navigationRef]);
 
   const checkAuthStatus = async () => {
     try {
@@ -146,6 +181,7 @@ export default function App() {
         >
           <View style={{ flex: 1 }}>
             <StatusBar style="auto" />
+            <PendingDeletionGate isAuthenticated={isAuthenticated}>
             <Stack.Navigator
               initialRouteName={getInitialRoute()}
               screenOptions={{
@@ -280,6 +316,7 @@ export default function App() {
                 }}
               />
             </Stack.Navigator>
+            </PendingDeletionGate>
 
             {/* Global MiniPlayer */}
             {showMiniPlayer && (

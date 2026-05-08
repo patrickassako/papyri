@@ -5,6 +5,19 @@
 
 import { supabase } from '../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceEventEmitter } from 'react-native';
+
+/**
+ * Event emitted whenever the user becomes unauthenticated (manual logout,
+ * expired session, 401 from API). Listeners should reset navigation to Login.
+ */
+export const AUTH_LOST_EVENT = '@papyri/auth-lost';
+
+export function emitAuthLost(reason = 'unknown') {
+  try {
+    DeviceEventEmitter.emit(AUTH_LOST_EVENT, { reason });
+  } catch (_) {}
+}
 
 // Note: Token storage is handled by Supabase client with custom storage adapter
 // Session persists in global storage (to be migrated to AsyncStorage later)
@@ -138,6 +151,9 @@ export async function logout() {
   // Clear local user cache
   currentUser = null;
 
+  // Notify the app that authentication is lost so the navigator resets to Login.
+  emitAuthLost('logout');
+
   return { success: true };
 }
 
@@ -219,6 +235,8 @@ export async function authFetch(url, options = {}) {
   const accessToken = await getAccessToken();
 
   if (!accessToken) {
+    // No token at all → notify app and throw, so callers don't keep retrying.
+    emitAuthLost('no_token');
     throw new Error('Not authenticated');
   }
 
@@ -255,9 +273,11 @@ export async function authFetch(url, options = {}) {
     clearTimeout(timeoutId);
   }
 
-  // If 401, session expired - logout
+  // If 401, session expired — clean state + notify app to reset navigation.
   if (response.status === 401) {
     await logout();
+    // logout() already emits AUTH_LOST_EVENT, but be explicit for clarity.
+    emitAuthLost('http_401');
     throw new Error('Session expired');
   }
 
