@@ -401,7 +401,11 @@ export default function DashboardPage() {
     return () => window.removeEventListener('papyri:profile-changed', handleProfileChange);
   }, []);
 
-  const userName = user?.full_name || t('common.unknown');
+  // For family accounts, use the active profile (owner or member).
+  // Solo accounts: activeProfile is null → fallback to master account.
+  const displayName = activeProfile?.name || user?.full_name || t('common.unknown');
+  const displayAvatarUrl = activeProfile?.avatar_url || user?.avatar_url || null;
+  const userName = displayName;
 
   const statCards = useMemo(() => ([
     { label: t('dashboard.booksRead'), value: stats.books_read, icon: MenuBookOutlined, color: tokens.colors.primary },

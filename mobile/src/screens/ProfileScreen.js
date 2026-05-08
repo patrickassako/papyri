@@ -342,7 +342,12 @@ export default function ProfileScreen({ navigation }) {
 
   // ── Current app language label ──
   const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === i18n.language) || SUPPORTED_LANGUAGES[0];
-  const firstName = user?.full_name?.split(' ')[0] || '';
+
+  // For family accounts, prefer the active profile (owner profile or member).
+  // Solo accounts: activeProfile is null → fallback to master account.
+  const displayName = activeProfile?.name || user?.full_name || '';
+  const displayAvatarUrl = activeProfile?.avatar_url || user?.avatar_url || null;
+  const firstName = displayName.split(' ')[0] || '';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -363,15 +368,15 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.header}>
           <TouchableOpacity activeOpacity={0.8} onPress={isOwner ? handleAvatarPress : undefined} disabled={!isOwner}>
             <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
-              {user?.avatar_url ? (
+              {displayAvatarUrl ? (
                 <Image
-                  source={{ uri: getProxiedImageUrl(user.avatar_url) }}
+                  source={{ uri: getProxiedImageUrl(displayAvatarUrl) }}
                   style={styles.avatarImage}
                   resizeMode="cover"
                 />
               ) : (
                 <Text style={styles.avatarText}>
-                  {getInitials(user?.full_name, user?.email)}
+                  {getInitials(displayName, user?.email)}
                 </Text>
               )}
               <View style={styles.avatarEditBadge}>
@@ -382,7 +387,7 @@ export default function ProfileScreen({ navigation }) {
             </Animated.View>
           </TouchableOpacity>
 
-          <Text style={styles.headerName}>{user?.full_name || t('common.unknown')}</Text>
+          <Text style={styles.headerName}>{displayName || t('common.unknown')}</Text>
           <Text style={styles.headerEmail}>{user?.email}</Text>
 
           {/* Subscription pill */}

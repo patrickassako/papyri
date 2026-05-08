@@ -591,7 +591,7 @@ export default function ProfilePage() {
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative', zIndex: 1, pt: { xs: 1.5, md: 2 } }}>
                 <Box sx={{ position: 'relative' }}>
                   <Avatar
-                    src={user?.avatar_url}
+                    src={activeProfileInfo?.avatar_url || user?.avatar_url}
                     onClick={openAvatarDialog}
                     sx={{
                       width: { xs: 104, md: 128 },
@@ -606,7 +606,7 @@ export default function ProfilePage() {
                       },
                     }}
                   >
-                    {user?.full_name?.[0]?.toUpperCase() || 'U'}
+                    {(activeProfileInfo?.name || user?.full_name)?.[0]?.toUpperCase() || 'U'}
                   </Avatar>
                   {isOwner ? (
                     <>
@@ -667,7 +667,7 @@ export default function ProfilePage() {
                   mb: 1,
                 }}
               >
-                {user?.full_name || 'Jean Dupont'}
+                {activeProfileInfo?.name || user?.full_name || 'Jean Dupont'}
               </Typography>
 
               {/* Premium Badge */}

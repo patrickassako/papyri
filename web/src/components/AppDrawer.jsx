@@ -79,8 +79,11 @@ export default function AppDrawer({ open, onClose, isAuthenticated, user }) {
     navigate('/');
   };
 
-  const userName = user?.full_name || (activeProfile?.name) || (isAuthenticated ? t('common.profile') : '');
+  // For family accounts, prefer the active profile (owner or member).
+  // Solo accounts: activeProfile is null → fallback to master account.
+  const userName = activeProfile?.name || user?.full_name || (isAuthenticated ? t('common.profile') : '');
   const userEmail = user?.email || '';
+  const userAvatarUrl = activeProfile?.avatar_url || user?.avatar_url || null;
   const userInitial = (userName?.[0] || 'U').toUpperCase();
 
   // ─── Items navigation ───────────────────────────────────────────────────
@@ -159,7 +162,7 @@ export default function AppDrawer({ open, onClose, isAuthenticated, user }) {
       {isAuthenticated ? (
         <Box sx={{ px: 2.2, py: 1.6, borderBottom: '1px solid #f0e8dc', display: 'flex', alignItems: 'center', gap: 1.4 }}>
           <Avatar
-            src={user?.avatar_url || undefined}
+            src={userAvatarUrl || undefined}
             sx={{ width: 44, height: 44, bgcolor: 'rgba(244,168,37,0.18)', color: primary, fontWeight: 800 }}
           >
             {userInitial}
@@ -173,9 +176,9 @@ export default function AppDrawer({ open, onClose, isAuthenticated, user }) {
                 {userEmail}
               </Typography>
             )}
-            {activeProfile?.name && !isOwner && (
+            {activeProfile && !isOwner && (
               <Typography sx={{ fontSize: '0.7rem', color: primary, fontWeight: 700, mt: 0.2 }}>
-                {t('drawer.activeProfile', { name: activeProfile.name, defaultValue: `Profil : ${activeProfile.name}` })}
+                {t('drawer.familyMemberBadge', { defaultValue: 'Profil famille' })}
               </Typography>
             )}
           </Box>

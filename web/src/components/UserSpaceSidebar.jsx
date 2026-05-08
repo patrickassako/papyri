@@ -67,9 +67,11 @@ export default function UserSpaceSidebar({
     }
   };
 
-  const userName = user?.full_name || t('sidebar.defaultUser');
+  // For family accounts, prefer the active profile (owner or member).
+  // Solo accounts: activeProfile is null → fallback to master account.
+  const userName = activeProfile?.name || user?.full_name || t('sidebar.defaultUser');
   const userEmail = user?.email || '';
-  const userAvatar = user?.avatar_url || '';
+  const userAvatar = activeProfile?.avatar_url || user?.avatar_url || '';
 
   return (
     <Box

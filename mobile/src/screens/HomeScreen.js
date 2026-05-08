@@ -310,7 +310,11 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const renderHeader = () => {
-    const firstName = user?.full_name?.split(' ')[0] || '';
+    // For family accounts, show the active profile (owner profile or member).
+    // Solo accounts: activeProfile is null → fallback to master account name/avatar.
+    const displayName = activeProfile?.name || user?.full_name || '';
+    const firstName = displayName.split(' ')[0] || '';
+    const displayAvatarUrl = activeProfile?.avatar_url || user?.avatar_url || null;
     return (
       <View>
         {/* Barre supérieure */}
@@ -324,8 +328,8 @@ const HomeScreen = ({ navigation }) => {
               <MaterialCommunityIcons name="magnify" size={22} color={tokens.colors.onSurface.light} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-              {user?.avatar_url ? (
-                <Avatar.Image size={40} source={{ uri: user.avatar_url }} style={styles.avatar} />
+              {displayAvatarUrl ? (
+                <Avatar.Image size={40} source={{ uri: displayAvatarUrl }} style={styles.avatar} />
               ) : (
                 <Avatar.Text
                   size={40}
