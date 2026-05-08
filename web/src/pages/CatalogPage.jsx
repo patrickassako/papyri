@@ -419,7 +419,7 @@ export default function CatalogPage() {
                 <MenuItem value="">{t('catalog.allCategories')}</MenuItem>
                 {Array.isArray(categories) && categories.map((cat) => (
                   <MenuItem key={cat.id} value={cat.slug}>
-                    {cat.name}
+                    {t(`categories.${cat.slug}`, { defaultValue: cat.name })}
                   </MenuItem>
                 ))}
               </Select>
