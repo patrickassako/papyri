@@ -179,16 +179,22 @@ export default function LoginScreen({ navigation }) {
 
           </View>
 
-          {/* Sign Up Button */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>{t('auth.noAccount')}</Text>
+          {/* Sign Up Card — mise en avant */}
+          <View style={styles.signupCard}>
+            <Text style={styles.signupTitle}>{t('auth.noAccount')}</Text>
+            <Text style={styles.signupSubtitle}>
+              {t('auth.signupTeaser', {
+                defaultValue: 'Créez votre compte gratuitement et commencez à explorer la bibliothèque.',
+              })}
+            </Text>
             <Button
-              mode="outlined"
+              mode="contained"
               onPress={() => navigation.navigate('Register')}
               style={styles.registerButton}
               contentStyle={styles.buttonContent}
               labelStyle={styles.registerButtonLabel}
-              textColor="#b4641d"
+              buttonColor="#b4641d"
+              icon="account-plus-outline"
             >
               {t('auth.signUp')}
             </Button>
@@ -326,24 +332,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3
   },
-  footer: {
-    marginTop: 24,
+  signupCard: {
+    marginTop: 20,
+    backgroundColor: '#fff7ec',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#f1d9a8',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
-  footerText: {
-    fontSize: 14,
-    color: '#867465'
+  signupTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#5a3a14',
+    textAlign: 'center',
+  },
+  signupSubtitle: {
+    fontSize: 13,
+    color: '#7d5e35',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 8,
   },
   registerButton: {
     borderRadius: 28,
-    borderColor: '#b4641d',
-    borderWidth: 1.5,
     width: '100%',
   },
   registerButtonLabel: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.3,
+    color: '#fff',
   }
 });
