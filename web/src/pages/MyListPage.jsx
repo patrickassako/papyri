@@ -289,7 +289,7 @@ export default function MyListPage() {
     { key: 'favoris', label: t('myList.favorites'), icon: <FavoriteOutlined fontSize="small" /> },
     { key: 'en_cours', label: t('myList.inProgress'), icon: <PlayCircleOutlineOutlined fontSize="small" /> },
     { key: 'termines', label: t('myList.completed'), icon: <CheckCircleOutlined fontSize="small" /> },
-    { key: 'achats', label: i18n.language?.startsWith('fr') ? 'Livres achetés' : 'Purchased books', icon: <MenuBookOutlined fontSize="small" /> },
+    { key: 'achats', label: t('myList.purchased'), icon: <MenuBookOutlined fontSize="small" /> },
   ];
 
   const allItems = useMemo(() => {
@@ -431,7 +431,7 @@ export default function MyListPage() {
                 {t('myList.streak')}
               </Typography>
               <Typography sx={{ mt: 0.35, fontWeight: 800, fontSize: '1rem', color: secondary }}>
-                {stats.streakDays} j
+                {stats.streakDays} {t('common.dayShort')}
               </Typography>
             </Paper>
             <Paper elevation={0} sx={{ p: 1.3, borderRadius: '12px', border: `1px solid ${surfaceVariant}` }}>
@@ -553,7 +553,7 @@ export default function MyListPage() {
                   : activeFilter === 'en_cours'
                     ? t('myList.inProgress')
                     : activeFilter === 'achats'
-                      ? (i18n.language?.startsWith('fr') ? 'Livres achetés' : 'Purchased books')
+                      ? t('myList.purchased')
                       : t('myList.favorites')}
               </Typography>
               <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: primary }}>

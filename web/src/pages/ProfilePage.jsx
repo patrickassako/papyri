@@ -545,7 +545,7 @@ export default function ProfilePage() {
           {[
             { label: t('profile.statCompleted'), value: `${stats.completedBooks}` },
             { label: t('profile.statInProgress'), value: `${stats.inProgressBooks}` },
-            { label: t('profile.statStreak'), value: `${stats.streakDays}j` },
+            { label: t('profile.statStreak'), value: `${stats.streakDays}${t('common.dayShort')}` },
           ].map((item) => (
             <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -667,7 +667,7 @@ export default function ProfilePage() {
                   mb: 1,
                 }}
               >
-                {activeProfileInfo?.name || user?.full_name || 'Jean Dupont'}
+                {activeProfileInfo?.name || user?.full_name || t('common.unknown')}
               </Typography>
 
               {/* Premium Badge */}
@@ -1295,4 +1295,3 @@ export default function ProfilePage() {
     </Box>
   );
 }
-

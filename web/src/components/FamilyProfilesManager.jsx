@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Check, Lock, Pencil, Plus, Shield, Trash2, UserRoundCheck, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import * as familyService from '../services/family.service';
 import * as authService from '../services/auth.service';
 import { getActiveProfile } from '../config/profileStorage';
@@ -32,7 +33,7 @@ function getAvatarChoice(key, fallbackIndex = 0) {
   return avatarChoices.find((choice) => choice.key === key) || avatarChoices[fallbackIndex % avatarChoices.length];
 }
 
-function ProfileCard({ profile, index, isActive, onUse, onEdit, onPin, onDelete }) {
+function ProfileCard({ profile, index, isActive, onUse, onEdit, onPin, onDelete, t }) {
   const avatar = getAvatarChoice(profile.avatar_key, index);
   return (
     <Paper
@@ -64,31 +65,31 @@ function ProfileCard({ profile, index, isActive, onUse, onEdit, onPin, onDelete 
             <Typography sx={{ fontWeight: 800, color: '#1f1f1f', lineHeight: 1.2, minWidth: 0, overflowWrap: 'anywhere' }}>
               {profile.name}
             </Typography>
-            {isActive && <Chip label="Actif" size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#fff7e6', color: '#9b6a00', flexShrink: 0 }} />}
+            {isActive && <Chip label={t('family.active')} size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#fff7e6', color: '#9b6a00', flexShrink: 0 }} />}
           </Stack>
           <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
-            {profile.is_owner_profile && <Chip label="Principal" size="small" sx={{ height: 22, fontWeight: 700 }} />}
-            {profile.is_kid && <Chip label="Enfant" size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }} />}
-            {profile.pin_enabled && <Chip icon={<Lock size={12} />} label="PIN" size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#f4f1ec', color: '#63584a' }} />}
+            {profile.is_owner_profile && <Chip label={t('family.owner')} size="small" sx={{ height: 22, fontWeight: 700 }} />}
+            {profile.is_kid && <Chip label={t('family.kid')} size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }} />}
+            {profile.pin_enabled && <Chip icon={<Lock size={12} />} label={t('family.pinBadge')} size="small" sx={{ height: 22, fontWeight: 700, bgcolor: '#f4f1ec', color: '#63584a' }} />}
           </Stack>
         </Box>
       </Stack>
 
       <Stack spacing={1}>
         <Button variant={isActive ? 'outlined' : 'contained'} onClick={() => onUse(profile)} sx={{ textTransform: 'none', borderRadius: 3, bgcolor: isActive ? undefined : '#f1a10a', '&:hover': { bgcolor: isActive ? undefined : '#d9900a' } }}>
-          {isActive ? 'Profil actif' : 'Utiliser ce profil'}
+          {isActive ? t('family.currentProfile') : t('family.useThisProfile')}
         </Button>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <Button fullWidth variant="outlined" startIcon={<Pencil size={14} />} onClick={() => onEdit(profile)} sx={{ textTransform: 'none', borderRadius: 3 }}>
-            Modifier
+            {t('family.edit')}
           </Button>
           <Button fullWidth variant="outlined" startIcon={profile.pin_enabled ? <Shield size={14} /> : <Lock size={14} />} onClick={() => onPin(profile)} sx={{ textTransform: 'none', borderRadius: 3 }}>
-            {profile.pin_enabled ? 'PIN' : 'Ajouter PIN'}
+            {profile.pin_enabled ? t('family.pinBadge') : t('family.addPin')}
           </Button>
         </Stack>
         {!profile.is_owner_profile && (
           <Button color="error" variant="text" startIcon={<Trash2 size={14} />} onClick={() => onDelete(profile)} sx={{ textTransform: 'none', alignSelf: 'flex-start', px: 0 }}>
-            Supprimer
+            {t('family.delete')}
           </Button>
         )}
       </Stack>
@@ -97,6 +98,7 @@ function ProfileCard({ profile, index, isActive, onUse, onEdit, onPin, onDelete 
 }
 
 export default function FamilyProfilesManager({ onProfileChange, onSummaryChange }) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -118,7 +120,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
       setActiveProfileId(getActiveProfile()?.id || null);
       if (onSummaryChange) onSummaryChange(data || null);
     } catch (err) {
-      setError(err.message || 'Impossible de charger les profils.');
+      setError(err.message || t('family.errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -126,6 +128,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
 
   useEffect(() => {
     refreshProfiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -162,7 +165,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
 
   const handleSaveProfile = async () => {
     if (!editor.name.trim()) {
-      setError('Le nom du profil est requis.');
+      setError(t('family.errors.nameRequired'));
       return;
     }
     setSaving(true);
@@ -175,19 +178,19 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
           avatar_key: editor.avatar_key,
           is_kid: editor.is_kid,
         });
-        setMessage('Profil mis a jour.');
+        setMessage(t('family.messages.profileUpdated'));
       } else {
         await familyService.createProfile({
           name: editor.name.trim(),
           avatar_key: editor.avatar_key,
           is_kid: editor.is_kid,
         });
-        setMessage('Profil cree.');
+        setMessage(t('family.messages.profileCreated'));
       }
       closeEditor();
       await refreshProfiles();
     } catch (err) {
-      setError(err.message || 'Impossible d enregistrer le profil.');
+      setError(err.message || t('family.errors.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -200,9 +203,9 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
     try {
       await familyService.selectProfile(profile.id);
       setActiveProfileId(profile.id);
-      setMessage(`Profil actif: ${profile.name}.`);
+      setMessage(t('family.messages.activeProfile', { name: profile.name }));
     } catch (err) {
-      setError(err.message || 'Impossible de changer de profil.');
+      setError(err.message || t('family.errors.switchFailed'));
     } finally {
       setSaving(false);
     }
@@ -211,7 +214,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
   const handleSavePin = async () => {
     if (!pinDialog.profile) return;
     if (!/^\d{4,6}$/.test(pinDialog.pin)) {
-      setError('Le PIN doit contenir 4 a 6 chiffres.');
+      setError(t('family.errors.pinDigits'));
       return;
     }
     setSaving(true);
@@ -219,11 +222,11 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
     setMessage('');
     try {
       await familyService.setProfilePin(pinDialog.profile.id, pinDialog.pin, pinDialog.verificationToken);
-      setMessage('Code PIN enregistre.');
+      setMessage(t('family.messages.pinSaved'));
       setPinDialog({ open: false, profile: null, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' });
       await refreshProfiles();
     } catch (err) {
-      setError(err.message || 'Impossible d enregistrer le PIN.');
+      setError(err.message || t('family.errors.savePinFailed'));
     } finally {
       setSaving(false);
     }
@@ -236,11 +239,11 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
     setMessage('');
     try {
       await familyService.removeProfilePin(pinDialog.profile.id, pinDialog.verificationToken);
-      setMessage('Code PIN retire.');
+      setMessage(t('family.messages.pinRemoved'));
       setPinDialog({ open: false, profile: null, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' });
       await refreshProfiles();
     } catch (err) {
-      setError(err.message || 'Impossible de retirer le PIN.');
+      setError(err.message || t('family.errors.removePinFailed'));
     } finally {
       setSaving(false);
     }
@@ -253,11 +256,11 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
     setMessage('');
     try {
       await familyService.deleteProfile(deleteDialog.profile.id, deleteDialog.verificationToken);
-      setMessage('Profil supprime.');
+      setMessage(t('family.messages.profileDeleted'));
       setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' });
       await refreshProfiles();
     } catch (err) {
-      setError(err.message || 'Impossible de supprimer le profil.');
+      setError(err.message || t('family.errors.deleteFailed'));
     } finally {
       setSaving(false);
     }
@@ -277,9 +280,9 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         emailCode: '',
         step: 'email',
       }));
-      setMessage(`Code email envoye ${result.email ? `a ${result.email}` : ''}.`);
+      setMessage(t('family.messages.emailCodeSent', { to: result.email ? ` (${result.email})` : '' }));
     } catch (err) {
-      setError(err.message || 'Impossible d envoyer le code email.');
+      setError(err.message || t('family.errors.emailCodeFailed'));
     } finally {
       setSaving(false);
     }
@@ -287,7 +290,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
 
   const handleVerifyOwnerEmailCode = async () => {
     if (!pinDialog.challengeId || !/^\d{6}$/.test(pinDialog.emailCode)) {
-      setError('Le code email est requis.');
+      setError(t('family.errors.emailCodeRequired'));
       return;
     }
     setSaving(true);
@@ -299,9 +302,9 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         verificationToken: result.verification_token,
         step: 'verified',
       }));
-      setMessage('Verification email validee.');
+      setMessage(t('family.messages.emailVerified'));
     } catch (err) {
-      setError(err.message || 'Code email invalide.');
+      setError(err.message || t('family.errors.invalidEmailCode'));
     } finally {
       setSaving(false);
     }
@@ -321,9 +324,9 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         emailCode: '',
         step: 'email',
       }));
-      setMessage(`Code email envoye ${result.email ? `a ${result.email}` : ''}.`);
+      setMessage(t('family.messages.emailCodeSent', { to: result.email ? ` (${result.email})` : '' }));
     } catch (err) {
-      setError(err.message || 'Impossible d envoyer le code email.');
+      setError(err.message || t('family.errors.emailCodeFailed'));
     } finally {
       setSaving(false);
     }
@@ -331,7 +334,7 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
 
   const handleVerifyDeleteEmailCode = async () => {
     if (!deleteDialog.challengeId || !/^\d{6}$/.test(deleteDialog.emailCode)) {
-      setError('Le code email est requis.');
+      setError(t('family.errors.emailCodeRequired'));
       return;
     }
     setSaving(true);
@@ -343,9 +346,9 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         verificationToken: result.verification_token,
         step: 'verified',
       }));
-      setMessage('Verification email validee.');
+      setMessage(t('family.messages.emailVerified'));
     } catch (err) {
-      setError(err.message || 'Code email invalide.');
+      setError(err.message || t('family.errors.invalidEmailCode'));
     } finally {
       setSaving(false);
     }
@@ -357,26 +360,37 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={1.5}>
           <Box>
             <Typography sx={{ fontWeight: 800, color: '#262626', fontSize: '1rem' }}>
-              Profils famille
+              {t('family.title')}
             </Typography>
             <Typography sx={{ color: '#7f7669', fontSize: '0.88rem', mt: 0.5 }}>
-              {profiles.length}/{subscription?.profiles_limit || 0} profils utilises. {subscription?.included_profiles || 3} inclus, jusqu a {subscription?.max_profiles || 10}.
+              {t('family.usage', {
+                count: profiles.length,
+                limit: subscription?.profiles_limit || 0,
+                included: subscription?.included_profiles || 3,
+                max: subscription?.max_profiles || 10,
+              })}
             </Typography>
           </Box>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
             <Button variant="outlined" onClick={refreshProfiles} sx={{ textTransform: 'none', borderRadius: 3, width: { xs: '100%', sm: 'auto' } }}>
-              Actualiser
+              {t('family.refresh')}
             </Button>
             <Button variant="contained" startIcon={<Plus size={16} />} disabled={saving || remainingSlots <= 0} onClick={openCreate} sx={{ textTransform: 'none', borderRadius: 3, bgcolor: '#f1a10a', width: { xs: '100%', sm: 'auto' }, '&:hover': { bgcolor: '#d9900a' } }}>
-              Nouveau profil
+              {t('family.newProfile')}
             </Button>
           </Stack>
         </Stack>
 
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
-          <Chip label={`${remainingSlots} profil${remainingSlots > 1 ? 's' : ''} disponible${remainingSlots > 1 ? 's' : ''}`} size="small" sx={{ fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }} />
-          {maxReached && <Chip label="Limite maximale atteinte" size="small" sx={{ fontWeight: 700, bgcolor: '#fff3e0', color: '#b25a00' }} />}
-          {activeProfileId && <Chip label="Profil actif detecte" size="small" sx={{ fontWeight: 700, bgcolor: '#fff7e6', color: '#9b6a00' }} />}
+          <Chip
+            label={remainingSlots > 1
+              ? t('family.slotsAvailableMany', { n: remainingSlots })
+              : t('family.slotsAvailableOne', { n: remainingSlots })}
+            size="small"
+            sx={{ fontWeight: 700, bgcolor: '#edf7f6', color: '#2d6b61' }}
+          />
+          {maxReached && <Chip label={t('family.maxReached')} size="small" sx={{ fontWeight: 700, bgcolor: '#fff3e0', color: '#b25a00' }} />}
+          {activeProfileId && <Chip label={t('family.activeDetected')} size="small" sx={{ fontWeight: 700, bgcolor: '#fff7e6', color: '#9b6a00' }} />}
         </Stack>
 
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
@@ -405,23 +419,24 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
               onEdit={openEdit}
               onPin={(target) => setPinDialog({ open: true, profile: target, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' })}
               onDelete={(target) => setDeleteDialog({ open: true, profile: target, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })}
+              t={t}
             />
           ))}
         </Box>
       )}
 
       <Dialog open={editor.open} onClose={() => !saving && closeEditor()} fullWidth maxWidth="sm">
-        <DialogTitle>{editor.profile ? 'Modifier le profil' : 'Creer un profil'}</DialogTitle>
+        <DialogTitle>{editor.profile ? t('family.editTitle') : t('family.createTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <TextField
               fullWidth
-              label="Nom du profil"
+              label={t('family.nameLabel')}
               value={editor.name}
               onChange={(event) => setEditor((prev) => ({ ...prev, name: event.target.value.slice(0, 80) }))}
             />
             <Box>
-              <Typography sx={{ fontWeight: 700, color: '#51483d', mb: 1 }}>Avatar</Typography>
+              <Typography sx={{ fontWeight: 700, color: '#51483d', mb: 1 }}>{t('family.avatar')}</Typography>
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                 {avatarChoices.map((choice) => {
                   const selected = editor.avatar_key === choice.key;
@@ -447,38 +462,38 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
               </Stack>
             </Box>
             <Box>
-              <Typography sx={{ fontWeight: 700, color: '#51483d', mb: 1 }}>Type de profil</Typography>
+              <Typography sx={{ fontWeight: 700, color: '#51483d', mb: 1 }}>{t('family.profileType')}</Typography>
               <Stack direction="row" spacing={1}>
                 <Button variant={!editor.is_kid ? 'contained' : 'outlined'} onClick={() => setEditor((prev) => ({ ...prev, is_kid: false }))} sx={{ textTransform: 'none', borderRadius: 3, bgcolor: !editor.is_kid ? '#f1a10a' : undefined, '&:hover': { bgcolor: !editor.is_kid ? '#d9900a' : undefined } }}>
-                  Standard
+                  {t('family.standardType')}
                 </Button>
                 <Button variant={editor.is_kid ? 'contained' : 'outlined'} onClick={() => setEditor((prev) => ({ ...prev, is_kid: true }))} sx={{ textTransform: 'none', borderRadius: 3, bgcolor: editor.is_kid ? '#f1a10a' : undefined, '&:hover': { bgcolor: editor.is_kid ? '#d9900a' : undefined } }}>
-                  Enfant
+                  {t('family.kidType')}
                 </Button>
               </Stack>
             </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={closeEditor} disabled={saving}>Annuler</Button>
+          <Button onClick={closeEditor} disabled={saving}>{t('family.cancel')}</Button>
           <Button variant="contained" onClick={handleSaveProfile} disabled={saving || !editor.name.trim()} sx={{ bgcolor: '#f1a10a', '&:hover': { bgcolor: '#d9900a' } }}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? t('family.saving') : t('family.save')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={pinDialog.open} onClose={() => !saving && setPinDialog({ open: false, profile: null, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' })} fullWidth maxWidth="xs">
-        <DialogTitle>Code PIN du profil</DialogTitle>
+        <DialogTitle>{t('family.pinTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography sx={{ color: '#6f6559' }}>
               {pinDialog.profile?.pin_enabled
-                ? `Modifiez ou retirez le PIN de ${pinDialog.profile?.name}.`
-                : `Definissez un PIN de 4 a 6 chiffres pour ${pinDialog.profile?.name}.`}
+                ? t('family.pinExisting', { name: pinDialog.profile?.name })
+                : t('family.pinNew', { name: pinDialog.profile?.name })}
             </Typography>
             <TextField
               fullWidth
-              label="Code PIN"
+              label={t('family.pinLabel')}
               value={pinDialog.pin}
               onChange={(event) => setPinDialog((prev) => ({ ...prev, pin: event.target.value.replace(/\D/g, '').slice(0, 6) }))}
               inputProps={{ inputMode: 'numeric', maxLength: 6 }}
@@ -487,26 +502,28 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
               <>
                 {pinDialog.step === 'pin' && (
                   <Button variant="outlined" onClick={handleStartOwnerVerification} disabled={saving} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
-                    Envoyer le code email
+                    {t('family.sendEmailCode')}
                   </Button>
                 )}
                 {pinDialog.step !== 'pin' && (
                   <>
                     <TextField
                       fullWidth
-                      label="Code email"
+                      label={t('family.emailCodeLabel')}
                       value={pinDialog.emailCode}
                       onChange={(event) => setPinDialog((prev) => ({ ...prev, emailCode: event.target.value.replace(/\D/g, '').slice(0, 6) }))}
-                      helperText={pinDialog.emailTarget ? `Code envoye a ${pinDialog.emailTarget}.` : 'Entrez le code recu par email.'}
+                      helperText={pinDialog.emailTarget
+                        ? t('family.emailCodeSentTo', { email: pinDialog.emailTarget })
+                        : t('family.emailCodeEnter')}
                       inputProps={{ inputMode: 'numeric', maxLength: 6 }}
                     />
                     {pinDialog.step === 'email' && (
                       <Button variant="outlined" onClick={handleVerifyOwnerEmailCode} disabled={saving || pinDialog.emailCode.length !== 6} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
-                        Verifier le code
+                        {t('family.verifyCode')}
                       </Button>
                     )}
                     {pinDialog.step === 'verified' && (
-                      <Alert severity="success">Verification email validee. Vous pouvez maintenant enregistrer le nouveau PIN.</Alert>
+                      <Alert severity="success">{t('family.emailVerifiedPin')}</Alert>
                     )}
                   </>
                 )}
@@ -517,56 +534,58 @@ export default function FamilyProfilesManager({ onProfileChange, onSummaryChange
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           {pinDialog.profile?.pin_enabled && (
             <Button color="error" onClick={handleRemovePin} disabled={saving}>
-              Retirer le PIN
+              {t('family.removePin')}
             </Button>
           )}
           <Button onClick={() => setPinDialog({ open: false, profile: null, pin: '', emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'pin' })} disabled={saving}>
-            Annuler
+            {t('family.cancel')}
           </Button>
           <Button variant="contained" onClick={handleSavePin} disabled={saving || pinDialog.pin.length < 4 || (pinDialog.profile?.is_owner_profile && !pinDialog.verificationToken)} sx={{ bgcolor: '#f1a10a', '&:hover': { bgcolor: '#d9900a' } }}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? t('family.saving') : t('family.save')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={deleteDialog.open} onClose={() => !saving && setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })} fullWidth maxWidth="xs">
-        <DialogTitle>Supprimer ce profil ?</DialogTitle>
+        <DialogTitle>{t('family.deleteTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography sx={{ color: '#6f6559' }}>
-            Le profil <b>{deleteDialog.profile?.name}</b> sera desactive. Son emplacement restera disponible dans votre quota de profils.
+              {t('family.deleteHint', { name: deleteDialog.profile?.name || '' })}
             </Typography>
             {deleteDialog.step === 'confirm' && (
               <Button variant="outlined" onClick={handleStartDeleteVerification} disabled={saving} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
-                Envoyer le code email
+                {t('family.sendEmailCode')}
               </Button>
             )}
             {deleteDialog.step !== 'confirm' && (
               <>
                 <TextField
                   fullWidth
-                  label="Code email"
+                  label={t('family.emailCodeLabel')}
                   value={deleteDialog.emailCode}
                   onChange={(event) => setDeleteDialog((prev) => ({ ...prev, emailCode: event.target.value.replace(/\D/g, '').slice(0, 6) }))}
-                  helperText={deleteDialog.emailTarget ? `Code envoye a ${deleteDialog.emailTarget}.` : 'Entrez le code recu par email.'}
+                  helperText={deleteDialog.emailTarget
+                    ? t('family.emailCodeSentTo', { email: deleteDialog.emailTarget })
+                    : t('family.emailCodeEnter')}
                   inputProps={{ inputMode: 'numeric', maxLength: 6 }}
                 />
                 {deleteDialog.step === 'email' && (
                   <Button variant="outlined" onClick={handleVerifyDeleteEmailCode} disabled={saving || deleteDialog.emailCode.length !== 6} sx={{ textTransform: 'none', alignSelf: 'flex-start' }}>
-                    Verifier le code
+                    {t('family.verifyCode')}
                   </Button>
                 )}
                 {deleteDialog.step === 'verified' && (
-                  <Alert severity="success">Verification email validee. Vous pouvez maintenant supprimer ce profil.</Alert>
+                  <Alert severity="success">{t('family.emailVerifiedDelete')}</Alert>
                 )}
               </>
             )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })} disabled={saving}>Annuler</Button>
+          <Button onClick={() => setDeleteDialog({ open: false, profile: null, emailCode: '', challengeId: '', verificationToken: '', emailTarget: '', step: 'confirm' })} disabled={saving}>{t('family.cancel')}</Button>
           <Button color="error" variant="contained" onClick={handleDeleteProfile} disabled={saving || !deleteDialog.verificationToken}>
-            {saving ? 'Suppression...' : 'Supprimer'}
+            {saving ? t('family.deleting') : t('family.delete')}
           </Button>
         </DialogActions>
       </Dialog>

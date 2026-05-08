@@ -207,7 +207,7 @@ export default function SecurityPage() {
       if (error) throw error;
       setMfaEnrollData(data);
     } catch (err) {
-      setMfaError(err.message || 'Impossible de démarrer la configuration.');
+      setMfaError(err.message || t('security.mfaSetupStartError'));
     } finally {
       setMfaLoading(false);
     }
@@ -222,7 +222,7 @@ export default function SecurityPage() {
       setMfaChallengeId(data.id);
       setMfaStep('verify');
     } catch (err) {
-      setMfaError(err.message || 'Erreur lors de la vérification.');
+      setMfaError(err.message || t('security.mfaVerifyStartError'));
     } finally {
       setMfaLoading(false);
     }
@@ -303,7 +303,7 @@ export default function SecurityPage() {
         >
           {[
             { label: '2FA', value: mfaMethod === 'email' ? 'Email' : mfaEnabled ? 'App' : t('security.inactive') },
-            { label: t('security.account'), value: user?.email ? t('security.protected') : 'Session' },
+            { label: t('security.account'), value: user?.email ? t('security.protected') : t('security.session') },
           ].map((item) => (
             <Paper key={item.label} elevation={0} sx={{ p: 1.4, borderRadius: 3, border: `1px solid ${surfaceVariant}` }}>
               <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -337,7 +337,7 @@ export default function SecurityPage() {
                     type={showPwd[field] ? 'text' : 'password'}
                     value={pwdForm[field]}
                     onChange={(e) => setPwdForm((p) => ({ ...p, [field]: e.target.value }))}
-                    placeholder={field === 'current' ? t('auth.currentPasswordPlaceholder') : t('auth.passwordMinChars')}
+                    placeholder={field === 'current' ? t('profile.currentPasswordPlaceholder') : t('auth.passwordMinChars')}
                     autoComplete={field === 'current' ? 'current-password' : 'new-password'}
                     InputProps={{
                       endAdornment: (
@@ -601,4 +601,3 @@ export default function SecurityPage() {
     </Box>
   );
 }
-
