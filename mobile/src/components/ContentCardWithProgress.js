@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, ProgressBar, Chip, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
@@ -53,12 +54,14 @@ const ContentCardWithProgress = ({
   onContinue,
   onPress,
 }) => {
+  const { t, i18n } = useTranslation();
   const [imgError, setImgError] = useState(false);
 
   // Format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
+    const locale = (i18n.language || 'fr').startsWith('en') ? 'en-US' : 'fr-FR';
+    return date.toLocaleDateString(locale, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -128,7 +131,7 @@ const ContentCardWithProgress = ({
               style={styles.continueButton}
               buttonColor={tokens.colors.primary}
             >
-              Reprendre
+              {t('home.resume')}
             </Button>
           )}
         </View>
@@ -217,7 +220,7 @@ const ContentCardWithProgress = ({
           />
           <View style={styles.listProgressRow}>
             <Text style={styles.listProgressPct}>
-              {is_completed ? 'Terminé' : `${Math.round(progress_percent)}%`}
+              {is_completed ? t('history.completed') : `${Math.round(progress_percent)}%`}
             </Text>
             <Text style={styles.listDate}>{formatDate(last_read_at)}</Text>
           </View>
@@ -235,7 +238,7 @@ const ContentCardWithProgress = ({
               size={14}
               color={tokens.colors.primary}
             />
-            <Text style={styles.listContinueTxt}>Reprendre</Text>
+            <Text style={styles.listContinueTxt}>{t('home.resume')}</Text>
           </TouchableOpacity>
         )}
       </View>

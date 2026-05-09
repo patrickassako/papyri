@@ -35,7 +35,7 @@ export default function CatalogScreen({ navigation, route }) {
   const SORT_OPTIONS = [
     { key: 'newest', label: t('catalog.newest'), icon: 'clock-outline' },
     { key: 'oldest', label: t('catalog.oldest'), icon: 'clock-check-outline' },
-    { key: 'title', label: 'Titre A→Z', icon: 'sort-alphabetical-ascending' },
+    { key: 'title', label: t('catalog.titleAZ'), icon: 'sort-alphabetical-ascending' },
     { key: 'popular', label: t('catalog.popular'), icon: 'trending-up' },
   ];
 
@@ -240,7 +240,7 @@ export default function CatalogScreen({ navigation, route }) {
           <BookCover uri={item.cover_url} title={item.title} style={styles.coverImage} />
           <View style={styles.typeBadge}>
             <MaterialCommunityIcons name={isAudio ? 'headphones' : 'book'} size={11} color="#171412" />
-            <Text style={styles.typeBadgeText}>{isAudio ? 'Audio' : 'E-book'}</Text>
+            <Text style={styles.typeBadgeText}>{isAudio ? t('catalog.audioBadge') : t('catalog.ebookBadge')}</Text>
           </View>
         </View>
         <View style={styles.bookInfo}>
@@ -271,7 +271,7 @@ export default function CatalogScreen({ navigation, route }) {
             color="#867465"
           />
           <Text style={styles.searchResultTypeText}>
-            {item.content_type === 'audiobook' ? 'Audio' : 'E-book'}
+            {item.content_type === 'audiobook' ? t('catalog.audioBadge') : t('catalog.ebookBadge')}
           </Text>
         </View>
       </View>
@@ -284,18 +284,18 @@ export default function CatalogScreen({ navigation, route }) {
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyIcon}>🔍</Text>
-        <Text style={styles.emptyTitle}>Aucun contenu trouvé</Text>
+        <Text style={styles.emptyTitle}>{t('catalog.noResults')}</Text>
         <Text style={styles.emptyText}>
           {selectedCategory || selectedType
-            ? 'Essaie un autre filtre ou catégorie'
-            : 'Le catalogue sera bientôt disponible'}
+            ? t('catalog.tryAnotherFilter')
+            : t('catalog.comingSoon')}
         </Text>
         {(selectedCategory || selectedType) && (
           <TouchableOpacity
             style={styles.emptyReset}
             onPress={() => { setSelectedCategory(''); setSelectedType(''); }}
           >
-            <Text style={styles.emptyResetText}>Réinitialiser les filtres</Text>
+            <Text style={styles.emptyResetText}>{t('catalog.resetFilters')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -330,7 +330,7 @@ export default function CatalogScreen({ navigation, route }) {
           <View style={styles.featuredContent}>
             <View style={styles.featuredBadge}>
               <MaterialCommunityIcons name="star-four-points" size={10} color="#fff" style={{ marginRight: 4 }} />
-              <Text style={styles.featuredBadgeText}>RECOMMANDATION</Text>
+              <Text style={styles.featuredBadgeText}>{t('catalog.recommendation')}</Text>
             </View>
             <Text style={styles.featuredTitle} numberOfLines={2}>{title}</Text>
             {!!author && (
@@ -343,7 +343,7 @@ export default function CatalogScreen({ navigation, route }) {
               style={styles.featuredBtn}
               onPress={() => navigation.navigate('ContentDetail', { contentId: recommendation.id })}
             >
-              <Text style={styles.featuredBtnText}>Découvrir</Text>
+              <Text style={styles.featuredBtnText}>{t('catalog.discover')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.featuredIconBg}>
@@ -362,7 +362,7 @@ export default function CatalogScreen({ navigation, route }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Catalogue</Text>
+        <Text style={styles.headerTitle}>{t('catalog.title')}</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerBtn} onPress={openFilter}>
             <MaterialCommunityIcons name="tune" size={22} color="#171412" />
@@ -383,7 +383,7 @@ export default function CatalogScreen({ navigation, route }) {
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={[{ id: 'all', name: 'Tout', slug: '' }, ...categories]}
+          data={[{ id: 'all', name: t('catalog.all'), slug: '' }, ...categories]}
           renderItem={renderCategoryChip}
           keyExtractor={(item) => item.id || item.slug}
           contentContainerStyle={styles.chipsList}
@@ -414,7 +414,7 @@ export default function CatalogScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ) : null}
-          <Text style={styles.totalCount}>{total} résultat{total > 1 ? 's' : ''}</Text>
+          <Text style={styles.totalCount}>{t('catalog.results', { count: total })}</Text>
         </View>
       )}
 
@@ -462,7 +462,7 @@ export default function CatalogScreen({ navigation, route }) {
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Titre, auteur, catégorie..."
+                placeholder={t('catalog.searchPlaceholder')}
                 placeholderTextColor="#9a8f86"
                 style={styles.searchInput}
                 autoFocus
@@ -486,9 +486,9 @@ export default function CatalogScreen({ navigation, route }) {
                 {searchLoading ? (
                   <ActivityIndicator size="small" color={tokens.colors.primary} />
                 ) : searchQuery.trim().length < 2 ? (
-                  <Text style={styles.searchHint}>Tape au moins 2 caractères...</Text>
+                  <Text style={styles.searchHint}>{t('catalog.searchHintTwo')}</Text>
                 ) : (
-                  <Text style={styles.searchHint}>Aucun résultat pour "{searchQuery}"</Text>
+                  <Text style={styles.searchHint}>{t('catalog.noResultsFor', { query: searchQuery })}</Text>
                 )}
               </View>
             }
@@ -502,9 +502,9 @@ export default function CatalogScreen({ navigation, route }) {
           <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setFilterVisible(false)} />
           <View style={styles.filterSheet}>
           <View style={styles.filterHandle} />
-          <Text style={styles.filterSheetTitle}>Filtres & Tri</Text>
+          <Text style={styles.filterSheetTitle}>{t('catalog.filtersAndSort')}</Text>
 
-          <Text style={styles.filterSectionLabel}>Type de contenu</Text>
+          <Text style={styles.filterSectionLabel}>{t('catalog.contentType')}</Text>
           <View style={styles.filterOptions}>
             {TYPE_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -524,7 +524,7 @@ export default function CatalogScreen({ navigation, route }) {
             ))}
           </View>
 
-          <Text style={styles.filterSectionLabel}>Trier par</Text>
+          <Text style={styles.filterSectionLabel}>{t('catalog.sortBy')}</Text>
           <View style={styles.filterSortList}>
             {SORT_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -548,10 +548,10 @@ export default function CatalogScreen({ navigation, route }) {
               style={styles.filterResetBtn}
               onPress={() => { setDraftType(''); setDraftSort('newest'); }}
             >
-              <Text style={styles.filterResetText}>Réinitialiser</Text>
+              <Text style={styles.filterResetText}>{t('catalog.reset')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterApplyBtn} onPress={applyFilter}>
-              <Text style={styles.filterApplyText}>Appliquer</Text>
+              <Text style={styles.filterApplyText}>{t('catalog.apply')}</Text>
             </TouchableOpacity>
           </View>
         </View>

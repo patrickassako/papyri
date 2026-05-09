@@ -16,6 +16,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { readingService } from '../services/reading.service';
 import { parseEpubArrayBuffer } from '../services/epub.service';
 import { useReadingLock } from '../hooks/useReadingLock';
+import { useTranslation } from 'react-i18next';
 
 const FONT_OPTIONS = [
   {
@@ -96,6 +97,7 @@ function buildFallbackParagraphs() {
 }
 
 export default function ReaderScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const { contentId } = route.params || {};
   const { lockState, reacquire } = useReadingLock(contentId);
   const [loading, setLoading] = useState(true);
@@ -515,16 +517,16 @@ export default function ReaderScreen({ route, navigation }) {
       <SafeAreaView style={[styles.loadingWrap, { backgroundColor: '#F7F4EF' }]} edges={['top', 'bottom']}>
         <MaterialCommunityIcons name="cellphone-arrow-down" size={48} color="#2E4057" />
         <Text style={[styles.errorText, { textAlign: 'center', marginTop: 12 }]}>
-          Un autre appareil a repris la lecture.
+          {t('content.displaced')}
         </Text>
         <TouchableOpacity
           onPress={reacquire}
           style={[styles.errorBackBtn, { backgroundColor: '#B5651D', marginBottom: 10 }]}
         >
-          <Text style={styles.errorBackText}>Reprendre ici</Text>
+          <Text style={styles.errorBackText}>{t('content.resumeHere')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.errorBackBtn}>
-          <Text style={styles.errorBackText}>Retour</Text>
+          <Text style={styles.errorBackText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );

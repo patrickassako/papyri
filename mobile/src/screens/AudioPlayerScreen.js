@@ -16,6 +16,7 @@ import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useReadingLock } from '../hooks/useReadingLock';
+import { useTranslation } from 'react-i18next';
 
 const tokens = require('../config/tokens');
 const { width, height } = Dimensions.get('window');
@@ -43,6 +44,7 @@ function formatDuration(seconds) {
 }
 
 export default function AudioPlayerScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const contentId = route?.params?.contentId;
   const [chaptersVisible, setChaptersVisible] = useState(false);
   const [sleepVisible, setSleepVisible] = useState(false);
@@ -169,7 +171,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
         <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#867465" />
         <Text style={styles.errorText}>{error || 'Contenu introuvable.'}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>Retour</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -181,7 +183,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
         <MaterialCommunityIcons name="lock-outline" size={48} color="#867465" />
         <Text style={styles.errorText}>{accessHint || 'Accès non autorisé.'}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>Retour</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -197,7 +199,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
           Limite de 3 appareils atteinte.{'\n'}Supprimez un appareil depuis votre profil.
         </Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>Retour</Text>
+          <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -209,9 +211,9 @@ export default function AudioPlayerScreen({ route, navigation }) {
       {lockState === 'displaced' && (
         <View style={styles.displacedBanner}>
           <MaterialCommunityIcons name="cellphone-arrow-down" size={18} color="#fff" />
-          <Text style={styles.displacedText}>Lecture reprise sur un autre appareil</Text>
+          <Text style={styles.displacedText}>{t('content.displaced')}</Text>
           <TouchableOpacity onPress={reacquire} style={styles.displacedBtn}>
-            <Text style={styles.displacedBtnText}>Reprendre ici</Text>
+            <Text style={styles.displacedBtnText}>{t('content.resumeHere')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -221,7 +223,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
           <MaterialCommunityIcons name="chevron-down" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>Lecture audio</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{t('content.audioPlayer')}</Text>
         <View style={styles.headerButton} />
       </View>
 

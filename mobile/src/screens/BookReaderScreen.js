@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
+import { useTranslation } from 'react-i18next';
 import { getLocalFilePath, getOfflineEntry } from '../services/offline.service';
 import { getAccessToken } from '../services/auth.service';
 import API_BASE_URL from '../config/api';
@@ -86,6 +87,7 @@ const HIGHLIGHT_COLORS = {
 };
 
 export default function BookReaderScreen({ route, navigation }) {
+  const { t: tr } = useTranslation();
   const { contentId } = route.params || {};
   const { lockState, reacquire } = useReadingLock(contentId);
   const { dismiss: dismissAudio, contentId: audioContentId } = useAudioPlayer();
@@ -738,16 +740,16 @@ export default function BookReaderScreen({ route, navigation }) {
       <SafeAreaView style={styles.loadingWrap} edges={['top', 'bottom']}>
         <MaterialCommunityIcons name="cellphone-arrow-down" size={48} color="#f4a825" />
         <Text style={[styles.errorText, { marginTop: 12, textAlign: 'center' }]}>
-          Un autre appareil a repris la lecture.
+          {tr('content.displaced')}
         </Text>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: '#B5651D', marginBottom: 10 }]}
           onPress={reacquire}
         >
-          <Text style={styles.backBtnText}>Reprendre ici</Text>
+          <Text style={styles.backBtnText}>{tr('content.resumeHere')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Retour</Text>
+          <Text style={styles.backBtnText}>{tr('common.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
