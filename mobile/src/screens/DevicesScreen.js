@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { deviceService } from '../services/device.service';
 import BottomNavBar from '../components/BottomNavBar';
+import { useTranslation } from 'react-i18next';
 
 const tokens = require('../config/tokens');
 
@@ -23,20 +24,20 @@ const DEVICE_ICONS = {
   web: 'web',
 };
 
-function formatLastSeen(dateStr) {
-  if (!dateStr) return 'Jamais vu';
+function formatLastSeen(dateStr, t) {
+  if (!dateStr) return t('devices.neverSeen');
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  if (minutes < 2) return 'À l\'instant';
-  if (minutes < 60) return `Il y a ${minutes} min`;
-  if (hours < 24) return `Il y a ${hours}h`;
-  if (days === 1) return 'Hier';
-  return `Il y a ${days} jours`;
+  if (minutes < 2) return t('devices.justNow');
+  if (minutes < 60) return t('devices.minutesAgo', { n: minutes });
+  if (hours < 24) return t('devices.hoursAgo', { n: hours });
+  if (days === 1) return t('devices.yesterday');
+  return t('devices.daysAgo', { n: days });
 }
 
-function DeviceCard({ device, onRemove, removing }) {
+function DeviceCard({ device, onRemove, removing, t }) {
   const icon = DEVICE_ICONS[device.device_type] || 'devices';
   const isCurrent = device.is_current;
   const isReading = device.is_reading;
@@ -57,17 +58,17 @@ function DeviceCard({ device, onRemove, removing }) {
             <Text style={styles.cardName} numberOfLines={1}>{device.device_name}</Text>
             {isCurrent && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>Cet appareil</Text>
+                <Text style={styles.badgeText}>{t('devices.currentDevice')}</Text>
               </View>
             )}
           </View>
           {isReading && (
             <View style={styles.readingRow}>
               <MaterialCommunityIcons name="book-open-variant" size={12} color={tokens.colors.semantic?.success || '#4CAF50'} />
-              <Text style={styles.readingText}>En lecture actuellement</Text>
+              <Text style={styles.readingText}>{t('devices.readingNow')}</Text>
             </View>
           )}
-          <Text style={styles.cardDate}>{formatLastSeen(device.last_seen_at)}</Text>
+          <Text style={styles.cardDate}>{formatLastSeen(device.last_seen_at, t)}</Text>
         </View>
       </View>
 
@@ -91,6 +92,7 @@ function DeviceCard({ device, onRemove, removing }) {
 }
 
 export default function DevicesScreen({ navigation }) {
+  const { t } = useTranslation();
   const [devices, setDevices] = useState([]);
   const [meta, setMeta] = useState({ limit: 3, count: 0 });
   const [loading, setLoading] = useState(true);
@@ -106,7 +108,7 @@ export default function DevicesScreen({ navigation }) {
         setMeta(res.meta || { limit: 3, count: res.data.length });
       }
     } catch (err) {
-      setSnack('Impossible de charger les appareils');
+      setSnack(t('devices.loadError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -125,12 +127,12 @@ export default function DevicesScreen({ navigation }) {
 
   const handleRemove = (device) => {
     Alert.alert(
-      'Supprimer cet appareil',
-      `Voulez-vous déconnecter "${device.device_name}" de votre compte ?`,
+      t('devices.removeConfirmTitle'),
+      t('devices.removeConfirm', { name: device.device_name }),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Supprimer',
+          text: t('devices.removeDevice'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -138,9 +140,9 @@ export default function DevicesScreen({ navigation }) {
               await deviceService.remove(device.device_id);
               setDevices((prev) => prev.filter((d) => d.device_id !== device.device_id));
               setMeta((prev) => ({ ...prev, count: prev.count - 1 }));
-              setSnack('Appareil supprimé');
+              setSnack(t('devices.removed'));
             } catch {
-              setSnack('Erreur lors de la suppression');
+              setSnack(t('devices.removeError'));
             } finally {
               setRemovingId(null);
             }
@@ -157,7 +159,7 @@ export default function DevicesScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={tokens.colors.onBackground.light} />
           </TouchableOpacity>
-          <Text style={styles.title}>Mes appareils</Text>
+          <Text style={styles.title}>{t('devices.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centered}>
@@ -174,19 +176,19 @@ export default function DevicesScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={tokens.colors.onBackground.light} />
         </TouchableOpacity>
-        <Text style={styles.title}>Mes appareils</Text>
+        <Text style={styles.title}>{t('devices.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Compteur */}
       <View style={styles.counterRow}>
         <Text style={styles.counterText}>
-          {meta.count} / {meta.limit} appareil{meta.count > 1 ? 's' : ''} connecté{meta.count > 1 ? 's' : ''}
+          {t('devices.counter', { count: meta.count, limit: meta.limit })}
         </Text>
         {meta.count >= meta.limit && (
           <View style={styles.limitBadge}>
             <MaterialCommunityIcons name="alert-circle-outline" size={13} color="#e53935" />
-            <Text style={styles.limitText}>Limite atteinte</Text>
+            <Text style={styles.limitText}>{t('devices.limitReachedShort')}</Text>
           </View>
         )}
       </View>
@@ -195,7 +197,7 @@ export default function DevicesScreen({ navigation }) {
       <View style={styles.infoBox}>
         <MaterialCommunityIcons name="information-outline" size={16} color={tokens.colors.primary} />
         <Text style={styles.infoText}>
-          Votre abonnement autorise jusqu'à {meta.limit} appareils simultanés. Supprimez un appareil pour en ajouter un nouveau.
+          {t('devices.limitInfoFull', { limit: meta.limit })}
         </Text>
       </View>
 
@@ -216,12 +218,13 @@ export default function DevicesScreen({ navigation }) {
             device={item}
             onRemove={handleRemove}
             removing={removingId === item.device_id}
+            t={t}
           />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
             <MaterialCommunityIcons name="devices" size={52} color={tokens.colors.primaryLight} />
-            <Text style={styles.emptyText}>Aucun appareil enregistré</Text>
+            <Text style={styles.emptyText}>{t('devices.noDevices')}</Text>
           </View>
         }
       />
