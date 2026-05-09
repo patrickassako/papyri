@@ -25,7 +25,13 @@ export async function cancelDeletionRequest() {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || `HTTP ${res.status}`);
+    // Normalize error shape — backend may send { error: 'string' } or
+    // { error: { message: '...' } } or { message: '...' }.
+    let message = `HTTP ${res.status}`;
+    if (typeof data?.error === 'string') message = data.error;
+    else if (typeof data?.error?.message === 'string') message = data.error.message;
+    else if (typeof data?.message === 'string') message = data.message;
+    throw new Error(message);
   }
   return data?.data || null;
 }

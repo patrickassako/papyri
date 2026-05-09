@@ -266,7 +266,9 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
       <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: isPremium ? primary : '#7a746d', fontWeight: 800 }}>
         {planBadge(plan.slug, t)}
       </Typography>
-      <Typography sx={{ mt: 0.5, fontSize: '1.6rem', fontWeight: 800 }}>{plan.name}</Typography>
+      <Typography sx={{ mt: 0.5, fontSize: '1.6rem', fontWeight: 800 }}>
+        {t(`plans.names.${plan.slug}`, { defaultValue: plan.name })}
+      </Typography>
 
       {/* Profile selector for family plans */}
       {isFamily && membersCount !== undefined && (
@@ -518,7 +520,7 @@ export default function PricingPage() {
     setError('');
     try {
       if (plan.displayOnlyAnnual) {
-        showSnack(t('pricing.planNotAvailable', { name: plan.name }), 'warning');
+        showSnack(t('pricing.planNotAvailable', { name: t(`plans.names.${plan.slug}`, { defaultValue: plan.name }) }), 'warning');
         return;
       }
 
@@ -531,7 +533,7 @@ export default function PricingPage() {
           planId: plan.id,
           usersLimit: Math.max(currentUsersLimit, resolvedUsersLimit),
         });
-        showSnack(t('pricing.planChanged', { name: plan.name }), 'success');
+        showSnack(t('pricing.planChanged', { name: t(`plans.names.${plan.slug}`, { defaultValue: plan.name }) }), 'success');
         setLoadingCheckoutSlug('');
       } else {
         // Open payment method dialog — user will choose between Stripe (card) or Flutterwave (mobile money)
@@ -863,7 +865,7 @@ export default function PricingPage() {
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: '#8a7f74', mb: 2, fontSize: '0.92rem' }}>
-            {paymentDialog.plan ? t('pricing.paymentDescPlan', { plan: paymentDialog.plan.name }) : t('pricing.paymentDesc')}
+            {paymentDialog.plan ? t('pricing.paymentDescPlan', { plan: t(`plans.names.${paymentDialog.plan.slug}`, { defaultValue: paymentDialog.plan.name }) }) : t('pricing.paymentDesc')}
           </Typography>
 
           {/* ── Code promo ── */}

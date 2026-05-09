@@ -1276,6 +1276,34 @@
     "continue": "Continue",
     "verifying": "Verifying..."
   },
+  "deletionGate": {
+    "title": "Account deletion in progress",
+    "body": "You requested account deletion. The app is temporarily unavailable.",
+    "deadline": "Permanent deletion scheduled for {{date}}.",
+    "cancelDeletion": "Cancel deletion",
+    "cancelError": "Unable to cancel deletion.",
+    "cancelledTitle": "Deletion cancelled",
+    "cancelledBody": "Your account is active again.",
+    "logout": "Sign out"
+  },
+  "plans": {
+    "names": {
+      "solo-monthly": "Solo",
+      "solo-premium-monthly": "Solo Premium",
+      "family-monthly": "Family",
+      "solo-annual": "Solo Annual",
+      "solo-premium-annual": "Solo Premium Annual",
+      "family-annual": "Family Annual"
+    },
+    "descriptions": {
+      "solo-monthly": "Unlimited premium catalog, 1 credit valid for 12 months (access while subscribed), 30% off paid books.",
+      "solo-premium-monthly": "Unlimited premium catalog, 1 credit valid for 12 months with lifetime access to the chosen book, 30% off paid books.",
+      "family-monthly": "Unlimited premium catalog for 3 included profiles, +6 CAD per extra profile (up to 10). 1 credit per profile valid for 12 months with lifetime access. 30% off paid books.",
+      "solo-annual": "Unlimited premium catalog, 1 credit/year (access while subscribed), 30% off. Save 20% on the year.",
+      "solo-premium-annual": "Unlimited premium catalog, 1 credit/year with lifetime access to the chosen book, 30% off. Save 20% on the year.",
+      "family-annual": "3 profiles included + expansion up to 10. 1 credit per profile/year with lifetime access. 30% off. Save 20% on the year."
+    }
+  },
   "family": {
     "title": "Family profiles",
     "usage": "{{count}}/{{limit}} profiles used. {{included}} included, up to {{max}}.",

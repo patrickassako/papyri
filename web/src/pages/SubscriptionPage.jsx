@@ -339,7 +339,7 @@ function SubscriptionPageInner() {
   const audioQuota = usageData.audio_quota || 0;
   const activeLabel = hasActive ? t('subscription.active').toUpperCase() : t('subscription.inactive').toUpperCase();
   const subscriptionLabel = hasActive
-    ? t('subscription.subscriptionActiveLabel', { name: subscription?.plan_snapshot?.name || subscription?.plan_type || t('subscription.title') })
+    ? t('subscription.subscriptionActiveLabel', { name: subscription?.plan_snapshot?.slug ? t(`plans.names.${subscription.plan_snapshot.slug}`, { defaultValue: subscription.plan_snapshot.name }) : (subscription?.plan_snapshot?.name || subscription?.plan_type || t('subscription.title')) })
     : t('subscription.noSubscription');
 
   return (
@@ -404,7 +404,9 @@ function SubscriptionPageInner() {
                 <Box>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.6 }}>
                     <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.4rem', md: '1.8rem' }, color: '#1f1f1f' }}>
-                      {subscription?.plan_snapshot?.name || subscription?.plan_type || t('subscription.noPlan')}
+                      {subscription?.plan_snapshot?.slug
+                        ? t(`plans.names.${subscription.plan_snapshot.slug}`, { defaultValue: subscription.plan_snapshot.name })
+                        : (subscription?.plan_snapshot?.name || subscription?.plan_type || t('subscription.noPlan'))}
                     </Typography>
                     <Box sx={{ px: 1.1, py: 0.2, borderRadius: 99, bgcolor: hasActive ? '#f6ead4' : '#f7d7d7', color: hasActive ? '#b5770c' : '#b42318', fontSize: '0.72rem', fontWeight: 700 }}>
                       {activeLabel}

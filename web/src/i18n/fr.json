@@ -1276,6 +1276,34 @@
     "continue": "Continuer",
     "verifying": "Verification..."
   },
+  "deletionGate": {
+    "title": "Suppression du compte en cours",
+    "body": "Vous avez demandé la suppression de votre compte. L'application est temporairement indisponible.",
+    "deadline": "Suppression définitive prévue le {{date}}.",
+    "cancelDeletion": "Annuler la suppression",
+    "cancelError": "Impossible d'annuler la suppression.",
+    "cancelledTitle": "Suppression annulée",
+    "cancelledBody": "Votre compte est de nouveau actif.",
+    "logout": "Se déconnecter"
+  },
+  "plans": {
+    "names": {
+      "solo-monthly": "Solo",
+      "solo-premium-monthly": "Solo Premium",
+      "family-monthly": "Famille",
+      "solo-annual": "Solo Annuel",
+      "solo-premium-annual": "Solo Premium Annuel",
+      "family-annual": "Famille Annuel"
+    },
+    "descriptions": {
+      "solo-monthly": "Catalogue premium illimité, 1 crédit valable 12 mois (accès tant qu'abonné), 30% de réduction sur les livres payants.",
+      "solo-premium-monthly": "Catalogue premium illimité, 1 crédit valable 12 mois avec accès à vie au livre choisi, 30% de réduction sur les livres payants.",
+      "family-monthly": "Catalogue premium illimité pour 3 profils inclus, +6 CAD par profil supplémentaire (jusqu'à 10). 1 crédit par profil valable 12 mois avec accès à vie. 30% de réduction sur les livres payants.",
+      "solo-annual": "Catalogue premium illimité, 1 crédit/an (accès tant qu'abonné), 30% de réduction. Économisez 20% sur l'année.",
+      "solo-premium-annual": "Catalogue premium illimité, 1 crédit/an avec accès à vie au livre choisi, 30% de réduction. Économisez 20% sur l'année.",
+      "family-annual": "3 profils inclus + extension jusqu'à 10. 1 crédit par profil/an avec accès à vie. 30% de réduction. Économisez 20% sur l'année."
+    }
+  },
   "family": {
     "title": "Profils famille",
     "usage": "{{count}}/{{limit}} profils utilisés. {{included}} inclus, jusqu'à {{max}}.",

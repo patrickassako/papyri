@@ -74,12 +74,16 @@ export default function PendingDeletionGate({ children }) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || 'Cancel failed');
+        throw new Error(data?.error || t('deletionGate.cancelError', { defaultValue: 'Cancel failed' }));
       }
+      // Reset state and reload the page so the user lands on a fresh dashboard.
       setPendingRequest(null);
+      // Small delay so React unmounts the gate before the reload.
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     } catch (err) {
       setError(err.message || t('common.error'));
-    } finally {
       setBusy(false);
     }
   };

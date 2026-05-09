@@ -39,8 +39,14 @@ export default function PendingDeletionGate({ children, isAuthenticated }) {
     }
   }, [isAuthenticated]);
 
+  // Re-fetch on every isAuthenticated change AND on app foreground.
+  // The dependency array includes fetchStatus which itself re-creates when
+  // isAuthenticated flips, so this fires as soon as the user is logged in.
   useEffect(() => {
     fetchStatus();
+  }, [fetchStatus]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') fetchStatus();
     });
@@ -52,9 +58,28 @@ export default function PendingDeletionGate({ children, isAuthenticated }) {
     setError('');
     try {
       await cancelDeletionRequest();
-      setPending(null);
+      // Re-fetch from the server to confirm the cancellation, then unblock.
+      // Without this, if the API silently failed the user could stay blocked.
+      const stillPending = await getPendingDeletionRequest();
+      setPending(stillPending);
+      if (!stillPending) {
+        // Cancellation confirmed — show a quick success toast via Alert,
+        // then the gate unmounts and the user lands on the regular nav.
+        try {
+          const { Alert } = require('react-native');
+          Alert.alert(
+            t('deletionGate.cancelledTitle', { defaultValue: 'Suppression annulée' }),
+            t('deletionGate.cancelledBody', { defaultValue: 'Votre compte est de nouveau actif.' })
+          );
+        } catch (_) {}
+      }
     } catch (err) {
-      setError(err?.message || t('common.error'));
+      // Defensive normalization to avoid "[object Object]" in the UI.
+      let message = t('common.error');
+      if (typeof err === 'string') message = err;
+      else if (typeof err?.message === 'string') message = err.message;
+      else if (typeof err?.error === 'string') message = err.error;
+      setError(message);
     } finally {
       setBusy(false);
     }

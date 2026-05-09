@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { subscriptionService } from '../services/subscription.service';
 import OwnerProfileGuard from '../components/OwnerProfileGuard';
 
@@ -67,7 +68,7 @@ function isFamilyPlan(plan) {
 }
 
 /* ─── Plan card ───────────────────────────────────────────────── */
-function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange }) {
+function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange, t }) {
   const yearly = isYearlyPlan(plan);
   const family = isFamilyPlan(plan);
   const minProfiles = Number(plan.includedUsers || 1);
@@ -84,38 +85,48 @@ function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange })
     >
       {yearly && (
         <View style={styles.planBadge}>
-          <Text style={styles.planBadgeText}>-20% / AN</Text>
+          <Text style={styles.planBadgeText}>{t('subscription.yearBadge')}</Text>
         </View>
       )}
       <View style={styles.planCardRow}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.planName, selected && styles.planNameSelected]}>{plan.name}</Text>
+          <Text style={[styles.planName, selected && styles.planNameSelected]}>
+            {t(`plans.names.${plan.slug}`, { defaultValue: plan.name })}
+          </Text>
           {plan.description ? (
-            <Text style={styles.planDesc} numberOfLines={3}>{plan.description}</Text>
+            <Text style={styles.planDesc} numberOfLines={3}>
+              {t(`plans.descriptions.${plan.slug}`, { defaultValue: plan.description })}
+            </Text>
           ) : null}
         </View>
         <View style={styles.planPriceBlock}>
           <Text style={[styles.planPrice, selected && styles.planPriceSelected]}>{formatPlanPrice(plan, extraProfiles)}</Text>
-          <Text style={styles.planPeriod}>{yearly ? '/ an' : '/ mois'}</Text>
+          <Text style={styles.planPeriod}>{yearly ? t('subscription.perYear') : t('subscription.perMonth')}</Text>
         </View>
       </View>
 
       {/* Bullets */}
       <View style={styles.planBullets}>
-        <Text style={styles.planBullet}>· Catalogue premium illimité</Text>
-        <Text style={styles.planBullet}>· Téléchargement hors-ligne</Text>
+        <Text style={styles.planBullet}>· {t('subscription.bulletUnlimited')}</Text>
+        <Text style={styles.planBullet}>· {t('subscription.bulletOffline')}</Text>
         {creditsTotal > 0 ? (
           <Text style={styles.planBullet}>
-            · {creditsTotal} crédit{creditsTotal > 1 ? 's' : ''} / 12 mois — {lifetime ? 'accès à vie' : 'accès tant qu\'abonné'}
+            · {lifetime
+              ? (creditsTotal > 1
+                  ? t('subscription.bulletCreditsLifetime', { count: creditsTotal })
+                  : t('subscription.bulletCreditsLifetimeOne', { count: creditsTotal }))
+              : (creditsTotal > 1
+                  ? t('subscription.bulletCreditsBound', { count: creditsTotal })
+                  : t('subscription.bulletCreditsBoundOne', { count: creditsTotal }))}
           </Text>
         ) : null}
-        <Text style={styles.planBullet}>· {plan.discountPercentPaidBooks || 30}% sur les livres payants</Text>
+        <Text style={styles.planBullet}>· {t('subscription.bulletDiscount', { percent: plan.discountPercentPaidBooks || 30 })}</Text>
       </View>
 
       {/* Family profile selector */}
       {family && selected && maxProfiles > minProfiles ? (
         <View style={styles.profileSelector}>
-          <Text style={styles.profileSelectorLabel}>Profils ({profilesCount} / {maxProfiles})</Text>
+          <Text style={styles.profileSelectorLabel}>{t('subscription.profilesLabel', { count: profilesCount, max: maxProfiles })}</Text>
           <View style={styles.profileSelectorRow}>
             <TouchableOpacity
               style={[styles.profileBtn, profilesCount <= minProfiles && styles.profileBtnDisabled]}
@@ -145,6 +156,7 @@ function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange })
 
 /* ─── Écran principal ─────────────────────────────────────────── */
 function SubscriptionScreenInner({ navigation }) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -188,7 +200,7 @@ function SubscriptionScreenInner({ navigation }) {
       setPlans(Array.isArray(plansResult.plans) ? plansResult.plans : []);
       setGeo(plansResult.geo || null);
     } catch (e) {
-      setError('Impossible de charger les données abonnement.');
+      setError(t('subscription.loadError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -238,7 +250,7 @@ function SubscriptionScreenInner({ navigation }) {
       });
       setPromoResult(result);
     } catch (err) {
-      setPromoError(err.message || 'Code promo invalide.');
+      setPromoError(err.message || t('subscription.promoInvalid'));
     } finally {
       setPromoLoading(false);
     }
@@ -256,7 +268,7 @@ function SubscriptionScreenInner({ navigation }) {
         promoCode: promoResult ? promoCode.trim().toUpperCase() : undefined,
       });
 
-      if (!response.paymentLink) throw new Error('Lien de paiement introuvable.');
+      if (!response.paymentLink) throw new Error(t('subscription.paymentLinkMissing'));
 
       // Store pending payment so AppState listener can resume verification
       const pending = {
@@ -275,7 +287,7 @@ function SubscriptionScreenInner({ navigation }) {
       // Open payment in browser
       await Linking.openURL(response.paymentLink);
     } catch (err) {
-      setError(err.message || 'Erreur de paiement. Réessayez.');
+      setError(err.message || t('subscription.paymentRetry'));
     } finally {
       setCheckoutBusy('');
     }
@@ -285,7 +297,11 @@ function SubscriptionScreenInner({ navigation }) {
   const subscription = statusPayload?.subscription || null;
   const hasSubscription = statusPayload?.hasSubscription === true || !!subscription;
   const isActive = statusPayload?.isActive === true || String(subscription?.status || '').toLowerCase() === 'active';
-  const planName = useMemo(() => resolvePlanName(subscription), [subscription]);
+  const planName = useMemo(() => {
+    const slug = subscription?.plan_snapshot?.slug || subscription?.plan_type;
+    const fallback = resolvePlanName(subscription);
+    return slug ? t(`plans.names.${slug}`, { defaultValue: fallback }) : fallback;
+  }, [subscription, t]);
 
   // Show plans when no active subscription; also filter out already-subscribed plan
   const availablePlans = useMemo(() => plans.filter((p) => {
@@ -317,17 +333,17 @@ function SubscriptionScreenInner({ navigation }) {
           <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
             <MaterialCommunityIcons name="arrow-left" size={22} color="#171412" />
           </TouchableOpacity>
-          <Text style={styles.title}>Abonnement</Text>
+          <Text style={styles.title}>{t('subscription.subscriptionLabel')}</Text>
           <View style={styles.iconBtn} />
         </View>
 
         {/* Statut */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text style={styles.label}>Statut</Text>
+            <Text style={styles.label}>{t('subscription.status')}</Text>
             <View style={[styles.statusPill, isActive ? styles.statusActive : styles.statusInactive]}>
               <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
-                {isActive ? 'Actif' : (hasSubscription ? 'Inactif' : 'Aucun plan')}
+                {isActive ? t('subscription.statusActive') : (hasSubscription ? t('subscription.statusInactive') : t('subscription.statusNone'))}
               </Text>
             </View>
           </View>
@@ -335,19 +351,19 @@ function SubscriptionScreenInner({ navigation }) {
             <>
               <View style={styles.separator} />
               <View style={styles.rowBetween}>
-                <Text style={styles.label}>Plan</Text>
+                <Text style={styles.label}>{t('subscription.plan')}</Text>
                 <Text style={styles.value}>{planName || '—'}</Text>
               </View>
               <View style={styles.rowBetween}>
-                <Text style={styles.label}>Échéance</Text>
+                <Text style={styles.label}>{t('subscription.deadline')}</Text>
                 <Text style={styles.value}>{formatDate(subscription?.current_period_end || subscription?.expires_at)}</Text>
               </View>
               <View style={styles.rowBetween}>
-                <Text style={styles.label}>Montant</Text>
+                <Text style={styles.label}>{t('subscription.amount')}</Text>
                 <Text style={styles.value}>{formatAmount(subscription?.amount, subscription?.currency)}</Text>
               </View>
               <View style={styles.rowBetween}>
-                <Text style={styles.label}>Places</Text>
+                <Text style={styles.label}>{t('subscription.seats')}</Text>
                 <Text style={styles.value}>{Number(subscription?.users_limit || 1)}</Text>
               </View>
             </>
@@ -357,25 +373,25 @@ function SubscriptionScreenInner({ navigation }) {
         {/* Crédits — uniquement si abo actif */}
         {isActive ? (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Mes crédits</Text>
+            <Text style={styles.sectionTitle}>{t('subscription.myCredits')}</Text>
             <View style={styles.rowBetween}>
-              <Text style={styles.label}>Crédits restants</Text>
+              <Text style={styles.label}>{t('subscription.creditsRemaining')}</Text>
               <Text style={styles.value}>
                 {Number(usage?.bonusAvailableTotal || usage?.bonus_available_total || 0)}
               </Text>
             </View>
             <View style={styles.rowBetween}>
-              <Text style={styles.label}>Catalogue premium</Text>
-              <Text style={styles.value}>Illimité</Text>
+              <Text style={styles.label}>{t('subscription.premiumCatalog')}</Text>
+              <Text style={styles.value}>{t('subscription.unlimited')}</Text>
             </View>
             <View style={styles.rowBetween}>
-              <Text style={styles.label}>Réduction livres payants</Text>
+              <Text style={styles.label}>{t('subscription.paidBooksDiscount')}</Text>
               <Text style={styles.value}>{Number(subscription?.plan_snapshot?.discountPercentPaidBooks || 30)}%</Text>
             </View>
             <Text style={styles.creditHint}>
               {subscription?.plan_snapshot?.creditsGrantLifetimeAccess
-                ? 'Chaque crédit utilisé donne un accès à vie au livre choisi.'
-                : 'Chaque crédit utilisé donne accès au livre tant que votre abonnement est actif.'}
+                ? t('subscription.creditHintLifetime')
+                : t('subscription.creditHintBound')}
             </Text>
           </View>
         ) : null}
@@ -383,13 +399,13 @@ function SubscriptionScreenInner({ navigation }) {
         {/* Plans disponibles */}
         {availablePlans.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>{isActive ? 'Changer de plan' : 'Choisir un plan'}</Text>
-            <Text style={styles.androidSubtitle}>Paiement sécurisé via Stripe ou Mobile Money</Text>
+            <Text style={styles.sectionTitle}>{isActive ? t('subscription.changePlan') : t('subscription.choosePlan')}</Text>
+            <Text style={styles.androidSubtitle}>{t('subscription.securedPayment')}</Text>
             {geo?.currency && geo.currency !== 'EUR' ? (
               <View style={styles.geoRow}>
                 <MaterialCommunityIcons name="map-marker-outline" size={13} color="#9c7e49" />
                 <Text style={styles.geoText}>
-                  Prix affichés en {geo.currency}
+                  {t('subscription.pricesIn', { currency: geo.currency })}
                   {geo.country ? ` · ${geo.country}` : ''}
                 </Text>
               </View>
@@ -406,6 +422,7 @@ function SubscriptionScreenInner({ navigation }) {
                   setProfilesCount(Number(p.includedUsers || 1));
                 }}
                 onProfilesChange={setProfilesCount}
+                t={t}
               />
             ))}
 
@@ -418,8 +435,8 @@ function SubscriptionScreenInner({ navigation }) {
               <MaterialCommunityIcons name="credit-card-outline" size={20} color="#fff" />
               <Text style={styles.payBtnText}>
                 {selectedPlan
-                  ? `Payer ${formatPlanPrice(selectedPlan, Math.max(0, profilesCount - Number(selectedPlan.includedUsers || 1)))}`
-                  : 'Sélectionnez un plan'}
+                  ? t('subscription.payButton', { price: formatPlanPrice(selectedPlan, Math.max(0, profilesCount - Number(selectedPlan.includedUsers || 1))) })
+                  : t('subscription.selectPlan')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -427,15 +444,15 @@ function SubscriptionScreenInner({ navigation }) {
 
         {/* Historique paiements */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Historique paiements</Text>
+          <Text style={styles.sectionTitle}>{t('subscription.paymentHistory')}</Text>
           {payments.length === 0 ? (
-            <Text style={styles.emptyText}>Aucun paiement enregistré.</Text>
+            <Text style={styles.emptyText}>{t('subscription.noPayments')}</Text>
           ) : (
             payments.slice(0, 10).map((payment) => (
               <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.paymentTitle}>
-                    {payment?.metadata?.payment_type === 'subscription_renewal' ? 'Renouvellement' : 'Abonnement'}
+                    {payment?.metadata?.payment_type === 'subscription_renewal' ? t('subscription.renewal') : t('subscription.subscriptionLabel')}
                   </Text>
                   <Text style={styles.paymentMeta}>{formatDate(payment.created_at)}</Text>
                 </View>
@@ -465,10 +482,13 @@ function SubscriptionScreenInner({ navigation }) {
             {/* Poignée */}
             <View style={styles.sheetHandle} />
 
-            <Text style={styles.modalTitle}>Mode de paiement</Text>
+            <Text style={styles.modalTitle}>{t('subscription.paymentMethod')}</Text>
             {selectedPlan ? (
               <Text style={styles.modalSubtitle}>
-                Plan {selectedPlan.name} · {formatPlanPrice(selectedPlan, Math.max(0, profilesCount - Number(selectedPlan.includedUsers || 1)))}
+                {t('subscription.planLine', {
+                  name: t(`plans.names.${selectedPlan.slug}`, { defaultValue: selectedPlan.name }),
+                  price: formatPlanPrice(selectedPlan, Math.max(0, profilesCount - Number(selectedPlan.includedUsers || 1))),
+                })}
               </Text>
             ) : null}
 
@@ -476,7 +496,7 @@ function SubscriptionScreenInner({ navigation }) {
             <View style={styles.promoRow}>
               <TextInput
                 style={styles.promoInput}
-                placeholder="Code promo (optionnel)"
+                placeholder={t('subscription.promoPlaceholder')}
                 placeholderTextColor="#a89a8d"
                 value={promoCode}
                 onChangeText={(v) => { setPromoCode(v.toUpperCase()); setPromoResult(null); setPromoError(''); }}
@@ -491,7 +511,7 @@ function SubscriptionScreenInner({ navigation }) {
               >
                 {promoLoading
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.promoBtnText}>Appliquer</Text>}
+                  : <Text style={styles.promoBtnText}>{t('subscription.apply')}</Text>}
               </TouchableOpacity>
             </View>
 
@@ -499,11 +519,12 @@ function SubscriptionScreenInner({ navigation }) {
               <View style={styles.promoSuccessBox}>
                 <MaterialCommunityIcons name="tag-check-outline" size={16} color="#1F7A39" />
                 <Text style={styles.promoSuccessText}>
-                  Code « {promoResult.code} » appliqué — {
-                    promoResult.discountType === 'percent'
+                  {t('subscription.promoApplied', {
+                    code: promoResult.code,
+                    discount: promoResult.discountType === 'percent'
                       ? `-${promoResult.discountValue}%`
-                      : `-${(promoResult.discountCents / 100).toFixed(2)} ${selectedPlan?.currency || 'EUR'}`
-                  }
+                      : `-${(promoResult.discountCents / 100).toFixed(2)} ${selectedPlan?.currency || 'EUR'}`,
+                  })}
                 </Text>
               </View>
             ) : null}
@@ -520,8 +541,8 @@ function SubscriptionScreenInner({ navigation }) {
                 ? <ActivityIndicator size="small" color="#5469d4" style={styles.providerIcon} />
                 : <Text style={[styles.providerIcon, { fontSize: 26 }]}>💳</Text>}
               <View style={styles.providerInfo}>
-                <Text style={styles.providerName}>Carte bancaire</Text>
-                <Text style={styles.providerSub}>Visa, Mastercard — via Stripe</Text>
+                <Text style={styles.providerName}>{t('subscription.creditCard')}</Text>
+                <Text style={styles.providerSub}>{t('subscription.creditCardSub')}</Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={20} color="#c8c4c0" />
             </TouchableOpacity>
@@ -537,14 +558,14 @@ function SubscriptionScreenInner({ navigation }) {
                 ? <ActivityIndicator size="small" color="#f9a825" style={styles.providerIcon} />
                 : <Text style={[styles.providerIcon, { fontSize: 26 }]}>📱</Text>}
               <View style={styles.providerInfo}>
-                <Text style={styles.providerName}>Mobile Money</Text>
-                <Text style={styles.providerSub}>Wave, Orange Money, MTN…</Text>
+                <Text style={styles.providerName}>{t('subscription.mobileMoney')}</Text>
+                <Text style={styles.providerSub}>{t('subscription.mobileMoneySub')}</Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={20} color="#c8c4c0" />
             </TouchableOpacity>
 
             <Text style={styles.modalNote}>
-              Vous serez redirigé vers votre navigateur pour finaliser le paiement.
+              {t('subscription.redirectNote')}
             </Text>
 
             <TouchableOpacity
@@ -552,7 +573,7 @@ function SubscriptionScreenInner({ navigation }) {
               onPress={() => !checkoutBusy && setModalVisible(false)}
               disabled={!!checkoutBusy}
             >
-              <Text style={styles.cancelBtnText}>Annuler</Text>
+              <Text style={styles.cancelBtnText}>{t('subscription.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
