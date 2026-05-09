@@ -57,10 +57,10 @@ function shuffle(arr) {
   return a;
 }
 
-function mapContinueItem(item) {
+function mapContinueItem(item, t) {
   const progressPercent = Math.max(0, Math.min(100, Math.round(item.progress_percent || 0)));
   const isAudio = item.content_type === 'audiobook';
-  const defaultRemaining = isAudio ? 'restant' : 'p. restantes';
+  const defaultRemaining = isAudio ? t('home.remainingAudio') : t('home.remainingPages');
 
   return {
     id: item.content_id || item.id,
@@ -68,7 +68,7 @@ function mapContinueItem(item) {
     author: item.author,
     type: isAudio ? 'audiobook' : 'ebook',
     progress: progressPercent / 100,
-    progressText: `${progressPercent}% ${isAudio ? 'écoutés' : 'terminés'}`,
+    progressText: `${progressPercent}% ${isAudio ? t('home.listened') : t('home.read')}`,
     remainingText: item.remaining_text || defaultRemaining,
     cover: resolveCover(item),
   };
@@ -195,7 +195,7 @@ const HomeScreen = ({ navigation }) => {
         setSearchResults(mapped);
       } catch (e) {
         if (cancelled) return;
-        setSearchError('Erreur recherche. Réessaie.');
+        setSearchError(t('home.searchError'));
       } finally {
         if (!cancelled) setSearchLoading(false);
       }
@@ -209,7 +209,7 @@ const HomeScreen = ({ navigation }) => {
 
   const applyHomeData = (homeData) => {
     if (!homeData) return;
-    setContinueReading((homeData.continue_reading || []).map(mapContinueItem));
+    setContinueReading((homeData.continue_reading || []).map((it) => mapContinueItem(it, t)));
     setNouveautes((homeData.new_releases || []).map(item => ({
       id: item.id, title: item.title, author: item.author || item.author_name,
       cover: resolveCover(item),
@@ -242,7 +242,7 @@ const HomeScreen = ({ navigation }) => {
             const inProgress = historyData.data
               .filter((item) => !item?.is_completed && Number(item?.progress_percent || 0) > 0)
               .slice(0, 8)
-              .map(mapContinueItem);
+              .map((it) => mapContinueItem(it, t));
             setContinueReading(inProgress);
           }
         }).catch(() => {});
@@ -270,7 +270,7 @@ const HomeScreen = ({ navigation }) => {
         }).catch(() => {});
       }
     } catch (err) {
-      setError('Impossible de charger les données. Vérifiez votre connexion.');
+      setError(t('home.loadError'));
     } finally {
       setLoading(false);
     }
@@ -580,7 +580,7 @@ const HomeScreen = ({ navigation }) => {
       </TouchableOpacity>
       <TouchableOpacity style={styles.navItem}>
         <MaterialCommunityIcons name="compass-outline" size={24} color="#867465" />
-        <Text style={styles.navLabel}>Découvrir</Text>
+        <Text style={styles.navLabel}>{t('home.discover')}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.navItem}>
         <MaterialCommunityIcons name="book-multiple" size={24} color="#867465" />
@@ -588,7 +588,7 @@ const HomeScreen = ({ navigation }) => {
       </TouchableOpacity>
       <TouchableOpacity style={styles.navItem}>
         <MaterialCommunityIcons name="cog-outline" size={24} color="#867465" />
-        <Text style={styles.navLabel}>Paramètres</Text>
+        <Text style={styles.navLabel}>{t('common.settings')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -779,7 +779,7 @@ const HomeScreen = ({ navigation }) => {
         onDismiss={() => setError(null)}
         duration={4000}
         action={{
-          label: 'Réessayer',
+          label: t('common.retry'),
           onPress: loadInitialData,
         }}
       >

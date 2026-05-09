@@ -3,6 +3,7 @@ import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 const tokens = require('../config/tokens');
 
@@ -77,9 +78,83 @@ const LEGAL_CONTENT = {
   },
 };
 
+const LEGAL_CONTENT_EN = {
+  cgu: {
+    title: "Terms of Service",
+    sections: [
+      { heading: '1. Service overview', body: "Papyri is a digital platform providing access to e-books and audiobooks via subscription. The platform is operated by Papyri Inc. (support@papyri.app)." },
+      { heading: '2. Platform access', body: "Some services require account creation. The user must be at least 18 years old and provide accurate information. The user is responsible for the confidentiality of their credentials." },
+      { heading: '3. Services offered', body: "The platform provides access to a catalog of e-books and audiobooks, streaming reading, audio listening, and temporary mobile downloads." },
+      { heading: '4. Offline downloads', body: "Downloads are reserved for active subscribers and limited to 2 devices per account. Files are protected and become inaccessible after cancellation." },
+      { heading: '5. Intellectual property', body: "All works are protected by copyright laws. The user is granted a personal, non-exclusive, non-transferable license. Any copy, distribution or resale is prohibited." },
+      { heading: '6. Prohibited behavior', body: "Bypassing technical protections, using bots, sharing credentials, or commercially exploiting content is prohibited." },
+      { heading: '7. Governing law', body: "These Terms are governed by the laws of the Province of Quebec (Canada). Any dispute will be brought before the competent courts of Quebec." },
+      { heading: '8. Contact', body: 'support@papyri.app' },
+    ],
+  },
+  cgv: {
+    title: 'Sales Terms',
+    sections: [
+      { heading: '1. Purpose', body: "These Sales Terms govern subscriptions, one-off purchases and any payment made via the Papyri platform." },
+      { heading: '2. Pricing', body: "Prices are displayed before any order. Any change to subscription pricing will be communicated at least 30 days in advance." },
+      { heading: '3. Payment methods', body: "Payments are secured via Stripe and Flutterwave. Accepted methods include: credit cards (Visa, Mastercard, Amex), Apple Pay, Google Pay, Mobile Money." },
+      { heading: '4. Subscriptions', body: "Subscriptions renew automatically. The user may cancel at any time from their account, effective at the end of the current period." },
+      { heading: '5. Refunds', body: "A refund may be granted in case of billing error, fraudulent transaction, or technical inability to access the service." },
+      { heading: '6. Governing law', body: "These Sales Terms are governed by the laws of the Province of Quebec (Canada)." },
+      { heading: '7. Contact', body: 'support@papyri.app' },
+    ],
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    sections: [
+      { heading: '1. Data controller', body: 'Papyri Inc. — privacy@papyri.app' },
+      { heading: '2. Data collected', body: "Identification data (name, email), browsing data (IP, device), reading history, subscription and payment data, push notification tokens." },
+      { heading: '3. Purposes', body: "Account management, service delivery, payment processing, sending notifications, platform improvement via anonymized statistics, fraud prevention." },
+      { heading: '4. Data sharing', body: "Your data is never sold. It is shared only with our processors: Supabase, Cloudflare, Stripe, Flutterwave, Firebase, Brevo." },
+      { heading: '5. Your rights', body: "You have rights of access, rectification, erasure, portability and objection. Exercise them from your profile or by contacting privacy@papyri.app." },
+      { heading: '6. Retention', body: "Active data: subscription duration + 3 years. Payment data: 10 years (legal obligation). Deleted account: immediate anonymization." },
+      { heading: '7. Security', body: "Encryption in transit (HTTPS/TLS) and at rest. Payments processed by Stripe and Flutterwave (PCI-DSS certified)." },
+      { heading: '8. Contact', body: 'privacy@papyri.app' },
+    ],
+  },
+  cookies: {
+    title: 'Cookie Policy',
+    sections: [
+      { heading: 'Essential cookies', body: "Required for the service to operate (login, security, session). Cannot be disabled." },
+      { heading: 'Analytics cookies', body: "Help us understand how users use the platform. Used only with your consent." },
+      { heading: 'Functional cookies', body: "Remember your preferences (language, theme, reading settings)." },
+      { heading: 'Duration', body: "Cookies may be stored for the session or up to 13 months." },
+      { heading: 'Management', body: "You can accept or refuse non-essential cookies via the consent banner on the website." },
+      { heading: 'Contact', body: 'support@papyri.app' },
+    ],
+  },
+  mentions: {
+    title: 'Legal Notice',
+    sections: [
+      { heading: 'Publisher', body: "Papyri Inc.\nEmail: support@papyri.app\nWebsite: https://papyri.app" },
+      { heading: 'Publication director', body: 'Dimitri Talla' },
+      { heading: 'Hosting', body: "Supabase Inc. — 970 Toa Payoh North, Singapore\nCloudflare Inc. (files) — 101 Townsend St, San Francisco, CA" },
+      { heading: 'Intellectual property', body: "Content (texts, books, audio files, images, logos) is protected by copyright laws. Any reproduction without authorization is prohibited." },
+      { heading: 'Contact', body: 'support@papyri.app' },
+    ],
+  },
+  copyright: {
+    title: 'Copyright & Reporting Policy',
+    sections: [
+      { heading: 'Copyright respect', body: "Papyri respects all applicable intellectual property laws. Available works are published with the authorization of their authors or publishers." },
+      { heading: 'Report a violation', body: "Send a notification to copyright@papyri.app with: your contact details, identification of the protected work, the URL of the content concerned, and a good-faith statement." },
+      { heading: 'Request handling', body: "Upon receipt of a valid notification: content may be temporarily removed, a legal review is performed, and the decision is communicated to the parties." },
+      { heading: 'Contact', body: 'copyright@papyri.app' },
+    ],
+  },
+};
+
 export default function LegalScreen({ route, navigation }) {
+  const { i18n } = useTranslation();
   const { type } = route.params || {};
-  const doc = LEGAL_CONTENT[type] || LEGAL_CONTENT.cgu;
+  const isEn = (i18n.language || 'fr').startsWith('en');
+  const dataset = isEn ? LEGAL_CONTENT_EN : LEGAL_CONTENT;
+  const doc = dataset[type] || dataset.cgu;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

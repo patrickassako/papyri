@@ -12,8 +12,10 @@ import { Text, TextInput, Button, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function ForgotPasswordScreen({ navigation }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +23,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   const handleResetPassword = async () => {
     if (!email) {
-      setError('Veuillez entrer votre adresse e-mail');
+      setError(t('auth.forgotEmailRequired'));
       return;
     }
 
@@ -80,9 +82,9 @@ export default function ForgotPasswordScreen({ navigation }) {
 
             {/* Header */}
             <View style={styles.titleContainer}>
-              <Text style={styles.title}>Mot de passe oublié</Text>
+              <Text style={styles.title}>{t('auth.forgotTitle')}</Text>
               <Text style={styles.subtitle}>
-                Pas d'inquiétude, nous vous envoyons un lien pour retrouver l'accès à votre bibliothèque.
+                {t('auth.forgotIntro')}
               </Text>
             </View>
 
@@ -90,9 +92,9 @@ export default function ForgotPasswordScreen({ navigation }) {
             {success ? (
               <View style={styles.successContainer}>
                 <MaterialCommunityIcons name="check-circle" size={48} color="#10b981" />
-                <Text style={styles.successTitle}>E-mail envoyé !</Text>
+                <Text style={styles.successTitle}>{t('auth.forgotSuccessTitle')}</Text>
                 <Text style={styles.successText}>
-                  Vérifiez votre boîte de réception et suivez les instructions pour réinitialiser votre mot de passe.
+                  {t('auth.forgotSuccessBody')}
                 </Text>
               </View>
             ) : (
@@ -100,12 +102,12 @@ export default function ForgotPasswordScreen({ navigation }) {
               <View style={styles.form}>
                 {/* Email Field */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Adresse e-mail</Text>
+                  <Text style={styles.label}>{t('auth.emailLabel')}</Text>
                   <TextInput
                     mode="flat"
                     value={email}
                     onChangeText={setEmail}
-                    placeholder="exemple@email.com"
+                    placeholder={t('auth.emailExample')}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoComplete="email"
@@ -140,7 +142,7 @@ export default function ForgotPasswordScreen({ navigation }) {
                   labelStyle={styles.buttonLabel}
                   buttonColor="#b4641d"
                 >
-                  Envoyer le lien
+                  {t('auth.sendReset')}
                 </Button>
               </View>
             )}
@@ -153,7 +155,7 @@ export default function ForgotPasswordScreen({ navigation }) {
               style={styles.backToLogin}
             >
               <MaterialCommunityIcons name="arrow-left" size={14} color="#b4641d" />
-              <Text style={styles.backToLoginText}>Retour à la connexion</Text>
+              <Text style={styles.backToLoginText}>{t('auth.backToLogin')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

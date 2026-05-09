@@ -124,7 +124,7 @@ export default function DownloadsScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={tokens.colors.onSurface.light} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Téléchargements</Text>
+        <Text style={styles.headerTitle}>{t('downloadsHeader.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 

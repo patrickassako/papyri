@@ -14,8 +14,10 @@ import {
   listProfiles, selectProfile, AVATAR_COLORS,
 } from '../services/family.service';
 import { useProfile } from '../context/ProfileContext';
+import { useTranslation } from 'react-i18next';
 
 export default function ProfileSelectorScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const fromSettings = route?.params?.fromSettings === true;
   const { switchProfile } = useProfile();
   const [profiles, setProfiles] = useState([]);
@@ -67,7 +69,7 @@ export default function ProfileSelectorScreen({ navigation, route }) {
       await switchProfile(selected);
       navigation.replace('Home');
     } catch (e) {
-      Alert.alert('Erreur', e.message || 'Impossible de sélectionner ce profil.');
+      Alert.alert(t('profileSelector.errorTitle'), e.message || t('profileSelector.selectError'));
     } finally {
       setSelecting(null);
     }
@@ -82,7 +84,7 @@ export default function ProfileSelectorScreen({ navigation, route }) {
       setPinProfile(null);
       navigation.replace('Home');
     } catch (e) {
-      setPinError('PIN incorrect. Réessayez.');
+      setPinError(t('profileSelector.wrongPin'));
       setPin('');
     } finally {
       setSelecting(null);

@@ -16,10 +16,12 @@ import {
 } from '../services/family.service';
 
 import OwnerProfileGuard from '../components/OwnerProfileGuard';
+import { useTranslation } from 'react-i18next';
 
 const tokens = require('../config/tokens');
 
 function FamilyScreenInner({ navigation }) {
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -88,7 +90,7 @@ function FamilyScreenInner({ navigation }) {
       setShowForm(false);
       load();
     } catch (e) {
-      Alert.alert('Erreur', e.message);
+      Alert.alert(t('profileSelector.errorTitle'), e.message);
     } finally {
       setFormLoading(false);
     }
@@ -96,21 +98,21 @@ function FamilyScreenInner({ navigation }) {
 
   const handleDelete = (profile) => {
     if (profile.is_owner) {
-      Alert.alert('Impossible', 'Le profil principal ne peut pas être supprimé.');
+      Alert.alert(t('familyExtra.ownerNotRemovableTitle'), t('familyExtra.ownerNotRemovable'));
       return;
     }
     Alert.alert(
-      'Supprimer le profil',
-      `Supprimer « ${profile.name} » définitivement ?`,
+      t('family.deleteProfile'),
+      t('familyExtra.deleteConfirmTemplate', { name: profile.name }),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Supprimer', style: 'destructive',
+          text: t('common.delete'), style: 'destructive',
           onPress: async () => {
             try {
               await deleteProfile(profile.id);
               load();
-            } catch (e) { Alert.alert('Erreur', e.message); }
+            } catch (e) { Alert.alert(t('profileSelector.errorTitle'), e.message); }
           },
         },
       ]
@@ -239,7 +241,7 @@ function FamilyScreenInner({ navigation }) {
             <TouchableOpacity style={styles.toggleRow} onPress={() => setFormIsChild(v => !v)}>
               <View>
                 <Text style={styles.toggleLabel}>Profil enfant</Text>
-                <Text style={styles.toggleSub}>Contenu adapté à l'âge</Text>
+                <Text style={styles.toggleSub}>{t('familyExtra.ageAdapted')}</Text>
               </View>
               <View style={[styles.toggle, formIsChild && styles.toggleOn]}>
                 <View style={[styles.toggleThumb, formIsChild && styles.toggleThumbOn]} />
@@ -254,7 +256,7 @@ function FamilyScreenInner({ navigation }) {
           >
             {formLoading
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.saveBtnText}>{editTarget ? 'Enregistrer' : 'Créer le profil'}</Text>
+              : <Text style={styles.saveBtnText}>{editTarget ? t('familyExtra.save') : t('familyExtra.createProfile')}</Text>
             }
           </TouchableOpacity>
         </ScrollView>
@@ -282,11 +284,11 @@ function FamilyScreenInner({ navigation }) {
           <Text style={styles.errorText}>{error}</Text>
           {error.includes('famille') || error.includes('FAMILY') ? (
             <Text style={styles.subText}>
-              Cette fonctionnalité est réservée à l'abonnement Famille.
+              {t('familyExtra.familyOnly')}
             </Text>
           ) : null}
           <TouchableOpacity style={styles.saveBtn} onPress={load}>
-            <Text style={styles.saveBtnText}>Réessayer</Text>
+            <Text style={styles.saveBtnText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (

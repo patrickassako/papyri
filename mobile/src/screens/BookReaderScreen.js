@@ -180,7 +180,7 @@ export default function BookReaderScreen({ route, navigation }) {
         setLoadingMsg('Connexion au serveur…');
         console.log('[BookReader] START load contentId:', contentId);
 
-        slowTimer = setTimeout(() => setLoadingMsg('Démarrage du serveur, patientez…'), 8000);
+        slowTimer = setTimeout(() => setLoadingMsg(tr('reader.serverStarting')), 8000);
 
         let sessionData, chaptersData = null, bookmarksData = [], highlightsData = [];
         let offlineMode = false;
@@ -224,7 +224,7 @@ export default function BookReaderScreen({ route, navigation }) {
           // Get EPUB file (prefer offline cache, otherwise download with JWT)
           let epubFileUri = await getLocalFilePath(contentId);
           if (!epubFileUri) {
-            setLoadingMsg('Téléchargement du livre…');
+            setLoadingMsg(tr('reader.downloadingBook'));
             const jwt = await getAccessToken();
             const proxyPath = sessionData?.stream?.proxy_url || `/api/reading/${contentId}/file`;
             const downloadUrl = `${API_BASE_URL}${proxyPath}`;
@@ -234,7 +234,7 @@ export default function BookReaderScreen({ route, navigation }) {
               headers: { Authorization: `Bearer ${jwt}` },
             });
             console.log('[BookReader] Download status:', dlResult.status);
-            if (dlResult.status !== 200) throw new Error(`Téléchargement échoué (HTTP ${dlResult.status})`);
+            if (dlResult.status !== 200) throw new Error(tr('reader.downloadFailedFmt', { status: dlResult.status }));
             epubFileUri = dlResult.uri;
           }
           console.log('[BookReader] EPUB file:', epubFileUri);
@@ -309,7 +309,7 @@ export default function BookReaderScreen({ route, navigation }) {
         clearTimeout(slowTimer);
         if (!active) return;
         const msg = loadError?.message === 'REQUEST_TIMEOUT'
-          ? 'Le serveur met trop de temps à répondre. Réessayez dans quelques secondes.'
+          ? tr('reader.loadingTimeout')
           : loadError?.message || 'Impossible de charger la lecture.';
         setError(msg);
       } finally {
@@ -726,7 +726,7 @@ export default function BookReaderScreen({ route, navigation }) {
             setRetryCount((c) => c + 1);
           }}
         >
-          <Text style={styles.backBtnText}>Réessayer</Text>
+          <Text style={styles.backBtnText}>{tr('common.retry')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backBtnText}>Retour</Text>
@@ -893,7 +893,7 @@ export default function BookReaderScreen({ route, navigation }) {
             scrollLoading || !scrollFileUri ? (
               <View style={styles.viewerOverlay}>
                 <ActivityIndicator size="large" color="#f4a825" />
-                <Text style={[styles.viewerOverlayText, { color: t.subtle }]}>Préparation du document…</Text>
+                <Text style={[styles.viewerOverlayText, { color: t.subtle }]}>{tr('reader.preparingDoc')}</Text>
               </View>
             ) : !!WebViewComponent && (
               <WebViewComponent
@@ -939,7 +939,7 @@ export default function BookReaderScreen({ route, navigation }) {
           {!WebViewComponent && (
             <View style={styles.unsupportedWrap}>
               <Text style={[styles.unsupportedText, { color: t.subtle }]}>
-                Le module WebView n&apos;est pas présent dans ce build.
+                {tr('reader.webViewMissing')}
               </Text>
             </View>
           )}

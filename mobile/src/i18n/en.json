@@ -58,6 +58,31 @@
     "history": "History",
     "stats": "Stats"
   },
+  "paymentCallback": {
+    "verifying": "Verifying your payment…",
+    "successTitle": "Subscription activated!",
+    "successBody": "Your payment was confirmed. Happy reading!",
+    "viewSubscription": "View my subscription",
+    "cancelTitle": "Payment cancelled",
+    "cancelBody": "Your payment was cancelled. You can retry anytime.",
+    "errorTitle": "Verification failed",
+    "errorBody": "An error occurred during confirmation.",
+    "retry": "Retry",
+    "back": "Back",
+    "missingSession": "session_id missing",
+    "missingParams": "Payment parameters missing",
+    "verifyFailed": "Verification failed."
+  },
+  "legal": {
+    "title": "Legal",
+    "termsTitle": "Terms of Service",
+    "privacyTitle": "Privacy Policy",
+    "cookiesTitle": "Cookie Policy",
+    "contactTitle": "Contact",
+    "contact": "Contact",
+    "version": "Version",
+    "lastUpdated": "Last updated"
+  },
   "home": {
     "greeting_morning": "Good morning, {{name}} 👋",
     "greeting_afternoon": "Good afternoon, {{name}} 👋",
@@ -85,7 +110,12 @@
     "resume": "Resume",
     "allContentsCount": "{{count}} content",
     "allContentsCount_plural": "{{count}} contents",
-    "noContentsCategory": "No content in this category"
+    "noContentsCategory": "No content in this category",
+    "listened": "listened",
+    "read": "read",
+    "remainingAudio": "left",
+    "remainingPages": "p. left",
+    "loadError": "Could not load data. Check your connection."
   },
   "auth": {
     "loginTitle": "Welcome back",
@@ -122,7 +152,70 @@
     "weakPassword": "Password too short (min. 8 characters)",
     "loginError": "Incorrect email or password",
     "registerError": "Error during registration",
-    "fieldRequired": "This field is required"
+    "fieldRequired": "This field is required",
+    "resetTitle": "Create a new password",
+    "resetInvalidLink": "Invalid link. Please request a new reset link.",
+    "resetSuccess": "Password changed successfully! Redirecting to login...",
+    "resetButton": "Reset password",
+    "resetButtonLoading": "Resetting...",
+    "passwordRequired": "Password is required.",
+    "passwordTooShort": "Password must contain at least 8 characters.",
+    "passwordMin8": "Minimum 8 characters",
+    "connectionError": "Connection error. Please try again.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "forgotEmailRequired": "Please enter your email address",
+    "forgotIntro": "Don't worry — we'll send you a link to regain access to your library.",
+    "forgotSuccessTitle": "Email sent!",
+    "forgotSuccessBody": "Check your inbox and follow the instructions to reset your password.",
+    "emailExample": "example@email.com",
+    "registerEmailUsed": "This email address is already in use.",
+    "registerAcceptRequired": "Please accept the Terms of Service and Privacy Policy.",
+    "confirmPasswordRepeat": "Repeat the password",
+    "termsAccept": "I accept the",
+    "termsAnd": "and the",
+    "termsLink": "Terms of Service",
+    "privacyLink": "Privacy Policy"
+  },
+  "downloadsHeader": {
+    "title": "Downloads"
+  },
+  "profileSelector": {
+    "selectError": "Could not select this profile.",
+    "errorTitle": "Error",
+    "wrongPin": "Wrong PIN. Try again."
+  },
+  "familyExtra": {
+    "ownerNotRemovable": "The main profile cannot be deleted.",
+    "ownerNotRemovableTitle": "Not allowed",
+    "deleteConfirmTemplate": "Permanently delete \"{{name}}\"?",
+    "ageAdapted": "Age-appropriate content",
+    "save": "Save",
+    "createProfile": "Create profile",
+    "familyOnly": "This feature is reserved for Family subscriptions."
+  },
+  "profileExtra": {
+    "photoUpdated": "Profile photo updated.",
+    "photoUpdateFailed": "Could not update photo.",
+    "deleteIrreversible": "This action is irreversible. All your data will be permanently deleted."
+  },
+  "reader": {
+    "accessDenied": "Access denied.",
+    "narratedBy": "Narrated by {{name}}",
+    "removeFromPlaylist": "Remove from playlist",
+    "addToPlaylist": "Add to playlist",
+    "fallbackText": "The full text of this book cannot be displayed in this reader.",
+    "noChapters": "No structured chapters available.",
+    "displaySettings": "Display settings",
+    "preparingDoc": "Preparing document…",
+    "webViewMissing": "The WebView module is missing from this build.",
+    "loadingTimeout": "The server is taking too long to respond. Try again in a few seconds.",
+    "downloadFailedFmt": "Download failed (HTTP {{status}})",
+    "downloadingBook": "Downloading book…",
+    "serverStarting": "Server starting, please wait…",
+    "fileFormatNotSupported": "The actual file is in {{format}}. Native {{format}} rendering on mobile is not enabled yet.",
+    "fileTextUnsegmentable": "The actual file is loaded, but its text cannot be cleanly segmented.",
+    "fileFetchFailed": "Could not retrieve the actual book file."
   },
   "profile": {
     "title": "My profile",

@@ -14,11 +14,13 @@ import {
   Banner,
 } from 'react-native-paper';
 import API_BASE_URL from '../config/api';
+import { useTranslation } from 'react-i18next';
 
 // Import shared design tokens
 const tokens = require('../config/tokens');
 
 const ResetPasswordScreen = ({ route, navigation }) => {
+  const { t } = useTranslation();
   // Get token from navigation params or deep link
   const token = route?.params?.token || null;
 
@@ -37,21 +39,21 @@ const ResetPasswordScreen = ({ route, navigation }) => {
   // Check if token exists
   useEffect(() => {
     if (!token) {
-      setError('Lien invalide. Veuillez demander un nouveau lien de réinitialisation.');
+      setError(t('auth.resetInvalidLink'));
     }
   }, [token]);
 
   // Password validation
   const validatePassword = (password) => {
-    if (!password) return 'Le mot de passe est obligatoire.';
-    if (password.length < 8) return 'Le mot de passe doit contenir au moins 8 caractères.';
+    if (!password) return t('auth.passwordRequired');
+    if (password.length < 8) return t('auth.passwordTooShort');
     return null;
   };
 
   // Confirm password validation
   const validateConfirmPassword = (confirmPassword) => {
-    if (!confirmPassword) return 'Veuillez confirmer le mot de passe.';
-    if (confirmPassword !== formData.password) return 'Les mots de passe ne correspondent pas.';
+    if (!confirmPassword) return t('auth.confirmPasswordPlaceholder');
+    if (confirmPassword !== formData.password) return t('auth.passwordMismatch');
     return null;
   };
 
@@ -96,7 +98,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error?.message || 'Une erreur est survenue.');
+        setError(data.error?.message || t('auth.connectionError'));
         setLoading(false);
         return;
       }
@@ -111,7 +113,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
       }, 2000);
     } catch (err) {
       console.error('Reset password error:', err);
-      setError('Erreur de connexion. Veuillez réessayer.');
+      setError(t('auth.connectionError'));
       setLoading(false);
     }
   };
@@ -128,7 +130,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
       >
         {/* Header */}
         <Text variant="headlineMedium" style={styles.title}>
-          Créer un nouveau mot de passe
+          {t('auth.resetTitle')}
         </Text>
 
         {/* Success Banner */}
@@ -138,7 +140,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
             icon="check-circle"
             style={styles.successBanner}
           >
-            Mot de passe modifié avec succès ! Redirection vers la connexion...
+            {t('auth.resetSuccess')}
           </Banner>
         )}
 
@@ -148,7 +150,7 @@ const ResetPasswordScreen = ({ route, navigation }) => {
             visible={!!error}
             actions={[
               {
-                label: 'Fermer',
+                label: t('common.close'),
                 onPress: () => setError(null),
               },
             ]}
@@ -164,57 +166,57 @@ const ResetPasswordScreen = ({ route, navigation }) => {
             {/* New Password Field */}
             <View style={styles.fieldContainer}>
               <Text variant="labelMedium" style={styles.label}>
-                Nouveau mot de passe
+                {t('auth.passwordLabel')}
               </Text>
               <TextInput
                 mode="outlined"
                 value={formData.password}
                 onChangeText={(value) => setFormData({ ...formData, password: value })}
                 onBlur={() => setTouched({ ...touched, password: true })}
-                placeholder="Votre nouveau mot de passe"
+                placeholder={t('auth.passwordPlaceholder')}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password-new"
                 error={!!errors.password}
                 style={styles.input}
                 outlineStyle={styles.inputOutline}
-                accessibilityLabel="Nouveau mot de passe"
+                accessibilityLabel={t('auth.passwordLabel')}
                 right={
                   <TextInput.Icon
                     icon={showPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowPassword(!showPassword)}
-                    accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    accessibilityLabel={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   />
                 }
               />
               <HelperText type={errors.password ? 'error' : 'info'} visible={true} style={styles.helperText}>
-                {errors.password || 'Minimum 8 caractères'}
+                {errors.password || t('auth.passwordMin8')}
               </HelperText>
             </View>
 
             {/* Confirm Password Field */}
             <View style={styles.fieldContainer}>
               <Text variant="labelMedium" style={styles.label}>
-                Confirmer le mot de passe
+                {t('auth.confirmPasswordLabel')}
               </Text>
               <TextInput
                 mode="outlined"
                 value={formData.confirmPassword}
                 onChangeText={(value) => setFormData({ ...formData, confirmPassword: value })}
                 onBlur={() => setTouched({ ...touched, confirmPassword: true })}
-                placeholder="Confirmez votre mot de passe"
+                placeholder={t('auth.confirmPasswordPlaceholder')}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
                 autoComplete="password-new"
                 error={!!errors.confirmPassword}
                 style={styles.input}
                 outlineStyle={styles.inputOutline}
-                accessibilityLabel="Confirmer le mot de passe"
+                accessibilityLabel={t('auth.confirmPasswordLabel')}
                 right={
                   <TextInput.Icon
                     icon={showConfirmPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    accessibilityLabel={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    accessibilityLabel={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   />
                 }
               />
@@ -234,9 +236,9 @@ const ResetPasswordScreen = ({ route, navigation }) => {
               style={styles.submitButton}
               contentStyle={styles.submitButtonContent}
               labelStyle={styles.submitButtonLabel}
-              accessibilityLabel="Réinitialiser le mot de passe"
+              accessibilityLabel={t('auth.resetButton')}
             >
-              {loading ? 'Réinitialisation en cours...' : 'Réinitialiser le mot de passe'}
+              {loading ? t('auth.resetButtonLoading') : t('auth.resetButton')}
             </Button>
           </>
         )}

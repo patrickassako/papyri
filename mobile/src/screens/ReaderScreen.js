@@ -225,7 +225,7 @@ export default function ReaderScreen({ route, navigation }) {
         setBinaryFormatLabel(label);
         return {
           paragraphs: fallbackParagraphs,
-          reason: `Le fichier réel est en ${label}. Le rendu natif ${label} mobile n'est pas encore activé.`,
+          reason: t('reader.fileFormatNotSupported', { format: label }),
         };
       }
 
@@ -234,7 +234,7 @@ export default function ReaderScreen({ route, navigation }) {
       if (parsed.join(' ').length < 300) {
         return {
           paragraphs: fallbackParagraphs,
-          reason: 'Le fichier réel est chargé, mais son texte ne peut pas être segmenté proprement.',
+          reason: t('reader.fileTextUnsegmentable'),
         };
       }
 
@@ -249,7 +249,7 @@ export default function ReaderScreen({ route, navigation }) {
       setBinaryFormatLabel('');
       return {
         paragraphs: fallbackParagraphs,
-        reason: 'Impossible de récupérer le fichier réel du livre.',
+        reason: t('reader.fileFetchFailed'),
         chapterAnchors: null,
       };
     }
@@ -659,7 +659,7 @@ export default function ReaderScreen({ route, navigation }) {
               Texte non disponible
             </Text>
             <Text style={[styles.emptyReaderText, { color: activeTheme.subtleText }]}>
-              {contentUnavailableReason || 'Le texte intégral de ce livre ne peut pas être affiché dans ce lecteur.'}
+              {contentUnavailableReason || t('reader.fallbackText')}
             </Text>
             {!!binaryFormatLabel && (
               <TouchableOpacity
@@ -758,7 +758,7 @@ export default function ReaderScreen({ route, navigation }) {
             </View>
 
             {chapterAnchors.length === 0 && (
-              <Text style={styles.emptyReaderText}>Aucun chapitre structuré disponible.</Text>
+              <Text style={styles.emptyReaderText}>{t('reader.noChapters')}</Text>
             )}
 
             {chapterAnchors.map((chapter) => {
@@ -796,7 +796,7 @@ export default function ReaderScreen({ route, navigation }) {
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowSettings(false)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Réglages d&apos;affichage</Text>
+              <Text style={styles.modalTitle}>{t('reader.displaySettings')}</Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
                 <MaterialCommunityIcons name="close" size={24} color="#6E6860" />
               </TouchableOpacity>

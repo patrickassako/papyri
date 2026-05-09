@@ -7,11 +7,13 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscriptionService } from '../services/subscription.service';
+import { useTranslation } from 'react-i18next';
 
 const tokens = require('../config/tokens');
 const PENDING_KEY = '@papyri_pending_payment';
 
 export default function PaymentCallbackScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const params = route?.params || {};
   const [status, setStatus] = useState('verifying'); // 'verifying' | 'success' | 'error' | 'cancelled'
   const [message, setMessage] = useState('');
@@ -37,13 +39,13 @@ export default function PaymentCallbackScreen({ route, navigation }) {
     try {
       if (provider === 'stripe') {
         const sessionId = params.session_id;
-        if (!sessionId) throw new Error('session_id manquant');
+        if (!sessionId) throw new Error(t('paymentCallback.missingSession'));
         await subscriptionService.verifyStripeSession({ sessionId });
       } else {
         // Flutterwave: tx_ref + transaction_id
         const txRef = params.tx_ref;
         const transactionId = params.transaction_id;
-        if (!txRef && !transactionId) throw new Error('Paramètres de paiement manquants');
+        if (!txRef && !transactionId) throw new Error(t('paymentCallback.missingParams'));
         await subscriptionService.verifyPayment({
           transactionId: transactionId || txRef,
           reference: txRef || transactionId,
@@ -53,7 +55,7 @@ export default function PaymentCallbackScreen({ route, navigation }) {
       await AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
       setStatus('success');
     } catch (err) {
-      setMessage(err.message || 'Vérification échouée.');
+      setMessage(err.message || t('paymentCallback.verifyFailed'));
       setStatus('error');
     }
   }
@@ -66,7 +68,7 @@ export default function PaymentCallbackScreen({ route, navigation }) {
     return (
       <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color={tokens.colors.primary} />
-        <Text style={styles.verifyText}>Vérification de votre paiement…</Text>
+        <Text style={styles.verifyText}>{t('paymentCallback.verifying')}</Text>
       </SafeAreaView>
     );
   }
@@ -77,10 +79,10 @@ export default function PaymentCallbackScreen({ route, navigation }) {
         <View style={styles.iconCircle}>
           <MaterialCommunityIcons name="check-circle" size={72} color="#1F7A39" />
         </View>
-        <Text style={styles.successTitle}>Abonnement activé !</Text>
-        <Text style={styles.successBody}>Votre paiement a été confirmé. Bonne lecture !</Text>
+        <Text style={styles.successTitle}>{t('paymentCallback.successTitle')}</Text>
+        <Text style={styles.successBody}>{t('paymentCallback.successBody')}</Text>
         <TouchableOpacity style={styles.btn} onPress={goToSubscription} activeOpacity={0.8}>
-          <Text style={styles.btnText}>Voir mon abonnement</Text>
+          <Text style={styles.btnText}>{t('paymentCallback.viewSubscription')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -90,10 +92,10 @@ export default function PaymentCallbackScreen({ route, navigation }) {
     return (
       <SafeAreaView style={styles.center}>
         <MaterialCommunityIcons name="close-circle-outline" size={64} color="#8a7d73" />
-        <Text style={styles.cancelTitle}>Paiement annulé</Text>
-        <Text style={styles.cancelBody}>Votre paiement a été annulé. Vous pouvez réessayer à tout moment.</Text>
+        <Text style={styles.cancelTitle}>{t('paymentCallback.cancelTitle')}</Text>
+        <Text style={styles.cancelBody}>{t('paymentCallback.cancelBody')}</Text>
         <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={() => navigation.replace('Subscription')} activeOpacity={0.8}>
-          <Text style={[styles.btnText, styles.btnSecondaryText]}>Retour</Text>
+          <Text style={[styles.btnText, styles.btnSecondaryText]}>{t('paymentCallback.back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -102,13 +104,13 @@ export default function PaymentCallbackScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.center}>
       <MaterialCommunityIcons name="alert-circle-outline" size={64} color="#ad3f3f" />
-      <Text style={styles.errorTitle}>Vérification échouée</Text>
-      <Text style={styles.errorBody}>{message || 'Une erreur est survenue lors de la confirmation.'}</Text>
+      <Text style={styles.errorTitle}>{t('paymentCallback.errorTitle')}</Text>
+      <Text style={styles.errorBody}>{message || t('paymentCallback.errorBody')}</Text>
       <TouchableOpacity style={styles.btn} onPress={verify} activeOpacity={0.8}>
-        <Text style={styles.btnText}>Réessayer</Text>
+        <Text style={styles.btnText}>{t('paymentCallback.retry')}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.btn, styles.btnSecondary, { marginTop: 10 }]} onPress={() => navigation.replace('Subscription')} activeOpacity={0.8}>
-        <Text style={[styles.btnText, styles.btnSecondaryText]}>Retour</Text>
+        <Text style={[styles.btnText, styles.btnSecondaryText]}>{t('paymentCallback.back')}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );

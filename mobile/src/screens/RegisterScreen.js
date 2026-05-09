@@ -54,7 +54,7 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
     if (!termsAccepted) {
-      setError('Veuillez accepter les Conditions d\'utilisation et la Politique de confidentialité.');
+      setError(t('auth.registerAcceptRequired'));
       return;
     }
 
@@ -81,7 +81,7 @@ export default function RegisterScreen({ navigation }) {
     } catch (err) {
       console.error('Register error:', err);
       if (err.message?.includes('already registered')) {
-        setError('Cette adresse e-mail est déjà utilisée.');
+        setError(t('auth.registerEmailUsed'));
       } else {
         setError(err.message || t('auth.registerError'));
       }
@@ -203,7 +203,7 @@ export default function RegisterScreen({ navigation }) {
                     mode="flat"
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
-                    placeholder="Répétez le mot de passe"
+                    placeholder={t('auth.confirmPasswordRepeat')}
                     secureTextEntry={!showConfirm}
                     autoCapitalize="none"
                     style={[
@@ -244,19 +244,19 @@ export default function RegisterScreen({ navigation }) {
                   )}
                 </View>
                 <Text style={styles.termsText}>
-                  J'accepte les{' '}
+                  {t('auth.termsAccept')}{' '}
                   <Text
                     style={styles.termsLink}
                     onPress={() => navigation.navigate('Legal', { type: 'cgu' })}
                   >
-                    Conditions d'utilisation
+                    {t('auth.termsLink')}
                   </Text>
-                  {' '}et la{' '}
+                  {' '}{t('auth.termsAnd')}{' '}
                   <Text
                     style={styles.termsLink}
                     onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
                   >
-                    Politique de confidentialité
+                    {t('auth.privacyLink')}
                   </Text>
                 </Text>
               </TouchableOpacity>

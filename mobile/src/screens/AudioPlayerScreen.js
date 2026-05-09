@@ -181,7 +181,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
     return (
       <SafeAreaView style={styles.centerContainer}>
         <MaterialCommunityIcons name="lock-outline" size={48} color="#867465" />
-        <Text style={styles.errorText}>{accessHint || 'Accès non autorisé.'}</Text>
+        <Text style={styles.errorText}>{accessHint || t('reader.accessDenied')}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
@@ -258,7 +258,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
           <Text style={styles.title} numberOfLines={2}>{content.title}</Text>
           <Text style={styles.author}>
             {content.author}
-            {content.narrator ? ` · Narré par ${content.narrator}` : ''}
+            {content.narrator ? ` · ${t('reader.narratedBy', { name: content.narrator })}` : ''}
           </Text>
           <Text style={styles.chapterName}>
             {chapterItems.find((c) => c.active)?.title || `Chapitre ${currentChapterIndex + 1}`}
@@ -467,7 +467,7 @@ export default function AudioPlayerScreen({ route, navigation }) {
                 color={isInPlaylist ? '#111827' : tokens.colors.primary}
               />
               <Text style={[styles.playlistActionBtnText, isInPlaylist && styles.playlistActionBtnTextActive]}>
-                {playlistActionLoading ? '...' : isInPlaylist ? 'Retirer de la playlist' : 'Ajouter à la playlist'}
+                {playlistActionLoading ? '...' : isInPlaylist ? t('reader.removeFromPlaylist') : t('reader.addToPlaylist')}
               </Text>
             </TouchableOpacity>
 

@@ -58,6 +58,31 @@
     "history": "Historique",
     "stats": "Stats"
   },
+  "paymentCallback": {
+    "verifying": "Vérification de votre paiement…",
+    "successTitle": "Abonnement activé !",
+    "successBody": "Votre paiement a été confirmé. Bonne lecture !",
+    "viewSubscription": "Voir mon abonnement",
+    "cancelTitle": "Paiement annulé",
+    "cancelBody": "Votre paiement a été annulé. Vous pouvez réessayer à tout moment.",
+    "errorTitle": "Vérification échouée",
+    "errorBody": "Une erreur est survenue lors de la confirmation.",
+    "retry": "Réessayer",
+    "back": "Retour",
+    "missingSession": "session_id manquant",
+    "missingParams": "Paramètres de paiement manquants",
+    "verifyFailed": "Vérification échouée."
+  },
+  "legal": {
+    "title": "Mentions légales",
+    "termsTitle": "Conditions d'utilisation",
+    "privacyTitle": "Politique de confidentialité",
+    "cookiesTitle": "Politique des cookies",
+    "contactTitle": "Contact",
+    "contact": "Contact",
+    "version": "Version",
+    "lastUpdated": "Dernière mise à jour"
+  },
   "home": {
     "greeting_morning": "Bonjour, {{name}} 👋",
     "greeting_afternoon": "Bon après-midi, {{name}} 👋",
@@ -85,7 +110,12 @@
     "resume": "Reprendre",
     "allContentsCount": "{{count}} contenu",
     "allContentsCount_plural": "{{count}} contenus",
-    "noContentsCategory": "Aucun contenu dans cette catégorie"
+    "noContentsCategory": "Aucun contenu dans cette catégorie",
+    "listened": "écoutés",
+    "read": "terminés",
+    "remainingAudio": "restant",
+    "remainingPages": "p. restantes",
+    "loadError": "Impossible de charger les données. Vérifiez votre connexion."
   },
   "auth": {
     "loginTitle": "Bienvenue",
@@ -122,7 +152,70 @@
     "weakPassword": "Mot de passe trop court (min. 8 caractères)",
     "loginError": "Email ou mot de passe incorrect",
     "registerError": "Erreur lors de l'inscription",
-    "fieldRequired": "Ce champ est obligatoire"
+    "fieldRequired": "Ce champ est obligatoire",
+    "resetTitle": "Créer un nouveau mot de passe",
+    "resetInvalidLink": "Lien invalide. Veuillez demander un nouveau lien de réinitialisation.",
+    "resetSuccess": "Mot de passe modifié avec succès ! Redirection vers la connexion...",
+    "resetButton": "Réinitialiser le mot de passe",
+    "resetButtonLoading": "Réinitialisation en cours...",
+    "passwordRequired": "Le mot de passe est obligatoire.",
+    "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères.",
+    "passwordMin8": "Minimum 8 caractères",
+    "connectionError": "Erreur de connexion. Veuillez réessayer.",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "forgotEmailRequired": "Veuillez entrer votre adresse e-mail",
+    "forgotIntro": "Pas d'inquiétude, nous vous envoyons un lien pour retrouver l'accès à votre bibliothèque.",
+    "forgotSuccessTitle": "E-mail envoyé !",
+    "forgotSuccessBody": "Vérifiez votre boîte de réception et suivez les instructions pour réinitialiser votre mot de passe.",
+    "emailExample": "exemple@email.com",
+    "registerEmailUsed": "Cette adresse e-mail est déjà utilisée.",
+    "registerAcceptRequired": "Veuillez accepter les Conditions d'utilisation et la Politique de confidentialité.",
+    "confirmPasswordRepeat": "Répétez le mot de passe",
+    "termsAccept": "J'accepte les",
+    "termsAnd": "et la",
+    "termsLink": "Conditions d'utilisation",
+    "privacyLink": "Politique de confidentialité"
+  },
+  "downloadsHeader": {
+    "title": "Téléchargements"
+  },
+  "profileSelector": {
+    "selectError": "Impossible de sélectionner ce profil.",
+    "errorTitle": "Erreur",
+    "wrongPin": "PIN incorrect. Réessayez."
+  },
+  "familyExtra": {
+    "ownerNotRemovable": "Le profil principal ne peut pas être supprimé.",
+    "ownerNotRemovableTitle": "Impossible",
+    "deleteConfirmTemplate": "Supprimer « {{name}} » définitivement ?",
+    "ageAdapted": "Contenu adapté à l'âge",
+    "save": "Enregistrer",
+    "createProfile": "Créer le profil",
+    "familyOnly": "Cette fonctionnalité est réservée à l'abonnement Famille."
+  },
+  "profileExtra": {
+    "photoUpdated": "Photo de profil mise à jour.",
+    "photoUpdateFailed": "Impossible de mettre à jour la photo.",
+    "deleteIrreversible": "Cette action est irréversible. Toutes vos données seront supprimées définitivement."
+  },
+  "reader": {
+    "accessDenied": "Accès non autorisé.",
+    "narratedBy": "Narré par {{name}}",
+    "removeFromPlaylist": "Retirer de la playlist",
+    "addToPlaylist": "Ajouter à la playlist",
+    "fallbackText": "Le texte intégral de ce livre ne peut pas être affiché dans ce lecteur.",
+    "noChapters": "Aucun chapitre structuré disponible.",
+    "displaySettings": "Réglages d'affichage",
+    "preparingDoc": "Préparation du document…",
+    "webViewMissing": "Le module WebView n'est pas présent dans ce build.",
+    "loadingTimeout": "Le serveur met trop de temps à répondre. Réessayez dans quelques secondes.",
+    "downloadFailedFmt": "Téléchargement échoué (HTTP {{status}})",
+    "downloadingBook": "Téléchargement du livre…",
+    "serverStarting": "Démarrage du serveur, patientez…",
+    "fileFormatNotSupported": "Le fichier réel est en {{format}}. Le rendu natif {{format}} mobile n'est pas encore activé.",
+    "fileTextUnsegmentable": "Le fichier réel est chargé, mais son texte ne peut pas être segmenté proprement.",
+    "fileFetchFailed": "Impossible de récupérer le fichier réel du livre."
   },
   "profile": {
     "title": "Mon profil",

@@ -173,12 +173,12 @@ export default function ProfileScreen({ navigation }) {
       if (avatarUrl) {
         const url = avatarUrl + '?t=' + Date.now();
         setUser(prev => ({ ...prev, avatar_url: url }));
-        showSnack('Photo de profil mise à jour.');
+        showSnack(t('profileExtra.photoUpdated'));
       } else {
         fetchProfile(true);
       }
     } catch (e) {
-      showSnack('Impossible de mettre à jour la photo.', true);
+      showSnack(t('profileExtra.photoUpdateFailed'), true);
     } finally {
       setAvatarUploading(false);
     }
@@ -782,7 +782,7 @@ export default function ProfileScreen({ navigation }) {
           </Dialog.Title>
           <Dialog.Content>
             <Text style={styles.deleteWarning}>
-              Cette action est irréversible. Toutes vos données seront supprimées définitivement.
+              {t('profileExtra.deleteIrreversible')}
             </Text>
             <Text style={styles.deleteInstruction}>
               Tapez <Text style={styles.deleteKeyword}>SUPPRIMER</Text> pour confirmer :
