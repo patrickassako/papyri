@@ -224,8 +224,8 @@ export default function LandingPage() {
   useEffect(() => {
     contentsService.getCategories()
       .then((data) => {
-        const api = (data || []).map((c) => ({ id: c.slug, label: c.name }));
-        setCategories([{ id: 'tous', label: 'Tous' }, ...api]);
+        const api = (data || []).map((c) => ({ id: c.slug, label: c.name, slug: c.slug }));
+        setCategories([{ id: 'tous', label: t('common.all') }, ...api]);
       })
       .catch(() => {});
   }, []);
@@ -479,7 +479,7 @@ export default function LandingPage() {
             {categories.map((cat) => (
               <Chip
                 key={cat.id}
-                label={cat.id === 'tous' ? t('common.all') : cat.label}
+                label={cat.id === 'tous' ? t('common.all') : t(`categories.${cat.slug || cat.id}`, { defaultValue: cat.label })}
                 onClick={() => setSelectedCategory(cat.id)}
                 sx={{
                   flexShrink: 0,
