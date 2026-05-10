@@ -325,7 +325,7 @@ async function unlockContent(req, res) {
             source: 'bonus',
             bonus_credit_id: usableCredit.id,
             lifetime_access: lifetimeAccess,
-            currency: content.price_currency || 'USD',
+            currency: content.price_currency || 'CAD',
             metadata: {
               subscription_id: subscription.id,
               credit_lifetime: lifetimeAccess,
@@ -402,7 +402,7 @@ async function unlockContent(req, res) {
       const stripeSession = await stripeService.createPaymentCheckoutSession({
         userId,
         amountCents: finalPriceCents,
-        currency: content.price_currency || 'USD',
+        currency: content.price_currency || 'CAD',
         title: 'Papyri - Déblocage contenu',
         description: `Déblocage: ${content.title}`,
         customerEmail: req.user.email,
@@ -434,7 +434,7 @@ async function unlockContent(req, res) {
 
       const checkout = await flutterwaveService.initiateCheckout({
         amount: finalPriceCents / 100,
-        currency: content.price_currency || 'USD',
+        currency: content.price_currency || 'CAD',
         email: req.user.email,
         name: req.user.full_name || req.user.email,
         userId,
@@ -461,7 +461,7 @@ async function unlockContent(req, res) {
       userId,
       subscriptionId: subscription?.id || null,
       amount: finalPriceCents / 100,
-      currency: content.price_currency || 'USD',
+      currency: content.price_currency || 'CAD',
       status: 'pending',
       provider: paymentProvider,
       providerPaymentId: reference,
@@ -495,7 +495,7 @@ async function unlockContent(req, res) {
           payment_link: paymentLink,
         },
         pricing: {
-          currency: content.price_currency || 'USD',
+          currency: content.price_currency || 'CAD',
           base_price_cents: basePriceCents,
           discount_percent: discountPercent,
           final_price_cents: finalPriceCents,

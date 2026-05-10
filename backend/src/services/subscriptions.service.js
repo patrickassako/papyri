@@ -352,10 +352,15 @@ async function renewSubscription(subscriptionId, newPeriodEnd) {
 async function getPaymentHistory(userId) {
   if (!userId) return [];
 
+  // Only return finalized payments (succeeded or failed). Pending rows are
+  // created when a user opens a checkout link; if the user abandons the flow
+  // the row stays in 'pending' forever and would otherwise show up as a
+  // ghost entry in the history.
   const { data, error } = await supabaseAdmin
     .from('payments')
     .select('*')
     .eq('user_id', userId)
+    .in('status', ['succeeded', 'failed', 'refunded'])
     .order('created_at', { ascending: false });
 
   if (error) {
