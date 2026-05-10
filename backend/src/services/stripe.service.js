@@ -294,6 +294,67 @@ async function retrieveInvoice(invoiceId) {
 }
 
 /**
+ * Create a PaymentIntent + Ephemeral Key for the mobile PaymentSheet flow.
+ * Returns { paymentIntent, ephemeralKey, customer, publishableKey } needed by
+ * @stripe/stripe-react-native PaymentSheet.
+ *
+ * Unlike createCheckoutSession (which redirects to Stripe-hosted UI), this
+ * stays inside the mobile app: Stripe SDK collects card details natively.
+ */
+async function createPaymentIntentForSheet({
+  userId,
+  email,
+  amountCents,
+  currency,
+  description,
+  existingCustomerId,
+  metadata = {},
+}) {
+  const stripe = getClient();
+
+  const customerId = await getOrCreateCustomer({ userId, email, existingCustomerId });
+
+  const ephemeralKey = await stripe.ephemeralKeys.create(
+    { customer: customerId },
+    { apiVersion: '2023-10-16' }
+  );
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amountCents,
+    currency: String(currency || 'CAD').toLowerCase(),
+    customer: customerId,
+    description: description || undefined,
+    automatic_payment_methods: { enabled: true },
+    metadata: { ...metadata, papyri_user_id: userId },
+  });
+
+  return {
+    paymentIntentId: paymentIntent.id,
+    paymentIntentClientSecret: paymentIntent.client_secret,
+    ephemeralKeySecret: ephemeralKey.secret,
+    customerId,
+    publishableKey: config.stripe.publishableKey || null,
+  };
+}
+
+/**
+ * Retrieve a PaymentIntent (used by the verify-payment-intent endpoint to
+ * confirm the payment status server-side after the SDK reports success).
+ */
+async function retrievePaymentIntent(paymentIntentId) {
+  const stripe = getClient();
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  return {
+    id: pi.id,
+    status: pi.status,
+    amount: pi.amount,
+    currency: pi.currency?.toUpperCase(),
+    metadata: pi.metadata || {},
+    customer: typeof pi.customer === 'string' ? pi.customer : pi.customer?.id || null,
+  };
+}
+
+/**
  * Construct and verify a Stripe webhook event
  */
 function constructWebhookEvent(rawBody, signature) {
@@ -309,6 +370,8 @@ module.exports = {
   getOrCreateCustomer,
   createCheckoutSession,
   createPaymentCheckoutSession,
+  createPaymentIntentForSheet,
+  retrievePaymentIntent,
   retrieveSession,
   retrieveSubscription,
   cancelSubscriptionAtPeriodEnd,

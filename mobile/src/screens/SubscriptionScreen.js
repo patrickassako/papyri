@@ -18,6 +18,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { subscriptionService } from '../services/subscription.service';
+import { paymentService } from '../services/payment.service';
+import { useStripe } from '@stripe/stripe-react-native';
 import OwnerProfileGuard from '../components/OwnerProfileGuard';
 
 const tokens = require('../config/tokens');
@@ -157,6 +159,7 @@ function PlanCard({ plan, selected, profilesCount, onSelect, onProfilesChange, t
 /* ─── Écran principal ─────────────────────────────────────────── */
 function SubscriptionScreenInner({ navigation }) {
   const { t } = useTranslation();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -261,6 +264,44 @@ function SubscriptionScreenInner({ navigation }) {
     if (!selectedPlan) return;
     setCheckoutBusy(provider);
     try {
+      // Stripe → in-app PaymentSheet (native, no browser redirect).
+      if (provider === 'stripe') {
+        const usersLimit = Math.max(profilesCount, Number(selectedPlan.includedUsers || 1));
+        const sheetParams = await paymentService.initSubscriptionSheet({
+          planId: selectedPlan.id,
+          usersLimit,
+          promoCode: promoResult ? promoCode.trim().toUpperCase() : undefined,
+        });
+
+        const { error: initErr } = await initPaymentSheet({
+          merchantDisplayName: 'Papyri',
+          paymentIntentClientSecret: sheetParams.paymentIntent,
+          customerEphemeralKeySecret: sheetParams.ephemeralKey,
+          customerId: sheetParams.customer,
+          allowsDelayedPaymentMethods: false,
+          returnURL: 'papyri://payment/callback',
+        });
+        if (initErr) throw new Error(initErr.message || 'init failed');
+
+        const { error: presentErr } = await presentPaymentSheet();
+        if (presentErr) {
+          if (presentErr.code === 'Canceled') {
+            setCheckoutBusy('');
+            return;
+          }
+          throw new Error(presentErr.message || 'present failed');
+        }
+
+        await paymentService.verifyPaymentIntent(sheetParams.paymentIntentId);
+        setModalVisible(false);
+        setPromoCode('');
+        setPromoResult(null);
+        setPromoError('');
+        await load();
+        return;
+      }
+
+      // Flutterwave → keep browser redirect (mobile money not in PaymentSheet).
       const response = await subscriptionService.checkout({
         planId: selectedPlan.id,
         usersLimit: Math.max(profilesCount, Number(selectedPlan.includedUsers || 1)),
@@ -270,7 +311,6 @@ function SubscriptionScreenInner({ navigation }) {
 
       if (!response.paymentLink) throw new Error(t('subscription.paymentLinkMissing'));
 
-      // Store pending payment so AppState listener can resume verification
       const pending = {
         provider,
         reference: response.reference || null,
@@ -284,7 +324,6 @@ function SubscriptionScreenInner({ navigation }) {
       setPromoResult(null);
       setPromoError('');
 
-      // Open payment in browser
       await Linking.openURL(response.paymentLink);
     } catch (err) {
       setError(err.message || t('subscription.paymentRetry'));

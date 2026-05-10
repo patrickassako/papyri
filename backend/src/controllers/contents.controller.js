@@ -239,6 +239,108 @@ async function getContentAccess(req, res) {
  * POST /contents/:id/unlock
  * Try unlocking content through quota -> bonus -> paid
  */
+/**
+ * POST /api/contents/:id/payment-sheet
+ * Initiate a Stripe PaymentSheet for a paid content unlock (mobile in-app).
+ * Returns the params needed by @stripe/stripe-react-native PaymentSheet.
+ */
+async function createContentPaymentSheet(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    if (!stripeService.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'STRIPE_NOT_CONFIGURED' });
+    }
+
+    const content = await contentsService.getContentByIdForUnlock(id);
+    if (!content) return res.status(404).json({ success: false, error: 'CONTENT_NOT_FOUND' });
+
+    const familyContext = await familyProfilesService.resolveProfileForUser(userId, req.headers['x-profile-id']);
+    const profileId = familyContext?.isFamilyContext ? familyContext.profileId : null;
+
+    const existingUnlock = await contentsService.getUserContentUnlock(userId, id, profileId);
+    if (existingUnlock) {
+      return res.status(200).json({ success: true, alreadyUnlocked: true });
+    }
+
+    const subStatus = await subscriptionsService.checkSubscriptionStatus(userId).catch(() => null);
+    const hasActiveSub = Boolean(subStatus?.isActive);
+    const pricing = contentAccessService.computePricing(content, hasActiveSub);
+    const finalPriceCents = pricing.final_price_cents;
+    const basePriceCents = pricing.base_price_cents;
+
+    if (!finalPriceCents || finalPriceCents <= 0) {
+      return res.status(400).json({ success: false, error: 'INVALID_PRICE' });
+    }
+
+    if (!req.user.email) {
+      return res.status(400).json({ success: false, error: 'MISSING_USER_EMAIL' });
+    }
+
+    const { data: prevStripe } = await supabaseAdmin
+      .from('subscriptions')
+      .select('provider_customer_id')
+      .eq('user_id', userId)
+      .eq('provider', 'stripe')
+      .not('provider_customer_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const sheet = await stripeService.createPaymentIntentForSheet({
+      userId,
+      email: req.user.email,
+      amountCents: finalPriceCents,
+      currency: content.price_currency || 'CAD',
+      description: `Papyri — ${content.title}`,
+      existingCustomerId: prevStripe?.provider_customer_id || null,
+      metadata: {
+        payment_type: 'content_unlock',
+        content_id: content.id,
+        access_type: content.access_type || 'paid',
+        ...(profileId ? { profile_id: profileId } : {}),
+      },
+    });
+
+    await subscriptionsService.createPayment({
+      userId,
+      subscriptionId: null,
+      amount: finalPriceCents / 100,
+      currency: content.price_currency || 'CAD',
+      status: 'pending',
+      provider: 'stripe',
+      providerPaymentId: sheet.paymentIntentId,
+      providerCustomerId: sheet.customerId,
+      paymentMethod: 'card',
+      metadata: {
+        payment_type: 'content_unlock',
+        stripe_payment_intent_id: sheet.paymentIntentId,
+        content_id: content.id,
+        access_type: content.access_type || 'paid',
+        ...(profileId ? { profile_id: profileId } : {}),
+        base_price_cents: basePriceCents,
+        discount_percent: pricing.discount_percent,
+        markup_percent: pricing.markup_percent || 0,
+        final_price_cents: finalPriceCents,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      paymentIntent: sheet.paymentIntentClientSecret,
+      ephemeralKey: sheet.ephemeralKeySecret,
+      customer: sheet.customerId,
+      publishableKey: sheet.publishableKey,
+      paymentIntentId: sheet.paymentIntentId,
+      contentId: id,
+    });
+  } catch (error) {
+    console.error('❌ Content payment sheet error:', error);
+    return res.status(500).json({ success: false, error: 'PAYMENT_SHEET_FAILED', message: error.message });
+  }
+}
+
 async function unlockContent(req, res) {
   try {
     const { id } = req.params;
@@ -916,6 +1018,7 @@ module.exports = {
   getContentFileUrl,
   getContentAccess,
   unlockContent,
+  createContentPaymentSheet,
   verifyUnlockPayment,
   getMyUnlocks,
   listCategories,

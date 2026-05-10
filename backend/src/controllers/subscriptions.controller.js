@@ -1859,11 +1859,211 @@ async function validatePromoCode(req, res) {
   }
 }
 
+/**
+ * POST /api/subscriptions/payment-sheet
+ * Initiate a Stripe PaymentSheet (in-app) checkout for the chosen plan.
+ * Returns the params required by @stripe/stripe-react-native:
+ *   { paymentIntent, ephemeralKey, customer, publishableKey, subscriptionId }
+ *
+ * The mobile app then calls initPaymentSheet + presentPaymentSheet. On success,
+ * it calls /api/subscriptions/verify-payment-intent to flip the subscription
+ * to ACTIVE (idempotent fallback if Stripe webhook didn't fire yet).
+ *
+ * Body: { planCode?: string, planId?: string, usersLimit?: number, promoCode?: string }
+ */
+async function initiatePaymentSheet(req, res) {
+  try {
+    const userId = req.user.id;
+    const { planCode, planId, usersLimit, promoCode } = req.body;
+    console.log('[subscriptions.payment-sheet] start', { userId, planCode, planId, usersLimit });
+
+    if (!stripeService.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'STRIPE_NOT_CONFIGURED' });
+    }
+
+    const plan = await subscriptionsService.getPlan(planId || planCode);
+    if (!plan) return res.status(400).json({ success: false, error: 'INVALID_PLAN' });
+
+    const existingSubscription = await subscriptionsService.getUserSubscription(userId);
+    if (existingSubscription) {
+      return res.status(400).json({ success: false, error: 'ACTIVE_SUBSCRIPTION_EXISTS' });
+    }
+
+    const payerEmail = req.user?.email;
+    if (!payerEmail) return res.status(400).json({ success: false, error: 'MISSING_USER_EMAIL' });
+
+    let promoResult = null;
+    if (promoCode) {
+      try {
+        promoResult = await promoService.validatePromoCode(promoCode, userId, plan.id);
+      } catch (e) {
+        return res.status(400).json({ success: false, error: 'INVALID_PROMO_CODE', message: e.message });
+      }
+    }
+
+    const subscription = await subscriptionsService.createSubscription({
+      userId,
+      planId: plan.id,
+      planCode: plan.slug,
+      usersLimit: usersLimit || plan.includedUsers || 1,
+      provider: 'stripe',
+      providerData: {},
+      overrideAmountCents: promoResult?.finalAmountCents ?? null,
+    });
+
+    const amountMajor = Number(subscription.amount || 0);
+    const amountCents = Math.round(amountMajor >= 100 ? amountMajor : amountMajor * 100);
+
+    const { data: prevStripeSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('provider_customer_id')
+      .eq('user_id', userId)
+      .eq('provider', 'stripe')
+      .not('provider_customer_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const sheetParams = await stripeService.createPaymentIntentForSheet({
+      userId,
+      email: payerEmail,
+      amountCents,
+      currency: subscription.currency || 'CAD',
+      description: `${plan.name} (${subscription.users_limit} place(s))`,
+      existingCustomerId: prevStripeSub?.provider_customer_id || null,
+      metadata: {
+        payment_type: 'subscription_initial',
+        plan_id: plan.id,
+        plan_code: plan.slug,
+        subscription_id: subscription.id,
+        users_limit: String(subscription.users_limit),
+      },
+    });
+
+    await subscriptionsService.createPayment({
+      userId,
+      subscriptionId: subscription.id,
+      amount: subscription.amount,
+      currency: subscription.currency,
+      status: 'pending',
+      provider: 'stripe',
+      providerPaymentId: sheetParams.paymentIntentId,
+      providerCustomerId: sheetParams.customerId,
+      paymentMethod: 'card',
+      metadata: {
+        payment_type: 'subscription_initial',
+        stripe_payment_intent_id: sheetParams.paymentIntentId,
+        plan_id: plan.id,
+        plan_code: plan.slug,
+        users_limit: subscription.users_limit,
+        promo_code: promoResult?.code || null,
+        discount_cents: promoResult?.discountCents || 0,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      paymentIntent: sheetParams.paymentIntentClientSecret,
+      ephemeralKey: sheetParams.ephemeralKeySecret,
+      customer: sheetParams.customerId,
+      publishableKey: sheetParams.publishableKey,
+      subscriptionId: subscription.id,
+      paymentIntentId: sheetParams.paymentIntentId,
+    });
+  } catch (error) {
+    console.error('❌ Payment sheet error:', error);
+    return res.status(500).json({ success: false, error: 'PAYMENT_SHEET_FAILED', message: error.message });
+  }
+}
+
+/**
+ * POST /api/subscriptions/verify-payment-intent
+ * Body: { paymentIntentId: string }
+ * Confirms a PaymentSheet payment server-side (fallback if webhook missed),
+ * activates the subscription, mirrors verify-stripe-session for content unlocks.
+ */
+async function verifyPaymentIntent(req, res) {
+  try {
+    const userId = req.user.id;
+    const { paymentIntentId } = req.body;
+    if (!paymentIntentId) return res.status(400).json({ success: false, error: 'MISSING_PAYMENT_INTENT' });
+    if (!stripeService.isConfigured()) return res.status(503).json({ success: false, error: 'STRIPE_NOT_CONFIGURED' });
+
+    const pi = await stripeService.retrievePaymentIntent(paymentIntentId);
+
+    const { data: payment } = await supabaseAdmin
+      .from('payments')
+      .select('id, subscription_id, status, metadata, currency, amount')
+      .eq('provider_payment_id', paymentIntentId)
+      .maybeSingle();
+
+    if (!payment) return res.status(404).json({ success: false, error: 'PAYMENT_NOT_FOUND' });
+
+    if (pi.status !== 'succeeded') {
+      return res.status(400).json({ success: false, status: pi.status });
+    }
+
+    if (payment.status !== 'succeeded') {
+      await subscriptionsService.updatePaymentStatus(payment.id, 'succeeded');
+    }
+
+    const paymentType = payment.metadata?.payment_type;
+
+    if (paymentType === 'content_unlock') {
+      const contentId = pi.metadata?.content_id || payment.metadata?.content_id;
+      const profileId = pi.metadata?.profile_id || payment.metadata?.profile_id || null;
+      if (!contentId) return res.status(400).json({ success: false, error: 'MISSING_CONTENT_ID' });
+
+      let existingQuery = supabaseAdmin
+        .from('content_unlocks')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('content_id', contentId);
+      existingQuery = profileId ? existingQuery.eq('profile_id', profileId) : existingQuery.is('profile_id', null);
+      const { data: existingUnlock } = await existingQuery.maybeSingle();
+
+      if (!existingUnlock) {
+        const meta = payment.metadata || {};
+        const insertResult = await supabaseAdmin
+          .from('content_unlocks')
+          .insert({
+            user_id: userId,
+            profile_id: profileId,
+            content_id: contentId,
+            source: 'paid',
+            payment_id: payment.id,
+            base_price_cents: Number(meta.base_price_cents || 0),
+            paid_amount_cents: Number(meta.final_price_cents || pi.amount || 0),
+            currency: payment.currency || 'CAD',
+            discount_applied_percent: Number(meta.discount_percent || 0),
+            metadata: { provider: 'stripe', payment_intent_id: paymentIntentId },
+          });
+        if (insertResult.error && insertResult.error.code !== '23505') {
+          console.error('[verify-payment-intent] unlock insert:', insertResult.error);
+        }
+      }
+      return res.status(200).json({ success: true, type: 'content_unlock', contentId });
+    }
+
+    let subscription = null;
+    if (payment.subscription_id) {
+      subscription = await subscriptionsService.applySuccessfulSubscriptionPayment(payment.subscription_id);
+    }
+
+    return res.status(200).json({ success: true, subscription });
+  } catch (error) {
+    console.error('❌ Verify payment intent error:', error);
+    return res.status(500).json({ success: false, error: 'VERIFY_FAILED', message: error.message });
+  }
+}
+
 module.exports = {
   getPlans,
   getMySubscription,
   getAllMySubscriptions,
   initiateCheckout,
+  initiatePaymentSheet,
+  verifyPaymentIntent,
   validatePromoCode,
   buyExtraSeat,
   cancelSubscription,

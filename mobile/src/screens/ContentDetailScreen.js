@@ -19,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { contentsService } from '../services/contents.service';
 import BookCover from '../components/BookCover';
 import { subscriptionService } from '../services/subscription.service';
+import { paymentService } from '../services/payment.service';
+import { useStripe } from '@stripe/stripe-react-native';
 import { detectCurrency, convertCents, formatMinorUnits } from '../services/currency.service';
 import {
   isContentDownloaded,
@@ -67,6 +69,7 @@ function mapContentPayload(raw) {
 export default function ContentDetailScreen({ route, navigation }) {
   const { contentId } = route.params || {};
   const { t } = useTranslation();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [content, setContent] = useState(null);
   const [access, setAccess] = useState(null);
@@ -388,10 +391,42 @@ export default function ContentDetailScreen({ route, navigation }) {
     }
   };
 
-  // Modal handlers : payer via Stripe ou Flutterwave (force useCredit: false)
+  // Modal handlers : payer via Stripe (in-app) ou Flutterwave (browser redirect)
   const handleChooseProvider = async (provider) => {
     setPaymentModal((s) => ({ ...s, busy: provider }));
     try {
+      if (provider === 'stripe') {
+        // In-app PaymentSheet — no browser redirect.
+        const sheet = await paymentService.initContentUnlockSheet(content.id || contentId);
+        if (sheet.alreadyUnlocked) {
+          setPaymentModal({ open: false, busy: '' });
+          await refreshAccessAndUsage();
+          return;
+        }
+        const { error: initErr } = await initPaymentSheet({
+          merchantDisplayName: 'Papyri',
+          paymentIntentClientSecret: sheet.paymentIntent,
+          customerEphemeralKeySecret: sheet.ephemeralKey,
+          customerId: sheet.customer,
+          allowsDelayedPaymentMethods: false,
+          returnURL: 'papyri://payment/callback',
+        });
+        if (initErr) throw new Error(initErr.message || 'init failed');
+        const { error: presentErr } = await presentPaymentSheet();
+        if (presentErr) {
+          if (presentErr.code === 'Canceled') {
+            setPaymentModal((s) => ({ ...s, busy: '' }));
+            return;
+          }
+          throw new Error(presentErr.message || 'present failed');
+        }
+        await paymentService.verifyPaymentIntent(sheet.paymentIntentId);
+        setPaymentModal({ open: false, busy: '' });
+        await refreshAccessAndUsage();
+        return;
+      }
+
+      // Flutterwave → browser redirect (mobile money not supported by PaymentSheet)
       const result = await contentsService.unlockContent(content.id || contentId, {
         provider,
         useCredit: false,
@@ -405,7 +440,6 @@ export default function ContentDetailScreen({ route, navigation }) {
           throw new Error(t('contentDetail.paymentLinkUnavailable'));
         }
       } else if (result?.success) {
-        // Inattendu mais on gère
         setPaymentModal({ open: false, busy: '' });
         await refreshAccessAndUsage();
       }

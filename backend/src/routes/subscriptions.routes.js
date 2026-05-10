@@ -92,6 +92,20 @@ router.post('/verify-payment', authenticate, rejectKidProfile, subscriptionsCont
 router.post('/verify-stripe-session', authenticate, rejectKidProfile, subscriptionsController.verifyStripeSession);
 
 /**
+ * POST /api/subscriptions/payment-sheet
+ * Initiate a Stripe PaymentSheet (in-app, mobile) for the chosen plan.
+ * @protected
+ */
+router.post('/payment-sheet', authenticate, rejectKidProfile, subscriptionsController.initiatePaymentSheet);
+
+/**
+ * POST /api/subscriptions/verify-payment-intent
+ * Verify a PaymentIntent server-side after PaymentSheet success.
+ * @protected
+ */
+router.post('/verify-payment-intent', authenticate, rejectKidProfile, subscriptionsController.verifyPaymentIntent);
+
+/**
  * POST /api/subscriptions/renew
  * Initiate manual renewal checkout for active subscription
  * @protected

@@ -8,6 +8,8 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PaperProvider, Text } from 'react-native-paper';
+import { StripeProvider } from '@stripe/stripe-react-native';
+import { STRIPE_PUBLISHABLE_KEY } from './src/config/stripe';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import theme from './src/theme/theme';
@@ -167,6 +169,11 @@ export default function App() {
 
   return (
     <PaperProvider theme={theme}>
+      <StripeProvider
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
+        merchantIdentifier={undefined}
+        urlScheme="papyri"
+      >
       <ProfileProvider>
       <AudioProvider>
         <NavigationContainer
@@ -326,6 +333,7 @@ export default function App() {
         </NavigationContainer>
       </AudioProvider>
       </ProfileProvider>
+      </StripeProvider>
     </PaperProvider>
   );
 }
