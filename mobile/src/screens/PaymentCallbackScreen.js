@@ -37,22 +37,32 @@ export default function PaymentCallbackScreen({ route, navigation }) {
     }
 
     try {
+      let verifyResult = null;
       if (provider === 'stripe') {
         const sessionId = params.session_id;
         if (!sessionId) throw new Error(t('paymentCallback.missingSession'));
-        await subscriptionService.verifyStripeSession({ sessionId });
+        verifyResult = await subscriptionService.verifyStripeSession({ sessionId });
       } else {
         // Flutterwave: tx_ref + transaction_id
         const txRef = params.tx_ref;
         const transactionId = params.transaction_id;
         if (!txRef && !transactionId) throw new Error(t('paymentCallback.missingParams'));
-        await subscriptionService.verifyPayment({
+        verifyResult = await subscriptionService.verifyPayment({
           transactionId: transactionId || txRef,
           reference: txRef || transactionId,
         });
       }
 
       await AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
+
+      // If this was a content unlock, jump back to the book detail so the
+      // user immediately sees the unlocked state instead of being sent to
+      // the subscription page.
+      if (verifyResult?.type === 'content_unlock' && verifyResult.contentId) {
+        navigation.replace('ContentDetail', { contentId: verifyResult.contentId });
+        return;
+      }
+
       setStatus('success');
     } catch (err) {
       setMessage(err.message || t('paymentCallback.verifyFailed'));

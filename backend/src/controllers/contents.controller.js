@@ -73,19 +73,27 @@ async function listContents(req, res) {
 
     // Appliquer la réduction abonné si l'utilisateur est connecté et a un abonnement actif
     const userId = req.user?.id;
-    if (userId && result.contents) {
-      const subStatus = await subscriptionsService.checkSubscriptionStatus(userId).catch(() => null);
-      const hasActiveSub = Boolean(subStatus?.isActive);
+    const NON_SUB_DEFAULT_MARKUP = 30;
+    if (result.contents) {
+      let hasActiveSub = false;
+      if (userId) {
+        const subStatus = await subscriptionsService.checkSubscriptionStatus(userId).catch(() => null);
+        hasActiveSub = Boolean(subStatus?.isActive);
+      }
       result.contents = result.contents.map(c => {
         const baseCents = Number(c.localized_price?.price_cents ?? c.price_cents ?? 0);
-        const discountPct = hasActiveSub ? Number(c.subscription_discount_percent ?? 0) : 0;
-        const discountedCents = discountPct > 0
-          ? Math.max(0, Math.round(baseCents * (100 - discountPct) / 100))
-          : baseCents;
+        const markupPct = Number(c.subscription_discount_percent ?? 0) > 0
+          ? Number(c.subscription_discount_percent)
+          : NON_SUB_DEFAULT_MARKUP;
+        const finalCents = hasActiveSub
+          ? baseCents
+          : Math.round(baseCents * (100 + markupPct) / 100);
         return {
           ...c,
-          subscriber_discount_percent: discountPct,
-          discounted_price_cents: discountedCents,
+          // Keep legacy field name for compat with the mobile app — it now
+          // carries the non-subscriber markup percent (0 for subscribers).
+          subscriber_discount_percent: hasActiveSub ? 0 : markupPct,
+          discounted_price_cents: finalCents,
         };
       });
     }

@@ -135,31 +135,28 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
 
           {(() => {
             const baseCents = content.localized_price?.price_cents ?? content.price_cents;
-            const currency = content.localized_price?.currency || content.price_currency || 'EUR';
+            const currency = content.localized_price?.currency || content.price_currency || 'CAD';
             if (!baseCents || Number(baseCents) <= 0) return null;
             const renderPrice = (cents) => formatFrom(cents, currency);
 
-            const discountPct = Number(
-              (hasActiveSubscription ? content.subscriber_discount_percent : 0) ?? 0
-            );
-            const discountedCents = content.discounted_price_cents ?? (
-              discountPct > 0
-                ? Math.max(0, Math.round(Number(baseCents) * (100 - discountPct) / 100))
-                : Number(baseCents)
-            );
-            const hasDiscount = discountPct > 0 && discountedCents < Number(baseCents);
+            // For non-subscribers the backend returns discounted_price_cents = base * (1 + markup/100).
+            // For subscribers it returns the base price as-is. Show the final price; if there's a markup
+            // (i.e. the user is not subscribed) cross out the subscriber price next to it as a teaser.
+            const finalCents = Number(content.discounted_price_cents ?? baseCents);
+            const markupPct = Number(content.subscriber_discount_percent ?? 0);
+            const hasMarkup = !hasActiveSubscription && markupPct > 0 && finalCents > Number(baseCents);
 
             return (
               <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                 <Chip
-                  label={renderPrice(hasDiscount ? discountedCents : baseCents)}
+                  label={renderPrice(finalCents)}
                   size="small"
                   sx={{
                     fontWeight: 700,
                     height: 'auto',
                     maxWidth: '100%',
-                    bgcolor: hasDiscount ? '#fff8e1' : undefined,
-                    color: hasDiscount ? '#b5651d' : undefined,
+                    bgcolor: hasMarkup ? '#fff8e1' : undefined,
+                    color: hasMarkup ? '#b5651d' : undefined,
                     '& .MuiChip-label': {
                       display: 'block',
                       whiteSpace: 'normal',
@@ -169,15 +166,15 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
                     },
                   }}
                 />
-                {hasDiscount && (
+                {hasMarkup && (
                   <>
-                    <Typography variant="caption" sx={{ textDecoration: 'line-through', color: 'text.disabled' }}>
-                      {renderPrice(baseCents)}
+                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                      {renderPrice(baseCents)} ·
                     </Typography>
                     <Chip
-                      label={`-${discountPct}%`}
+                      label={`+${markupPct}%`}
                       size="small"
-                      sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, fontSize: '10px', height: 18 }}
+                      sx={{ bgcolor: '#fbe9e7', color: '#c84315', fontWeight: 700, fontSize: '10px', height: 18 }}
                     />
                   </>
                 )}

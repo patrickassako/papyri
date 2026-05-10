@@ -584,6 +584,51 @@ async function verifyPayment(req, res) {
         });
       }
 
+      // Content unlock (Flutterwave fallback if webhook is missed)
+      if (paymentType === 'content_unlock') {
+        const contentId = payment.metadata?.content_id;
+        const profileId = payment.metadata?.profile_id || null;
+
+        if (!contentId) {
+          return res.status(400).json({ success: false, error: 'Missing content_id in payment metadata' });
+        }
+
+        let existingQuery = supabaseAdmin
+          .from('content_unlocks')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('content_id', contentId);
+        existingQuery = profileId ? existingQuery.eq('profile_id', profileId) : existingQuery.is('profile_id', null);
+        const { data: existingUnlock } = await existingQuery.maybeSingle();
+
+        if (!existingUnlock) {
+          const meta = payment.metadata || {};
+          const insertResult = await supabaseAdmin
+            .from('content_unlocks')
+            .insert({
+              user_id: userId,
+              profile_id: profileId,
+              content_id: contentId,
+              source: 'paid',
+              payment_id: payment.id,
+              base_price_cents: Number(meta.base_price_cents || 0),
+              paid_amount_cents: Number(meta.final_price_cents || Math.round(Number(paymentDetails.amount || 0) * 100)),
+              currency: paymentDetails.currency || payment.currency || 'CAD',
+              discount_applied_percent: Number(meta.discount_percent || 0),
+              metadata: { provider: 'flutterwave', tx_ref: reference },
+            });
+          if (insertResult.error && insertResult.error.code !== '23505') {
+            console.error('[subscriptions.verify] content_unlock insert error:', insertResult.error);
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          type: 'content_unlock',
+          contentId,
+        });
+      }
+
       // Activate or renew depending on current subscription state.
       const subscription = await subscriptionsService.applySuccessfulSubscriptionPayment(payment.subscription_id);
 
@@ -731,6 +776,54 @@ async function verifyStripeSession(req, res) {
         type: 'extra_seat',
         message: `Siège ajouté. Votre abonnement passe à ${targetUsersLimit} places.`,
         subscription: updatedSub,
+      });
+    }
+
+    // Content unlock (paid book) — fallback if Stripe webhook is missed.
+    // Idempotent: re-running this for an already-unlocked book is a no-op.
+    if (paymentType === 'content_unlock') {
+      const contentId = session.metadata?.content_id || payment.metadata?.content_id;
+      const profileId = session.metadata?.profile_id || payment.metadata?.profile_id || null;
+
+      if (!contentId) {
+        return res.status(400).json({ success: false, error: 'Missing content_id in payment metadata' });
+      }
+
+      let existingQuery = supabaseAdmin
+        .from('content_unlocks')
+        .select('id, content_id')
+        .eq('user_id', userId)
+        .eq('content_id', contentId);
+      existingQuery = profileId ? existingQuery.eq('profile_id', profileId) : existingQuery.is('profile_id', null);
+      const { data: existingUnlock } = await existingQuery.maybeSingle();
+
+      if (!existingUnlock) {
+        const meta = payment.metadata || {};
+        const insertResult = await supabaseAdmin
+          .from('content_unlocks')
+          .insert({
+            user_id: userId,
+            profile_id: profileId,
+            content_id: contentId,
+            source: 'paid',
+            payment_id: payment.id,
+            base_price_cents: Number(meta.base_price_cents || 0),
+            paid_amount_cents: Number(meta.final_price_cents || Math.round(Number(session.amountTotal || 0))),
+            currency: payment.currency || 'CAD',
+            discount_applied_percent: Number(meta.discount_percent || 0),
+            metadata: { provider: 'stripe', session_id: session.id },
+          });
+        // ignore conflict if a concurrent webhook already inserted
+        if (insertResult.error && insertResult.error.code !== '23505') {
+          console.error('[subscriptions.verify-stripe] content_unlock insert error:', insertResult.error);
+        }
+      }
+
+      console.log('[subscriptions.verify-stripe] content_unlock success', { userId, sessionId, contentId });
+      return res.status(200).json({
+        success: true,
+        type: 'content_unlock',
+        contentId,
       });
     }
 

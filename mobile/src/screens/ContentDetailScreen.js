@@ -592,6 +592,7 @@ export default function ContentDetailScreen({ route, navigation }) {
   const dbCurrency = access?.pricing?.currency ?? content?.localized_price?.currency ?? content?.price_currency ?? 'EUR';
   const dbBasePriceCents = Number(access?.pricing?.base_price_cents ?? content?.localized_price?.price_cents ?? content?.price_cents ?? 0);
   const discountPercent = Number(access?.pricing?.discount_percent ?? 0);
+  const markupPercent = Number(access?.pricing?.markup_percent ?? 0);
   const dbReducedPriceCents = Number(
     access?.pricing?.final_price_cents ?? Math.max(0, Math.round(dbBasePriceCents * (100 - discountPercent) / 100))
   );
@@ -614,8 +615,11 @@ export default function ContentDetailScreen({ route, navigation }) {
       return t('contentDetail.primaryUnlock');
     }
     if (isPaidBook) {
-      return basePriceCents > 0
-        ? t('contentDetail.primaryBuyWithPrice', { price: formatMoney(basePriceCents, pricingCurrency) })
+      // Non-subscribers pay reducedPriceCents which the backend computes as
+      // base + markup (currently +30%). Falling back to base if final missing.
+      const priceForNonSub = reducedPriceCents > 0 ? reducedPriceCents : basePriceCents;
+      return priceForNonSub > 0
+        ? t('contentDetail.primaryBuyWithPrice', { price: formatMoney(priceForNonSub, pricingCurrency) })
         : t('contentDetail.primaryBuy');
     }
     return t('contentDetail.primarySubscribe');
@@ -795,7 +799,15 @@ export default function ContentDetailScreen({ route, navigation }) {
                   : t('contentDetail.creditOrBuyDiscount')}
               </Text>
               {isPaidBook && basePriceCents > 0 ? (
-                discountPercent > 0 && reducedPriceCents < basePriceCents ? (
+                markupPercent > 0 && reducedPriceCents > basePriceCents ? (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents, pricingCurrency)}</Text>
+                    <Text style={styles.priceBase}>({formatMoney(basePriceCents, pricingCurrency)} {t('contentDetail.subscriberPrice', { defaultValue: 'abonné' })})</Text>
+                    <View style={[styles.discountPill, { backgroundColor: '#fbe9e7' }]}>
+                      <Text style={[styles.discountPillText, { color: '#c84315' }]}>+{markupPercent}%</Text>
+                    </View>
+                  </View>
+                ) : discountPercent > 0 && reducedPriceCents < basePriceCents ? (
                   <View style={styles.priceRow}>
                     <Text style={styles.priceBase}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
                     <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents, pricingCurrency)}</Text>
@@ -805,7 +817,7 @@ export default function ContentDetailScreen({ route, navigation }) {
                   </View>
                 ) : (
                   <Text style={styles.accessCardMeta}>
-                    {t('contentDetail.priceLabel')}<Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                    {t('contentDetail.priceLabel')}<Text style={{ fontWeight: '700' }}>{formatMoney(reducedPriceCents || basePriceCents, pricingCurrency)}</Text>
                   </Text>
                 )
               ) : null}

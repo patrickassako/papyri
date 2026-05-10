@@ -53,24 +53,43 @@ async function checkGeoRestriction(contentId, geo) {
 }
 
 /**
+ * Compute the price the user has to pay for a paid content.
+ *
+ * Pricing model (per client decision 2026-05):
+ * - DB price_cents = subscriber price (the reference)
+ * - Subscriber: pays the reference price as-is.
+ * - Non-subscriber: pays reference price + 30% markup (configurable per content
+ *   via subscription_discount_percent — that legacy column now stores the
+ *   non-subscriber markup percent, defaulting to 30 if unset).
+ *
  * @param {object} content
  * @param {boolean} hasActiveSubscription
- * @param {number} [planDiscountPercent] — discount du plan abonnement (fallback si le contenu n'en a pas)
+ * @param {number} [planDiscountPercent] — kept for signature compat, unused.
  */
+const NON_SUBSCRIBER_DEFAULT_MARKUP = 30;
+
 function computePricing(content, hasActiveSubscription, planDiscountPercent = 0) {
   const basePriceCents = Number(content?.price_cents || 0);
 
-  // Priorité : discount propre au contenu → discount du plan → 0
-  const contentDiscount = Number(content?.subscription_discount_percent || 0);
-  const effectiveDiscount = contentDiscount > 0 ? contentDiscount : Number(planDiscountPercent || 0);
-  const discountPercent = hasActiveSubscription ? effectiveDiscount : 0;
+  if (hasActiveSubscription) {
+    return {
+      currency: content?.price_currency || 'CAD',
+      base_price_cents: basePriceCents,
+      discount_percent: 0,
+      markup_percent: 0,
+      final_price_cents: basePriceCents,
+    };
+  }
 
-  const finalPriceCents = Math.max(0, Math.round(basePriceCents * (100 - discountPercent) / 100));
+  const contentMarkup = Number(content?.subscription_discount_percent || 0);
+  const markupPercent = contentMarkup > 0 ? contentMarkup : NON_SUBSCRIBER_DEFAULT_MARKUP;
+  const finalPriceCents = Math.max(0, Math.round(basePriceCents * (100 + markupPercent) / 100));
 
   return {
-    currency: content?.price_currency || 'EUR',
+    currency: content?.price_currency || 'CAD',
     base_price_cents: basePriceCents,
-    discount_percent: discountPercent,
+    discount_percent: 0,
+    markup_percent: markupPercent,
     final_price_cents: finalPriceCents,
   };
 }
