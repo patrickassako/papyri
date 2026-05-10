@@ -471,7 +471,7 @@ function normalizeSnapshotPlan(snapshot) {
     name: snapshot.name || snapshot.display_name || snapshot.slug || 'plan',
     durationDays: Number(snapshot.durationDays || snapshot.duration_days || 30),
     basePriceCents: Number(snapshot.basePriceCents || snapshot.base_price_cents || 0),
-    currency: snapshot.currency || 'USD',
+    currency: snapshot.currency || 'CAD',
     includedUsers: Number(snapshot.includedUsers || snapshot.included_users || 1),
     extraUserPriceCents: Number(snapshot.extraUserPriceCents || snapshot.extra_user_price_cents || 0),
     extraProfilePriceCents: Number(snapshot.extraProfilePriceCents || snapshot.extra_profile_price_cents || 0),
@@ -511,7 +511,7 @@ async function resolvePricingPlanForSubscription(subscription) {
     name: subscription.plan_type || 'monthly',
     durationDays: LEGACY_PLAN_DURATION_DAYS[subscription.plan_type] || 30,
     basePriceCents: Math.round(Number(subscription.amount || 0) * 100),
-    currency: subscription.currency || 'USD',
+    currency: subscription.currency || 'CAD',
     includedUsers: getEffectiveProfilesLimit(subscription),
     extraUserPriceCents: 0,
     textQuotaPerUser: 0,
@@ -532,7 +532,7 @@ async function computeRenewalAmountForSubscription(subscription) {
     plan,
     amountCents,
     amount: toMajorAmount(amountCents),
-    currency: plan.currency || subscription.currency || 'USD',
+    currency: plan.currency || subscription.currency || 'CAD',
   };
 }
 
@@ -542,7 +542,7 @@ function buildPlanSnapshot(plan) {
     slug: plan.slug,
     name: plan.name,
     basePriceCents: Number(plan.basePriceCents || 0),
-    currency: plan.currency || 'USD',
+    currency: plan.currency || 'CAD',
     durationDays: Number(plan.durationDays || 30),
     includedUsers: Number(plan.includedUsers || 1),
     extraUserPriceCents: Number(plan.extraUserPriceCents || 0),

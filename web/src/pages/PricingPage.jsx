@@ -202,27 +202,15 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
   const minMembers = Number(plan.includedUsers || 1);
 
-  // Priorité: localisé par le backend → localisé par le frontend → EUR par défaut
-  const backendLocalized = Boolean(plan.localizedCurrency && plan.localizedCurrency !== (plan.currency || 'EUR'));
-  const frontendLocalized = Boolean(localCurrency && localCurrency !== 'EUR' && !backendLocalized);
-  const isLocalized = backendLocalized || frontendLocalized;
+  // Display all subscription prices in the plan's native currency (no conversion).
+  // Prevents random USD/EUR/CAD/XAF flips reported by users — abos are always billed
+  // in the currency stored in DB (CAD for the current catalog).
+  const planNativeCurrency = (plan.currency || 'EUR').toUpperCase();
+  const displayCurrency = planNativeCurrency;
+  const isLocalized = false;
 
-  const displayCurrency = backendLocalized
-    ? plan.localizedCurrency
-    : (frontendLocalized ? localCurrency : (plan.currency || 'EUR'));
-
-  const basePriceCentsEUR = Number(plan.basePriceCents || 0);
-  // Prefer extra_profile_price_cents (new schema), fallback to legacy extra_user_price_cents.
-  const extraUnitCentsEUR = Number(plan.extraProfilePriceCents || plan.extraUserPriceCents || 0);
-  const localizedExtraUnitCents = Number(plan.localizedExtraProfilePriceCents || plan.localizedExtraUserPriceCents || 0);
-
-  const basePriceCents = backendLocalized
-    ? Number(plan.localizedPriceCents || 0)
-    : (frontendLocalized && convertFromEUR ? convertFromEUR(basePriceCentsEUR) : basePriceCentsEUR);
-
-  const extraUserPriceCents = backendLocalized
-    ? localizedExtraUnitCents
-    : (frontendLocalized && convertFromEUR ? convertFromEUR(extraUnitCentsEUR) : extraUnitCentsEUR);
+  const basePriceCents = Number(plan.basePriceCents || 0);
+  const extraUserPriceCents = Number(plan.extraProfilePriceCents || plan.extraUserPriceCents || 0);
 
   const familyMaxProfiles = Number(plan.maxProfiles || MAX_FAMILY_MEMBERS);
   const extraMembers = isFamily && membersCount !== undefined ? Math.max(0, membersCount - minMembers) : 0;
@@ -301,9 +289,7 @@ function PlanCard({ plan, loadingCheckout, onCheckout, actionLabel, actionDisabl
 
       {plan.monthlyEquivalentCents && !isFamily ? (
         <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#6d665d', overflowWrap: 'anywhere' }}>
-          {t('pricing.soit', { price: isLocalized
-            ? formatDisplayMoney(Math.round(plan.monthlyEquivalentCents * (basePriceCents / Math.max(1, Number(plan.basePriceCents || 1)))))
-            : formatLocalFromEUR(plan.monthlyEquivalentCents) })}
+          {t('pricing.soit', { price: formatDisplayMoney(Number(plan.monthlyEquivalentCents)) })}
         </Typography>
       ) : null}
 
@@ -591,11 +577,7 @@ export default function PricingPage() {
     {
       key: 'price',
       label: t('pricing.priceLabel'),
-      value: (p) => {
-        if (p.localizedPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedPriceCents, p.localizedCurrency);
-        if (isFrontendLocalized) return formatLocalPrice(p.basePriceCents);
-        return formatMinorUnits(p.basePriceCents, p.currency || 'EUR');
-      },
+      value: (p) => formatMinorUnits(p.basePriceCents, p.currency || 'CAD'),
     },
     {
       key: 'includedUsers',
@@ -627,10 +609,7 @@ export default function PricingPage() {
       value: (p) => {
         const extra = Number(p.extraProfilePriceCents || p.extraUserPriceCents || 0);
         if (extra <= 0) return <RemoveIcon sx={{ color: '#b9b3aa' }} />;
-        if (p.localizedExtraProfilePriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraProfilePriceCents, p.localizedCurrency);
-        if (p.localizedExtraUserPriceCents && p.localizedCurrency) return formatMinorUnits(p.localizedExtraUserPriceCents, p.localizedCurrency);
-        if (isFrontendLocalized) return formatLocalPrice(extra);
-        return formatMinorUnits(extra, p.currency || 'EUR');
+        return formatMinorUnits(extra, p.currency || 'CAD');
       },
     },
   ];
@@ -654,12 +633,6 @@ export default function PricingPage() {
             {t('pricing.realtimePricing')}
           </Typography>
 
-          {(geoInfo?.currency && geoInfo.currency !== 'EUR') || isFrontendLocalized ? (
-            <Typography sx={{ mt: 1, fontSize: '0.82rem', color: '#9a7f4d', bgcolor: 'rgba(244,168,37,0.08)', display: 'inline-block', px: 2, py: 0.5, borderRadius: '20px', border: '1px solid rgba(244,168,37,0.2)' }}>
-              {t('pricing.priceDisplayed', { currency: geoInfo?.currency || localCurrency })}
-              {(geoInfo?.country || localCountry) ? ` (${geoInfo?.country || localCountry})` : ''}
-            </Typography>
-          ) : null}
 
           <Box sx={{ mt: 4.5, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5 }}>
             {!isMobile && <Typography sx={{ fontSize: '0.84rem', fontWeight: 600 }}>{t('pricing.monthlyBilling')}</Typography>}

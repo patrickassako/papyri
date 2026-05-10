@@ -39,10 +39,11 @@ const COLOR_BORDER = '#e0dbd0';
 /**
  * Formats an amount with currency symbol.
  */
-function formatMoney(amount, currency = 'USD') {
+function formatMoney(amount, currency = 'CAD') {
   const n = Number(amount || 0);
-  const symbols = { USD: '$', EUR: '€', XAF: 'XAF ', GBP: '£', NGN: '₦', GHS: '₵', KES: 'KSh ' };
-  const sym = symbols[currency] || `${currency} `;
+  const symbols = { USD: 'US$', EUR: '€', CAD: 'CA$', XAF: 'XAF ', GBP: '£', NGN: '₦', GHS: '₵', KES: 'KSh ' };
+  const code = (currency || 'CAD').toUpperCase();
+  const sym = symbols[code] || `${code} `;
   return `${sym}${n.toFixed(2)}`;
 }
 
@@ -126,7 +127,7 @@ async function generateInvoicePDF({ payment, user, subscription, settings, strea
   const invoiceNumber = buildInvoiceNumber(payment.id, payment.paid_at || payment.created_at, prefix);
   const issueDate     = formatDateFr(payment.paid_at || payment.created_at);
   const description   = paymentTypeLabel(payment.metadata || {});
-  const amount        = formatMoney(payment.amount, payment.currency || 'USD');
+  const amount        = formatMoney(payment.amount, payment.currency || 'CAD');
   const providerLabel = payment.provider === 'stripe' ? 'Stripe (carte bancaire)' : 'Flutterwave (Mobile Money)';
   const statusLabel   = payment.status === 'succeeded' ? 'Payée' : payment.status === 'pending' ? 'En attente' : 'Échouée';
 
