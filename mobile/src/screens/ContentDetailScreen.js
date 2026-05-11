@@ -668,9 +668,20 @@ export default function ContentDetailScreen({ route, navigation }) {
   const dbCurrency = access?.pricing?.currency ?? content?.localized_price?.currency ?? content?.price_currency ?? 'EUR';
   const dbBasePriceCents = Number(access?.pricing?.base_price_cents ?? content?.localized_price?.price_cents ?? content?.price_cents ?? 0);
   const discountPercent = Number(access?.pricing?.discount_percent ?? 0);
-  const markupPercent = Number(access?.pricing?.markup_percent ?? 0);
+
+  // Non-subscriber markup: 30% floor when the content has no explicit override.
+  // Use || (not ??) so 0/null/undefined all collapse to the floor.
+  const NON_SUB_MARKUP_FLOOR = 30;
+  const contentMarkupOverride = Number(content?.subscription_discount_percent) || 0;
+  const apiMarkupPercent = Number(access?.pricing?.markup_percent || 0);
+  const markupPercent = hasActiveSubscription
+    ? 0
+    : (apiMarkupPercent > 0 ? apiMarkupPercent : (contentMarkupOverride > 0 ? contentMarkupOverride : NON_SUB_MARKUP_FLOOR));
   const dbReducedPriceCents = Number(
-    access?.pricing?.final_price_cents ?? Math.max(0, Math.round(dbBasePriceCents * (100 - discountPercent) / 100))
+    access?.pricing?.final_price_cents
+      ?? (hasActiveSubscription
+            ? Math.max(0, Math.round(dbBasePriceCents * (100 - discountPercent) / 100))
+            : Math.max(0, Math.round(dbBasePriceCents * (100 + markupPercent) / 100)))
   );
 
   // Devise effective : celle du backend si géo-ajustée, sinon celle de l'utilisateur

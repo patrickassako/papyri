@@ -353,11 +353,15 @@ export default function ContentDetailPage() {
   const localizedPrice = content?.localized_price || null;
   const pricingCurrency = accessInfo?.pricing?.currency || localizedPrice?.currency || content?.price_currency || 'CAD';
   const basePriceCents = Number(accessInfo?.pricing?.base_price_cents ?? localizedPrice?.price_cents ?? content?.price_cents ?? 0);
-  // Pricing model: DB stores the subscriber price. Non-subscribers pay base × 1.30.
-  const defaultMarkupPercent = Number(content?.subscription_discount_percent ?? 30);
-  const markupPercent = Number(accessInfo?.pricing?.markup_percent ?? (hasActiveSubscription ? 0 : defaultMarkupPercent));
+  // Pricing model: DB stores the subscriber price. Non-subscribers pay base × 1.30
+  // unless the content overrides subscription_discount_percent with a positive value.
+  // Use || (not ??) so DB values of 0/null/undefined all fall back to the 30% floor.
+  const NON_SUB_MARKUP_FLOOR = 30;
+  const defaultMarkupPercent = Number(content?.subscription_discount_percent) || NON_SUB_MARKUP_FLOOR;
+  const apiMarkup = Number(accessInfo?.pricing?.markup_percent || 0);
+  const effectiveMarkup = hasActiveSubscription ? 0 : (apiMarkup > 0 ? apiMarkup : defaultMarkupPercent);
   const discountPercent = 30; // marketing label for subscribers ("-30% appliqué")
-  const nonSubPriceCents = Math.max(0, Math.round(basePriceCents * (100 + (markupPercent || defaultMarkupPercent)) / 100));
+  const nonSubPriceCents = Math.max(0, Math.round(basePriceCents * (100 + effectiveMarkup) / 100));
   const reducedPriceCents = Number(
     accessInfo?.pricing?.final_price_cents ?? (hasActiveSubscription ? basePriceCents : nonSubPriceCents)
   );
