@@ -574,9 +574,15 @@ async function unlockContent(req, res) {
       paymentMethod = 'mobile_money';
     }
 
+    // Important: do NOT attach this payment to the user's subscription_id.
+    // Content unlocks are one-off purchases — linking them to the active
+    // subscription confuses the history view (the label was being inherited
+    // from the subscription instead of staying "Achat contenu"). The user's
+    // active subscription is captured via metadata.subscription_id_snapshot
+    // for analytics only.
     const paymentRecord = await subscriptionsService.createPayment({
       userId,
-      subscriptionId: subscription?.id || null,
+      subscriptionId: null,
       amount: finalPriceCents / 100,
       currency: content.price_currency || 'CAD',
       status: 'pending',
@@ -589,6 +595,7 @@ async function unlockContent(req, res) {
         content_id: content.id,
         access_type: content.access_type || 'paid',
         ...(paymentProfileId ? { profile_id: paymentProfileId } : {}),
+        ...(subscription?.id ? { subscription_id_snapshot: subscription.id } : {}),
         base_price_cents: basePriceCents,
         discount_percent: discountPercent,
         final_price_cents: finalPriceCents,
