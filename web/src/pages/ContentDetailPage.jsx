@@ -351,14 +351,15 @@ export default function ContentDetailPage() {
   const isPaidBook = accessType === 'paid' || accessType === 'subscription_or_paid' || Number(content?.price_cents || 0) > 0;
 
   const localizedPrice = content?.localized_price || null;
-  const pricingCurrency = accessInfo?.pricing?.currency || localizedPrice?.currency || content?.price_currency || 'EUR';
+  const pricingCurrency = accessInfo?.pricing?.currency || localizedPrice?.currency || content?.price_currency || 'CAD';
   const basePriceCents = Number(accessInfo?.pricing?.base_price_cents ?? localizedPrice?.price_cents ?? content?.price_cents ?? 0);
-  const defaultDiscountPercent = Number(content?.subscription_discount_percent ?? 30);
-  const discountPercent = Number(
-    accessInfo?.pricing?.discount_percent ?? (hasActiveSubscription ? defaultDiscountPercent : 0)
-  );
+  // Pricing model: DB stores the subscriber price. Non-subscribers pay base × 1.30.
+  const defaultMarkupPercent = Number(content?.subscription_discount_percent ?? 30);
+  const markupPercent = Number(accessInfo?.pricing?.markup_percent ?? (hasActiveSubscription ? 0 : defaultMarkupPercent));
+  const discountPercent = 30; // marketing label for subscribers ("-30% appliqué")
+  const nonSubPriceCents = Math.max(0, Math.round(basePriceCents * (100 + (markupPercent || defaultMarkupPercent)) / 100));
   const reducedPriceCents = Number(
-    accessInfo?.pricing?.final_price_cents ?? Math.max(0, Math.round(basePriceCents * (100 - discountPercent) / 100))
+    accessInfo?.pricing?.final_price_cents ?? (hasActiveSubscription ? basePriceCents : nonSubPriceCents)
   );
   const isUnlocked = Boolean(accessInfo?.unlocked);
   const canOpenContent = Boolean(accessInfo?.can_read || isUnlocked);
@@ -832,14 +833,14 @@ export default function ContentDetailPage() {
                       : t('content.guestPaidHint')}
                   </Typography>
                   {isPaidBook && basePriceCents > 0 ? (() => {
-                    const p = formatDisplayedPrice(basePriceCents);
-                    const localPrice = `${p.local}${p.eur ? ` (≈ ${p.eur})` : ''}`;
+                    const p = formatDisplayedPrice(nonSubPriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}
-                        dangerouslySetInnerHTML={{
-                          __html: t('content.guestPriceHint', { price: localPrice, discount: defaultDiscountPercent }),
-                        }}
-                      />
+                      <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#b5651d' }}>{p.local}</Typography>
+                        <Typography sx={{ mt: 0.5, color: '#5f513d', fontSize: '0.9rem' }}>
+                          {t('content.subscribeSavingsBanner', { defaultValue: 'Bénéficiez d\'une réduction de 30% et d\'un accès à notre bibliothèque Papyri en prenant un abonnement.' })}
+                        </Typography>
+                      </Box>
                     );
                   })() : null}
                 </Box>
@@ -853,31 +854,18 @@ export default function ContentDetailPage() {
                       ? t('content.readingIncluded')
                       : t('content.creditOrBuyDiscount')}
                   </Typography>
-                  {/* Prix avec réduction abonné — uniquement si le livre est payant ET que la réduction est effective */}
-                  {isPaidBook && basePriceCents > 0 && discountPercent > 0 && reducedPriceCents < basePriceCents ? (() => {
-                    const pBase = formatDisplayedPrice(basePriceCents);
-                    const pReduced = formatDisplayedPrice(reducedPriceCents);
+                  {/* Active subscriber: show the price they pay + a discount-applied badge */}
+                  {isPaidBook && basePriceCents > 0 ? (() => {
+                    const p = formatDisplayedPrice(basePriceCents);
                     return (
                       <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                          <Typography component="span" sx={{ color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                          {isSubscriptionBook ? t('content.orBuyIt') : t('content.subscriberPrice')}:{' '}
-                          <strong style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500 }}>{pBase.local}</strong>
-                          {'  '}
-                          <strong style={{ color: '#b5651d' }}>{pReduced.local}</strong>
-                          {pReduced.eur ? <span style={{ color: '#9a8c7f', fontSize: '0.82em' }}> (≈ {pReduced.eur})</span> : ''}
+                          <Typography component="span" sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#b5651d' }}>
+                            {p.local}
                           </Typography>
-                          <Chip label={`-${discountPercent}%`} size="small" sx={{ bgcolor: '#b5651d', color: '#fff', fontWeight: 700, fontSize: '0.72rem', height: 20 }} />
+                          <Chip label={`-${discountPercent}% appliqué`} size="small" sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, fontSize: '0.72rem', height: 20 }} />
                         </Box>
                       </Box>
-                    );
-                  })() : isPaidBook && basePriceCents > 0 && discountPercent === 0 ? (() => {
-                    const pBase = formatDisplayedPrice(basePriceCents);
-                    const local = `${pBase.local}${pBase.eur ? ` (≈ ${pBase.eur})` : ''}`;
-                    return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.9rem', overflowWrap: 'anywhere' }}
-                        dangerouslySetInnerHTML={{ __html: t('content.priceLabel', { price: local }) }}
-                      />
                     );
                   })() : null}
                 </Box>
@@ -890,12 +878,14 @@ export default function ContentDetailPage() {
                     {t('content.inactiveSubscriptionHint')}
                   </Typography>
                   {isPaidBook && basePriceCents > 0 ? (() => {
-                    const p = formatDisplayedPrice(basePriceCents);
-                    const local = `${p.local}${p.eur ? ` (≈ ${p.eur})` : ''}`;
+                    const p = formatDisplayedPrice(nonSubPriceCents);
                     return (
-                      <Typography sx={{ mt: 0.9, color: '#5f513d', fontSize: '0.95rem', overflowWrap: 'anywhere' }}
-                        dangerouslySetInnerHTML={{ __html: t('content.buyWithoutDiscount', { price: local }) }}
-                      />
+                      <Box sx={{ mt: 1.2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(181,101,29,0.06)', border: '1px solid rgba(181,101,29,0.15)' }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: '1.15rem', color: '#b5651d' }}>{p.local}</Typography>
+                        <Typography sx={{ mt: 0.5, color: '#5f513d', fontSize: '0.9rem' }}>
+                          {t('content.subscribeSavingsBanner', { defaultValue: 'Bénéficiez d\'une réduction de 30% et d\'un accès à notre bibliothèque Papyri en prenant un abonnement.' })}
+                        </Typography>
+                      </Box>
                     );
                   })() : null}
                   {hasAnySubscription ? (

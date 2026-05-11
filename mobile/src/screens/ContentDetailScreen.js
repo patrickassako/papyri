@@ -875,27 +875,12 @@ export default function ContentDetailScreen({ route, navigation }) {
                   : t('contentDetail.creditOrBuyDiscount')}
               </Text>
               {isPaidBook && basePriceCents > 0 ? (
-                markupPercent > 0 && reducedPriceCents > basePriceCents ? (
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents, pricingCurrency)}</Text>
-                    <Text style={styles.priceBase}>({formatMoney(basePriceCents, pricingCurrency)} {t('contentDetail.subscriberPrice', { defaultValue: 'abonné' })})</Text>
-                    <View style={[styles.discountPill, { backgroundColor: '#fbe9e7' }]}>
-                      <Text style={[styles.discountPillText, { color: '#c84315' }]}>+{markupPercent}%</Text>
-                    </View>
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceReduced}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                  <View style={styles.discountPill}>
+                    <Text style={styles.discountPillText}>{t('contentDetail.discountApplied', { defaultValue: '-30% appliqué' })}</Text>
                   </View>
-                ) : discountPercent > 0 && reducedPriceCents < basePriceCents ? (
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceBase}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
-                    <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents, pricingCurrency)}</Text>
-                    <View style={styles.discountPill}>
-                      <Text style={styles.discountPillText}>-{discountPercent}%</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <Text style={styles.accessCardMeta}>
-                    {t('contentDetail.priceLabel')}<Text style={{ fontWeight: '700' }}>{formatMoney(reducedPriceCents || basePriceCents, pricingCurrency)}</Text>
-                  </Text>
-                )
+                </View>
               ) : null}
             </>
           ) : (
@@ -906,17 +891,22 @@ export default function ContentDetailScreen({ route, navigation }) {
                   {subscription ? t('contentDetail.inactiveSubscription') : t('contentDetail.notSubscribed')}
                 </Text>
               </View>
-              <Text style={styles.accessCardBody}>
-                {isSubscriptionBook
-                  ? t('contentDetail.subscribePromptSubscription')
-                  : t('contentDetail.subscribePromptPaid')}
-              </Text>
               {isPaidBook && basePriceCents > 0 ? (
-                <Text style={styles.accessCardMeta}>
-                  {t('contentDetail.buyWithoutDiscount')}
-                  <Text style={{ fontWeight: '700' }}>{formatMoney(basePriceCents, pricingCurrency)}</Text>
+                <>
+                  <Text style={styles.priceReduced}>{formatMoney(reducedPriceCents || basePriceCents, pricingCurrency)}</Text>
+                  <Text style={[styles.accessCardBody, { marginTop: 8 }]}>
+                    {t('contentDetail.subscribeSavingsBanner', {
+                      defaultValue: 'Bénéficiez d\'une réduction de 30% et un accès à notre bibliothèque Papyri en prenant un abonnement.',
+                    })}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.accessCardBody}>
+                  {isSubscriptionBook
+                    ? t('contentDetail.subscribePromptSubscription')
+                    : t('contentDetail.subscribePromptPaid')}
                 </Text>
-              ) : null}
+              )}
             </>
           )}
         </View>

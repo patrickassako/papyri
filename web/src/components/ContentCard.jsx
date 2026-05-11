@@ -139,12 +139,11 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
             if (!baseCents || Number(baseCents) <= 0) return null;
             const renderPrice = (cents) => formatFrom(cents, currency);
 
-            // For non-subscribers the backend returns discounted_price_cents = base * (1 + markup/100).
-            // For subscribers it returns the base price as-is. Show the final price; if there's a markup
-            // (i.e. the user is not subscribed) cross out the subscriber price next to it as a teaser.
+            // Backend returns discounted_price_cents = base × (1 + markup/100) for
+            // non-subscribers; base as-is for subscribers. We only show the final
+            // price the user actually pays — no struck-through reference, no badge.
+            // The "-30% appliqué" or upsell banner lives next to the price.
             const finalCents = Number(content.discounted_price_cents ?? baseCents);
-            const markupPct = Number(content.subscriber_discount_percent ?? 0);
-            const hasMarkup = !hasActiveSubscription && markupPct > 0 && finalCents > Number(baseCents);
 
             return (
               <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
@@ -155,8 +154,6 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
                     fontWeight: 700,
                     height: 'auto',
                     maxWidth: '100%',
-                    bgcolor: hasMarkup ? '#fff8e1' : undefined,
-                    color: hasMarkup ? '#b5651d' : undefined,
                     '& .MuiChip-label': {
                       display: 'block',
                       whiteSpace: 'normal',
@@ -166,18 +163,13 @@ export default function ContentCard({ content, hasActiveSubscription = false }) 
                     },
                   }}
                 />
-                {hasMarkup && (
-                  <>
-                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-                      {renderPrice(baseCents)} ·
-                    </Typography>
-                    <Chip
-                      label={`+${markupPct}%`}
-                      size="small"
-                      sx={{ bgcolor: '#fbe9e7', color: '#c84315', fontWeight: 700, fontSize: '10px', height: 18 }}
-                    />
-                  </>
-                )}
+                {hasActiveSubscription ? (
+                  <Chip
+                    label="-30% appliqué"
+                    size="small"
+                    sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, fontSize: '10px', height: 18 }}
+                  />
+                ) : null}
               </Box>
             );
           })()}

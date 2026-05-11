@@ -530,6 +530,8 @@
     "inactiveSubscriptionTitle": "Subscription inactive or expired.",
     "inactiveSubscriptionHint": "Subscribe to access included books and enjoy a discount on paid books.",
     "buyWithoutDiscount": "Buy at full price: <strong>{{price}}</strong>.",
+    "subscribeSavingsBanner": "Save 30% and unlock access to the full Papyri library by subscribing.",
+    "discountApplied": "-30% applied",
     "previousSubscriptionInactive": "Your previous subscription is no longer active.",
     "priceLabel": "Price: <strong>{{price}}</strong>",
     "reviewsTitle": "Reader reviews",

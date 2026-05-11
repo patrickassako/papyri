@@ -625,6 +625,8 @@
     "subscribePromptPaid": "Subscribe to enjoy a discount on paid books.",
     "priceLabel": "Price: ",
     "buyWithoutDiscount": "Buy at full price: ",
+    "discountApplied": "-30% applied",
+    "subscribeSavingsBanner": "Save 30% and unlock access to the full Papyri library by subscribing.",
     "bonusAvailable": "Bonus available",
     "primaryListen": "Listen",
     "primaryRead": "Read now",
