@@ -90,6 +90,9 @@ export const contentsService = {
       body: JSON.stringify({
         ...(provider ? { provider } : {}),
         ...(useCredit !== undefined ? { useCredit } : {}),
+        // Tell the backend to issue a deep-link redirect so the browser
+        // bounces back into the app on payment completion.
+        source: 'mobile',
       }),
     });
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,7 +10,9 @@ import {
   Linking,
   Share,
   Modal,
+  AppState,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text, ActivityIndicator, ProgressBar } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -316,6 +318,33 @@ export default function ContentDetailScreen({ route, navigation }) {
     }
   };
 
+  /* ── AppState: detect return from Flutterwave browser checkout ──
+   * If a pending content_unlock payment exists, hop to PaymentCallback which
+   * runs verify-payment + redirects back to this screen on success. Also fires
+   * if the OS swallowed the deep-link redirect for any reason.
+   */
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (nextState !== 'active' || (prev !== 'background' && prev !== 'inactive')) return;
+      try {
+        const raw = await AsyncStorage.getItem('@papyri_pending_payment');
+        if (!raw) return;
+        const pending = JSON.parse(raw);
+        if (pending?.kind !== 'content_unlock') return;
+        navigation.navigate('PaymentCallback', {
+          provider: pending.provider,
+          tx_ref: pending.tx_ref,
+          transaction_id: pending.transaction_id,
+          status: 'successful',
+        });
+      } catch (_) {}
+    });
+    return () => sub.remove();
+  }, [navigation]);
+
   const handleUnlockedAction = () => {
     if (isAudiobook) {
       navigation.navigate('AudioPlayer', { contentId: content.id || contentId });
@@ -434,6 +463,19 @@ export default function ContentDetailScreen({ route, navigation }) {
       if (result?.paymentRequired) {
         const paymentLink = result?.data?.payment?.payment_link;
         if (paymentLink) {
+          // Remember the pending payment so the AppState listener can verify
+          // it when the user comes back, even if the deep link redirect fails.
+          const reference = result?.data?.payment?.reference || result?.data?.reference || null;
+          try {
+            await AsyncStorage.setItem('@papyri_pending_payment', JSON.stringify({
+              provider,
+              reference,
+              tx_ref: reference,
+              transaction_id: reference,
+              contentId: content.id || contentId,
+              kind: 'content_unlock',
+            }));
+          } catch (_) {}
           setPaymentModal({ open: false, busy: '' });
           await Linking.openURL(paymentLink);
         } else {

@@ -490,6 +490,12 @@ async function unlockContent(req, res) {
       ? requestOrigin
       : undefined;
 
+    // If the caller is the mobile app, override the redirect URL with our
+    // custom deep link scheme so the browser kicks the user back into the app
+    // (which then runs verify-payment automatically).
+    const isMobile = req.body?.source === 'mobile';
+    const mobileCallbackBase = isMobile ? 'papyri://payment/callback' : null;
+
     const requestedProvider = req.body?.provider === 'stripe' ? 'stripe' : 'flutterwave';
 
     let paymentLink = null;
@@ -551,6 +557,7 @@ async function unlockContent(req, res) {
         txPrefix: 'CNT',
         redirectPath: `/catalogue/${content.id}`,
         redirectBaseUrl,
+        overrideRedirectUrl: mobileCallbackBase,
         title: 'Papyri - Déblocage contenu',
         description: `Déblocage: ${content.title}`,
         meta: {

@@ -243,6 +243,45 @@ async function handleChargeCompleted(data, eventId) {
 
     if (paymentType === 'content_unlock') {
       console.log(`ℹ️  Content unlock payment confirmed: ${txRef}`);
+      const meta = payment.metadata || {};
+      const contentId = meta.content_id;
+      const profileId = meta.profile_id || null;
+      if (!contentId) {
+        console.warn('⚠️  content_unlock payment has no content_id metadata');
+        return;
+      }
+
+      let existingQuery = supabaseAdmin
+        .from('content_unlocks')
+        .select('id')
+        .eq('user_id', payment.user_id)
+        .eq('content_id', contentId);
+      existingQuery = profileId ? existingQuery.eq('profile_id', profileId) : existingQuery.is('profile_id', null);
+      const { data: existingUnlock } = await existingQuery.maybeSingle();
+
+      if (!existingUnlock) {
+        const insertResult = await supabaseAdmin
+          .from('content_unlocks')
+          .insert({
+            user_id: payment.user_id,
+            profile_id: profileId,
+            content_id: contentId,
+            source: 'paid',
+            payment_id: payment.id,
+            base_price_cents: Number(meta.base_price_cents || 0),
+            paid_amount_cents: Number(meta.final_price_cents || Math.round(Number(payment.amount || 0) * 100)),
+            currency: payment.currency || 'CAD',
+            discount_applied_percent: Number(meta.discount_percent || 0),
+            metadata: { provider: 'flutterwave', tx_ref: txRef },
+          });
+        if (insertResult.error && insertResult.error.code !== '23505') {
+          console.error('[webhook.flutterwave] content_unlock insert error:', insertResult.error);
+        } else {
+          console.log(`✅ content_unlocks row created for content ${contentId} (user ${payment.user_id})`);
+        }
+      } else {
+        console.log(`ℹ️  content_unlocks row already exists for ${contentId} — no-op`);
+      }
       return;
     }
 
