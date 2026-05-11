@@ -64,23 +64,22 @@ export async function registerForPushNotifications() {
     });
   }
 
-  // Obtenir le token Expo (projectId requis sur SDK 49+)
-  const projectId = getProjectId();
-  if (!projectId) {
-    console.warn('[notifications] projectId manquant — set extra.eas.projectId dans app.json ou EXPO_PUBLIC_PROJECT_ID');
-    return null;
-  }
-
+  // Use the raw FCM device token directly (no Expo Push wrapper) so the
+  // backend can deliver notifications through firebase-admin with the
+  // project credentials already configured in env (FIREBASE_PROJECT_ID,
+  // FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY). This bypasses the
+  // Expo Push API entirely so we don't need to upload an FCM server key
+  // to Expo.
   let token;
   try {
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const tokenData = await Notifications.getDevicePushTokenAsync();
     token = tokenData.data;
   } catch (err) {
-    console.error('[notifications] getExpoPushTokenAsync failed:', err.message);
+    console.error('[notifications] getDevicePushTokenAsync failed:', err.message);
     return null;
   }
 
-  console.log('[notifications] Expo push token obtenu:', token);
+  console.log('[notifications] FCM device token obtenu:', token);
 
   // Envoyer au backend
   await sendTokenToBackend(token);
