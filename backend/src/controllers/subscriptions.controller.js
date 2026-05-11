@@ -649,7 +649,7 @@ async function verifyPayment(req, res) {
         const emailData = {
           planName: plan?.name || 'Abonnement',
           amount: (paymentDetails.amount / 100).toFixed(2),
-          currency: paymentDetails.currency || 'EUR',
+          currency: paymentDetails.currency || 'CAD',
           endDate: subscription.end_date,
         };
         sendSubscriptionConfirmationEmail(profile.email, profile.full_name, emailData)

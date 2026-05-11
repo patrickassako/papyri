@@ -45,7 +45,7 @@ function getClient() {
  */
 async function initiatePayment({
   amount,
-  currency = 'USD',
+  currency = 'CAD',
   email,
   name,
   planCode,
@@ -81,7 +81,7 @@ async function initiatePayment({
  */
 async function initiateCheckout({
   amount,
-  currency = 'EUR',
+  currency = 'CAD',
   email,
   name,
   userId,
