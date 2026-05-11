@@ -119,13 +119,22 @@ async function sendFcmNotification(token, { title, body, data = {} }) {
 async function sendToToken(token, payload) {
   if (!token) throw new Error('Token FCM manquant');
 
-  // Since SDK 49, getExpoPushTokenAsync returns the raw FCM token on
-  // standalone Android builds (format: "xxx:APA91b..."), not the
-  // "ExponentPushToken[...]" wrapper. Both formats are still valid Expo
-  // push targets — the Expo Push API accepts them and routes through its
-  // own Firebase project. Always go through exp.host so we don't have to
-  // own a Firebase Android app or share the project key with Expo.
-  return await sendExpoNotification(token, payload);
+  // Two flavors of tokens can land here:
+  //   - ExponentPushToken[...]  — issued by getExpoPushTokenAsync, must go
+  //                                through the Expo Push API (exp.host).
+  //   - raw FCM/APNs token       — issued by getDevicePushTokenAsync OR by
+  //                                getExpoPushTokenAsync when the project
+  //                                has a real Firebase Android app + EAS
+  //                                push credentials. Goes through
+  //                                firebase-admin directly, which requires
+  //                                that the same Firebase project that
+  //                                issued the token is wired into the
+  //                                backend env (FIREBASE_PROJECT_ID etc).
+  if (isExpoToken(token)) {
+    return await sendExpoNotification(token, payload);
+  }
+
+  return await sendFcmNotification(token, payload);
 }
 
 /**
