@@ -487,17 +487,24 @@ function SubscriptionScreenInner({ navigation }) {
           {payments.length === 0 ? (
             <Text style={styles.emptyText}>{t('subscription.noPayments')}</Text>
           ) : (
-            payments.slice(0, 10).map((payment) => (
-              <View key={payment.id} style={styles.paymentRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.paymentTitle}>
-                    {payment?.metadata?.payment_type === 'subscription_renewal' ? t('subscription.renewal') : t('subscription.subscriptionLabel')}
-                  </Text>
-                  <Text style={styles.paymentMeta}>{formatDate(payment.created_at)}</Text>
+            payments.slice(0, 10).map((payment) => {
+              const pt = payment?.metadata?.payment_type;
+              const label =
+                pt === 'subscription_renewal' ? t('subscription.renewal') :
+                pt === 'subscription_initial' ? t('subscription.subscriptionLabel') :
+                pt === 'extra_seat' ? t('subscription.paymentTypeExtraSeat', { defaultValue: 'Place supplémentaire' }) :
+                pt === 'content_unlock' ? t('subscription.paymentTypeContentUnlock', { defaultValue: 'Achat contenu' }) :
+                t('subscription.subscriptionLabel');
+              return (
+                <View key={payment.id} style={styles.paymentRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paymentTitle}>{label}</Text>
+                    <Text style={styles.paymentMeta}>{formatDate(payment.created_at)}</Text>
+                  </View>
+                  <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
                 </View>
-                <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 

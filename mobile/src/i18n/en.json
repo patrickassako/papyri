@@ -428,6 +428,8 @@
     "noPayments": "No payment recorded.",
     "renewal": "Renewal",
     "subscriptionLabel": "Subscription",
+    "paymentTypeContentUnlock": "Content purchase",
+    "paymentTypeExtraSeat": "Extra seat",
     "paymentMethod": "Payment method",
     "planLine": "{{name}} plan · {{price}}",
     "promoPlaceholder": "Promo code (optional)",
