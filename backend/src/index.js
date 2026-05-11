@@ -15,9 +15,17 @@ const app = express();
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
 }));
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://papyrihub.net',
+  'https://www.papyrihub.net',
+  'https://papyri-backend.onrender.com',
+];
 const CORS_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3001'];
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : DEFAULT_CORS_ORIGINS;
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (server-to-server, curl) and listed origins.
