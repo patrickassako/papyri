@@ -5,9 +5,19 @@
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from '../config/supabase';
 import API_BASE_URL from '../config/api';
+
+function getProjectId() {
+  return (
+    process.env.EXPO_PUBLIC_PROJECT_ID ||
+    Constants.expoConfig?.extra?.eas?.projectId ||
+    Constants.easConfig?.projectId ||
+    null
+  );
+}
 
 // ── Configuration du handler foreground ──────────────────────
 Notifications.setNotificationHandler({
@@ -54,11 +64,23 @@ export async function registerForPushNotifications() {
     });
   }
 
-  // Obtenir le token Expo
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
-  });
-  const token = tokenData.data;
+  // Obtenir le token Expo (projectId requis sur SDK 49+)
+  const projectId = getProjectId();
+  if (!projectId) {
+    console.warn('[notifications] projectId manquant — set extra.eas.projectId dans app.json ou EXPO_PUBLIC_PROJECT_ID');
+    return null;
+  }
+
+  let token;
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    token = tokenData.data;
+  } catch (err) {
+    console.error('[notifications] getExpoPushTokenAsync failed:', err.message);
+    return null;
+  }
+
+  console.log('[notifications] Expo push token obtenu:', token);
 
   // Envoyer au backend
   await sendTokenToBackend(token);
