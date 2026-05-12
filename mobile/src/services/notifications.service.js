@@ -190,6 +190,49 @@ export async function markAsRead(notificationId) {
 }
 
 /**
+ * Ping le backend quand l'utilisateur clique sur une notif push (analytics).
+ */
+export async function markAsClicked(notificationId) {
+  if (!notificationId) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/clicked`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+  } catch (_) { /* swallow analytics errors */ }
+}
+
+/**
+ * Branche un listener qui écoute les taps sur les notifications push et :
+ *  1. Pingue /api/notifications/:id/clicked si la notif porte un notification_id
+ *     dans son data payload (pour les analytics).
+ *  2. Navigue vers l'écran indiqué par data.screen (Home par défaut).
+ *
+ * Retourne la subscription pour qu'on puisse la cleanup au démontage.
+ */
+export function attachNotificationTapHandler(navigationRef) {
+  return Notifications.addNotificationResponseReceivedListener((response) => {
+    try {
+      const data = response?.notification?.request?.content?.data || {};
+      if (data.notification_id) {
+        markAsClicked(data.notification_id);
+      }
+      const screen = data.screen;
+      if (screen && navigationRef?.current?.isReady?.()) {
+        const params = {};
+        if (data.content_id) params.contentId = data.content_id;
+        if (data.promo_code) params.promoCode = data.promo_code;
+        navigationRef.current.navigate(screen, params);
+      }
+    } catch (err) {
+      console.warn('[notifications] tap handler error:', err.message);
+    }
+  });
+}
+
+/**
  * Marque toutes les notifications comme lues
  */
 export async function markAllAsRead() {

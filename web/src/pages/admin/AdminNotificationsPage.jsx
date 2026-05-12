@@ -35,6 +35,11 @@ const SEGMENTS = [
   { value: 'active_subscribers',    label: 'Abonnés actifs',         icon: '✅' },
   { value: 'expired_subscribers',   label: 'Abonnés expirés',        icon: '⏰' },
   { value: 'cancelled_subscribers', label: 'Abonnés résiliés',       icon: '❌' },
+  { value: 'bought_paid',           label: 'Acheteurs livres payants', icon: '💳' },
+  { value: 'read_category',         label: 'Lecteurs d\'une catégorie', icon: '📚' },
+  { value: 'kid_profiles',          label: 'Comptes avec profil enfant', icon: '🧒' },
+  { value: 'adult_profiles',        label: 'Comptes adultes uniquement', icon: '🧑' },
+  { value: 'push_enabled',          label: 'Push activé',            icon: '🔔' },
   { value: 'user',                  label: 'Utilisateur spécifique', icon: '🎯' },
 ];
 
@@ -62,47 +67,92 @@ export default function AdminNotificationsPage() {
   // Form
   const [segment,   setSegment]   = useState('all');
   const [userEmail, setUserEmail] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [type,      setType]      = useState('system');
-  const [title,     setTitle]     = useState('');
-  const [body,      setBody]      = useState('');
+  const [titleFr,   setTitleFr]   = useState('');
+  const [bodyFr,    setBodyFr]    = useState('');
+  const [titleEn,   setTitleEn]   = useState('');
+  const [bodyEn,    setBodyEn]    = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
   const [sending,   setSending]   = useState(false);
   const [sendResult, setSendResult] = useState(null);
   const [sendError,  setSendError]  = useState(null);
+  const [audiencePreview, setAudiencePreview] = useState(null);
+  const [scheduled, setScheduled] = useState([]);
 
   const load = useCallback(() => {
     setLoading(true);
-    authFetch(`${API}/api/admin/notifications/stats`)
-      .then(r => r.json())
-      .then(d => { setStats(d.stats || {}); setRecent(d.recent || []); })
+    Promise.all([
+      authFetch(`${API}/api/admin/notifications/stats`).then(r => r.json()),
+      authFetch(`${API}/api/admin/notifications/scheduled?status=pending`).then(r => r.json()).catch(() => ({ scheduled: [] })),
+    ])
+      .then(([statsData, schedData]) => {
+        setStats(statsData.stats || {});
+        setRecent(statsData.recent || []);
+        setScheduled(schedData.scheduled || []);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  // Live audience preview whenever segment/criteria change.
+  useEffect(() => {
+    let cancelled = false;
+    const criteria = {};
+    if (segment === 'user' && userEmail) criteria.userEmail = userEmail;
+    if (segment === 'read_category' && categoryId) criteria.categoryId = categoryId;
+    const qs = new URLSearchParams({ target: segment, criteria_json: JSON.stringify(criteria) }).toString();
+    authFetch(`${API}/api/admin/notifications/audience-preview?${qs}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setAudiencePreview(typeof d.count === 'number' ? d.count : null); })
+      .catch(() => { if (!cancelled) setAudiencePreview(null); });
+    return () => { cancelled = true; };
+  }, [segment, userEmail, categoryId]);
+
+  const cancelScheduled = async (id) => {
+    try {
+      await authFetch(`${API}/api/admin/notifications/scheduled/${id}`, { method: 'DELETE' });
+      load();
+    } catch (_) { /* ignore */ }
+  };
+
   useEffect(() => { load(); }, [load]);
 
   async function handleSend() {
-    if (!title.trim() || !body.trim()) { setSendError('Titre et message requis.'); return; }
+    if (!titleFr.trim() || !bodyFr.trim()) { setSendError('Titre et message FR requis.'); return; }
     if (segment === 'user' && !userEmail.trim()) { setSendError('Email utilisateur requis.'); return; }
+    if (segment === 'read_category' && !categoryId.trim()) { setSendError('Catégorie requise.'); return; }
     setSending(true); setSendError(null); setSendResult(null);
     try {
-      const payload = { target: segment, type, title, body, saveToDb: true };
+      const payload = {
+        target: segment,
+        type,
+        title_fr: titleFr,
+        body_fr: bodyFr,
+        title_en: titleEn || null,
+        body_en: bodyEn || null,
+        saveToDb: true,
+      };
       if (segment === 'user') payload.userEmail = userEmail.trim();
-      const res  = await authFetch(`${API}/api/admin/notifications/send`, {
+      if (segment === 'read_category') payload.categoryId = categoryId.trim();
+      if (scheduledFor) payload.scheduledFor = new Date(scheduledFor).toISOString();
+      const res = await authFetch(`${API}/api/admin/notifications/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Erreur envoi');
       setSendResult(data.message);
-      setTitle(''); setBody('');
+      setTitleFr(''); setBodyFr(''); setTitleEn(''); setBodyEn(''); setScheduledFor('');
       setTimeout(load, 1500);
     } catch (e) { setSendError(e.message); }
     finally { setSending(false); }
   }
 
   const kpis = [
-    { label: 'Notifications envoyées', value: stats?.total ?? '—', icon: NotificationsOutlinedIcon, color: C.indigo },
-    { label: 'Non lues',               value: stats?.unread ?? '—', icon: CheckCircleOutlineIcon,  color: C.orange },
-    { label: 'Appareils push actifs',  value: stats?.pushEnabled ?? '—', icon: PhoneAndroidOutlinedIcon, color: C.green },
+    { label: 'Envoyées',           value: stats?.total ?? '—',       icon: NotificationsOutlinedIcon, color: C.indigo },
+    { label: 'Lues',               value: `${stats?.readRate ?? 0}%`,    icon: CheckCircleOutlineIcon,  color: C.green },
+    { label: 'Cliquées',           value: `${stats?.clickedRate ?? 0}%`, icon: SendIcon,                color: C.primary },
+    { label: 'Appareils push',     value: stats?.pushEnabled ?? '—', icon: PhoneAndroidOutlinedIcon, color: C.indigo },
   ];
 
   return (
@@ -174,6 +224,18 @@ export default function AdminNotificationsPage() {
                   placeholder="user@example.com" type="email" />
               )}
 
+              {segment === 'read_category' && (
+                <TextField label="ID de la catégorie" size="small" fullWidth sx={inputSx}
+                  value={categoryId} onChange={e => setCategoryId(e.target.value)}
+                  placeholder="UUID de la catégorie" />
+              )}
+
+              {audiencePreview !== null && (
+                <Alert severity="info" sx={{ borderRadius: '10px', py: 0.5 }}>
+                  Audience estimée : <strong>{audiencePreview}</strong> utilisateur{audiencePreview > 1 ? 's' : ''}
+                </Alert>
+              )}
+
               <FormControl size="small" fullWidth sx={inputSx}>
                 <InputLabel>Type</InputLabel>
                 <Select value={type} label="Type" onChange={e => setType(e.target.value)}>
@@ -181,23 +243,46 @@ export default function AdminNotificationsPage() {
                 </Select>
               </FormControl>
 
-              <TextField label="Titre *" size="small" fullWidth sx={inputSx}
-                value={title} onChange={e => setTitle(e.target.value)}
-                placeholder="Ex : Nouveau livre disponible !" />
+              {/* FR */}
+              <Box sx={{ borderLeft: `3px solid ${C.primary}`, pl: 1.5 }}>
+                <Typography variant="caption" fontWeight={700} color={C.primary} sx={{ display: 'block', mb: 1 }}>
+                  🇫🇷 Français
+                </Typography>
+                <TextField label="Titre FR *" size="small" fullWidth sx={{ ...inputSx, mb: 1 }}
+                  value={titleFr} onChange={e => setTitleFr(e.target.value)}
+                  placeholder="Ex : Nouveau livre disponible !" />
+                <TextField label="Message FR *" size="small" fullWidth multiline rows={2} sx={inputSx}
+                  value={bodyFr} onChange={e => setBodyFr(e.target.value)}
+                  placeholder="Ex : Découvrez notre dernière nouveauté…" />
+              </Box>
 
-              <TextField label="Message *" size="small" fullWidth multiline rows={3} sx={inputSx}
-                value={body} onChange={e => setBody(e.target.value)}
-                placeholder="Ex : Découvrez notre dernière nouveauté…" />
+              {/* EN */}
+              <Box sx={{ borderLeft: `3px solid ${C.indigo}`, pl: 1.5 }}>
+                <Typography variant="caption" fontWeight={700} color={C.indigo} sx={{ display: 'block', mb: 1 }}>
+                  🇬🇧 English (optionnel — fallback FR)
+                </Typography>
+                <TextField label="Title EN" size="small" fullWidth sx={{ ...inputSx, mb: 1 }}
+                  value={titleEn} onChange={e => setTitleEn(e.target.value)}
+                  placeholder="Ex: New book available!" />
+                <TextField label="Body EN" size="small" fullWidth multiline rows={2} sx={inputSx}
+                  value={bodyEn} onChange={e => setBodyEn(e.target.value)}
+                  placeholder="Ex: Check out our latest title…" />
+              </Box>
+
+              {/* Scheduling */}
+              <TextField label="Programmer pour (laisser vide = envoi immédiat)" size="small" fullWidth sx={inputSx}
+                type="datetime-local" InputLabelProps={{ shrink: true }}
+                value={scheduledFor} onChange={e => setScheduledFor(e.target.value)} />
 
               {/* Aperçu */}
-              {(title || body) && (
+              {(titleFr || bodyFr) && (
                 <Box sx={{ bgcolor: '#1a1a2e', borderRadius: '14px', p: 2, display: 'flex', gap: 1.5 }}>
                   <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <NotificationsOutlinedIcon sx={{ color: '#fff', fontSize: 20 }} />
                   </Box>
                   <Box>
-                    <Typography variant="body2" fontWeight={700} color="#fff">{title || 'Titre'}</Typography>
-                    <Typography variant="caption" color="rgba(255,255,255,0.65)">{body || 'Message…'}</Typography>
+                    <Typography variant="body2" fontWeight={700} color="#fff">{titleFr || 'Titre'}</Typography>
+                    <Typography variant="caption" color="rgba(255,255,255,0.65)">{bodyFr || 'Message…'}</Typography>
                   </Box>
                 </Box>
               )}
@@ -208,7 +293,7 @@ export default function AdminNotificationsPage() {
                 onClick={handleSend} disabled={sending}
                 sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '10px', bgcolor: C.indigo, py: 1.2, '&:hover': { bgcolor: '#1a2d47' } }}
               >
-                {sending ? 'Envoi en cours…' : `Envoyer ${SEGMENTS.find(s => s.value === segment)?.icon || ''}`}
+                {sending ? 'Envoi en cours…' : scheduledFor ? `Programmer ${SEGMENTS.find(s => s.value === segment)?.icon || ''}` : `Envoyer ${SEGMENTS.find(s => s.value === segment)?.icon || ''}`}
               </Button>
             </Box>
           </Card>
@@ -255,6 +340,41 @@ export default function AdminNotificationsPage() {
             )}
           </Card>
         </Box>
+
+        {/* ── Notifications programmées ── */}
+        {scheduled.length > 0 && (
+          <Card sx={{ borderRadius: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+            <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #e5e0d8', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle1" fontWeight={700} color={C.textPrimary}>
+                ⏰ Notifications programmées ({scheduled.length})
+              </Typography>
+            </Box>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date prévue</TableCell>
+                  <TableCell>Cible</TableCell>
+                  <TableCell>Titre</TableCell>
+                  <TableCell align="right">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {scheduled.map(s => (
+                  <TableRow key={s.id}>
+                    <TableCell>{fmtDate(s.scheduled_for)}</TableCell>
+                    <TableCell>{s.target}</TableCell>
+                    <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title_fr}</TableCell>
+                    <TableCell align="right">
+                      <Button size="small" color="error" onClick={() => cancelScheduled(s.id)}>
+                        Annuler
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
       </Box>
     </Box>
   );

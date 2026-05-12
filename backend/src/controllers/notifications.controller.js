@@ -4,6 +4,7 @@
  */
 
 const notificationsService = require('../services/notifications.service');
+const audienceService = require('../services/audience.service');
 const fcmService = require('../services/fcm.service');
 const { supabaseAdmin } = require('../config/database');
 const { sendAdminBroadcastEmail } = require('../services/email.service');
@@ -136,6 +137,29 @@ async function getNotifications(req, res) {
 }
 
 /**
+ * PATCH /api/notifications/:id/clicked
+ * Logged when the user taps the push (mobile opens the deep link).
+ */
+async function markClicked(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from('notifications')
+      .update({ clicked_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .maybeSingle();
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    return res.status(200).json({ success: true, notification: data });
+  } catch (error) {
+    console.error('❌ markClicked error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
  * PATCH /api/notifications/:id/read
  * Marque une notification comme lue
  */
@@ -173,106 +197,127 @@ async function markAllRead(req, res) {
  */
 async function adminSendNotification(req, res) {
   try {
-    const { target, userId, userEmail, title, body, data, type = 'system', saveToDb = true, sendEmail = false, ctaLabel, ctaUrl } = req.body;
+    const {
+      target,
+      userId,
+      userEmail,
+      // Backward-compat single-language fields
+      title, body,
+      // Multilingual fields (preferred)
+      title_fr, body_fr, title_en, body_en,
+      // Targeting criteria (categoryId, daysWindow, etc.)
+      target_criteria,
+      categoryId, daysWindow,
+      // Common
+      data,
+      type = 'system',
+      saveToDb = true,
+      sendEmail = false,
+      ctaLabel, ctaUrl,
+      // Scheduling
+      scheduledFor, // ISO datetime string. If provided, store in scheduled_notifications.
+    } = req.body;
 
-    if (!title || !body) {
-      return res.status(400).json({ success: false, error: 'title et body requis.' });
+    // Resolve title/body for both languages (fall back to single-lang fields).
+    const fr_title = title_fr || title;
+    const fr_body  = body_fr  || body;
+    const en_title = title_en || null;
+    const en_body  = body_en  || null;
+
+    if (!fr_title || !fr_body) {
+      return res.status(400).json({ success: false, error: 'title_fr/body_fr (ou title/body) requis.' });
     }
 
-    const payload = { type, title, body, data: data || {}, saveToDb };
-    let result;
+    // Build target criteria (merge legacy fields).
+    const criteria = { ...(target_criteria || {}) };
+    if (userId) criteria.userId = userId;
+    if (userEmail) criteria.userEmail = userEmail;
+    if (categoryId) criteria.categoryId = categoryId;
+    if (daysWindow) criteria.daysWindow = Number(daysWindow);
 
-    if (target === 'all') {
-      result = await notificationsService.sendToAll({ ...payload, saveToDb });
-
-      // Envoi email optionnel à tous les utilisateurs
-      if (sendEmail) {
-        const { data: profiles } = await supabaseAdmin
-          .from('notification_preferences')
-          .select('user_id, profiles(email, full_name)')
-          .eq('email_enabled', true);
-        let emailsSent = 0;
-        for (const pref of profiles || []) {
-          const profile = pref.profiles;
-          if (profile?.email) {
-            sendAdminBroadcastEmail(profile.email, profile.full_name || profile.email, { title, body, ctaLabel, ctaUrl })
-              .catch(() => {});
-            emailsSent++;
-          }
-        }
-        result.emailsSent = emailsSent;
+    // ── Scheduled? store in DB, scheduler will pick it up ───────
+    if (scheduledFor) {
+      const when = new Date(scheduledFor);
+      if (Number.isNaN(when.getTime())) {
+        return res.status(400).json({ success: false, error: 'scheduledFor invalide (ISO datetime).' });
       }
-
+      if (when.getTime() < Date.now() - 60000) {
+        return res.status(400).json({ success: false, error: 'scheduledFor doit être dans le futur.' });
+      }
+      const { data: row, error: insertErr } = await supabaseAdmin
+        .from('scheduled_notifications')
+        .insert({
+          created_by: req.user?.id || null,
+          scheduled_for: when.toISOString(),
+          status: 'pending',
+          target,
+          target_criteria: criteria,
+          title_fr: fr_title,
+          body_fr: fr_body,
+          title_en: en_title,
+          body_en: en_body,
+          type,
+          data: data || {},
+          send_email: !!sendEmail,
+        })
+        .select()
+        .single();
+      if (insertErr) {
+        return res.status(500).json({ success: false, error: insertErr.message });
+      }
       return res.status(200).json({
         success: true,
-        message: `Notification sauvegardée pour ${result.saved || 0} utilisateur(s), push envoyé à ${result.pushSent || 0}${sendEmail ? `, email à ${result.emailsSent || 0}` : ''}.`,
-        result,
+        scheduled: true,
+        message: `Notification programmée pour ${when.toISOString()}.`,
+        id: row.id,
       });
     }
 
-    if (target === 'active_subscribers' || target === 'expired_subscribers' || target === 'cancelled_subscribers') {
-      const statusMap = {
-        active_subscribers:    'ACTIVE',
-        expired_subscribers:   'EXPIRED',
-        cancelled_subscribers: 'CANCELLED',
-      };
-      const { data: subsData } = await supabaseAdmin
-        .from('subscriptions')
-        .select('user_id')
-        .eq('status', statusMap[target]);
-      const userIds = [...new Set((subsData || []).map(s => s.user_id))];
-      result = await notificationsService.sendToUsers(userIds, { ...payload, saveToDb });
-      return res.status(200).json({
-        success: true,
-        message: `Notification envoyée à ${userIds.length} utilisateur(s) (${target}).`,
-        result,
-      });
+    // ── Immediate send ──────────────────────────────────────────
+    // 1. Resolve audience via the new helper.
+    let userIds;
+    try {
+      userIds = await audienceService.resolveAudience(target, criteria);
+    } catch (e) {
+      return res.status(400).json({ success: false, error: e.message });
+    }
+    if (!userIds.length) {
+      return res.status(200).json({ success: true, message: 'Audience vide, rien envoyé.', result: { sent: 0 } });
     }
 
-    if (target === 'user') {
-      let resolvedUserId = userId;
+    // 2. Multilingual broadcast.
+    const stats = await notificationsService.sendMultilingualBroadcast(userIds, {
+      titleFr: fr_title, bodyFr: fr_body,
+      titleEn: en_title, bodyEn: en_body,
+      type,
+      data: data || {},
+    });
 
-      // Résoudre userId depuis email si fourni
-      if (!resolvedUserId && userEmail) {
-        const { data: profile } = await supabaseAdmin
+    // 3. Optional email broadcast.
+    if (sendEmail) {
+      let emailsSent = 0;
+      for (const uid of userIds) {
+        const { data: prof } = await supabaseAdmin
           .from('profiles')
-          .select('id')
-          .eq('email', userEmail.trim().toLowerCase())
-          .single();
-
-        if (!profile) {
-          return res.status(404).json({ success: false, error: `Aucun utilisateur trouvé avec l'email : ${userEmail}` });
-        }
-        resolvedUserId = profile.id;
-      }
-
-      if (!resolvedUserId) {
-        return res.status(400).json({ success: false, error: 'userId ou userEmail requis pour target=user.' });
-      }
-
-      result = await notificationsService.sendToUser(resolvedUserId, payload);
-
-      // Email individuel optionnel
-      if (sendEmail) {
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('email, full_name')
-          .eq('id', resolvedUserId)
+          .select('email, full_name, language')
+          .eq('id', uid)
           .maybeSingle();
-        if (profile?.email) {
-          sendAdminBroadcastEmail(profile.email, profile.full_name || profile.email, { title, body, ctaLabel, ctaUrl })
-            .catch(() => {});
-        }
+        if (!prof?.email) continue;
+        const lang = (prof.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
+        const emailTitle = lang === 'en' && en_title ? en_title : fr_title;
+        const emailBody  = lang === 'en' && en_body  ? en_body  : fr_body;
+        sendAdminBroadcastEmail(prof.email, prof.full_name || prof.email, { title: emailTitle, body: emailBody, ctaLabel, ctaUrl })
+          .catch(() => {});
+        emailsSent++;
       }
-
-      return res.status(200).json({
-        success: true,
-        message: `Notification envoyée à l'utilisateur.`,
-        result,
-      });
+      stats.emailsSent = emailsSent;
     }
 
-    return res.status(400).json({ success: false, error: 'target doit être "all" ou "user".' });
+    return res.status(200).json({
+      success: true,
+      message: `Notification envoyée : ${stats.sent} reçu(s) (FR ${stats.perLang.fr} / EN ${stats.perLang.en})${sendEmail ? `, ${stats.emailsSent || 0} email(s)` : ''}.`,
+      result: stats,
+    });
   } catch (error) {
     console.error('❌ adminSendNotification error:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -285,22 +330,31 @@ async function adminSendNotification(req, res) {
  */
 async function adminGetStats(req, res) {
   try {
-    const [totalRes, unreadRes, pushEnabledRes, recentRes] = await Promise.all([
+    const [totalRes, unreadRes, clickedRes, pushEnabledRes, recentRes] = await Promise.all([
       supabaseAdmin.from('notifications').select('id', { count: 'exact', head: true }),
       supabaseAdmin.from('notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
+      supabaseAdmin.from('notifications').select('id', { count: 'exact', head: true }).not('clicked_at', 'is', null),
       supabaseAdmin.from('notification_preferences').select('id', { count: 'exact', head: true })
         .eq('push_enabled', true).not('fcm_token', 'is', null),
       supabaseAdmin.from('notifications')
-        .select('id, type, title, body, is_read, sent_at')
+        .select('id, type, title, body, is_read, sent_at, clicked_at')
         .order('sent_at', { ascending: false })
         .limit(15),
     ]);
 
+    const total = totalRes.count || 0;
+    const read = total - (unreadRes.count || 0);
+    const clicked = clickedRes.count || 0;
+
     return res.status(200).json({
       success: true,
       stats: {
-        total: totalRes.count || 0,
+        total,
         unread: unreadRes.count || 0,
+        read,
+        clicked,
+        readRate:    total > 0 ? Math.round((read / total) * 100) : 0,
+        clickedRate: total > 0 ? Math.round((clicked / total) * 100) : 0,
         pushEnabled: pushEnabledRes.count || 0,
       },
       recent: recentRes.data || [],
@@ -308,6 +362,71 @@ async function adminGetStats(req, res) {
   } catch (error) {
     console.error('❌ adminGetStats error:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * GET /api/admin/notifications/scheduled
+ * Liste des notifications programmées (pending, sent, failed, cancelled).
+ */
+async function adminListScheduled(req, res) {
+  try {
+    const status = req.query.status || null;
+    let q = supabaseAdmin
+      .from('scheduled_notifications')
+      .select('*')
+      .order('scheduled_for', { ascending: false })
+      .limit(100);
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    return res.status(200).json({ success: true, scheduled: data || [] });
+  } catch (error) {
+    console.error('❌ adminListScheduled error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * DELETE /api/admin/notifications/scheduled/:id
+ * Annule une notification programmée non encore envoyée.
+ */
+async function adminCancelScheduled(req, res) {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from('scheduled_notifications')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select()
+      .maybeSingle();
+    if (error) return res.status(500).json({ success: false, error: error.message });
+    if (!data) return res.status(404).json({ success: false, error: 'Aucune notif pending avec cet id.' });
+    return res.status(200).json({ success: true, scheduled: data });
+  } catch (error) {
+    console.error('❌ adminCancelScheduled error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * GET /api/admin/notifications/audience-preview?target=...&criteria_json=...
+ * Counts how many users would receive the broadcast for the given target.
+ */
+async function adminAudiencePreview(req, res) {
+  try {
+    const target = req.query.target;
+    let criteria = {};
+    try {
+      criteria = req.query.criteria_json ? JSON.parse(req.query.criteria_json) : {};
+    } catch (_) {
+      return res.status(400).json({ success: false, error: 'criteria_json invalide.' });
+    }
+    const userIds = await audienceService.resolveAudience(target, criteria);
+    return res.status(200).json({ success: true, count: userIds.length });
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error.message });
   }
 }
 
@@ -350,8 +469,12 @@ module.exports = {
   updatePreferences,
   getNotifications,
   markRead,
+  markClicked,
   markAllRead,
   adminSendNotification,
   adminSendPromo,
   adminGetStats,
+  adminListScheduled,
+  adminCancelScheduled,
+  adminAudiencePreview,
 };

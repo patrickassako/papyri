@@ -162,10 +162,16 @@ async function sendToUser(userId, { type, title, body, data = {}, saveToDb = tru
     if (!error) results.db = notif;
   }
 
+  // Inject the persisted notification id into the FCM data payload so the
+  // mobile tap handler can ping /clicked for analytics.
+  const dataWithId = results.db?.id
+    ? { ...data, notification_id: String(results.db.id) }
+    : data;
+
   // Envoyer la notification push si token disponible
   if (prefs.fcm_token) {
     try {
-      results.push = await fcmService.sendToToken(prefs.fcm_token, { title, body, data });
+      results.push = await fcmService.sendToToken(prefs.fcm_token, { title, body, data: dataWithId });
     } catch (pushErr) {
       console.error(`[notifications] Push failed for user ${userId}:`, pushErr.message);
       results.pushError = pushErr.message;
@@ -334,6 +340,57 @@ async function notifyNewContent(userIds, content) {
       content_type: String(content.content_type || ''),
     },
   });
+}
+
+/**
+ * Multilingual admin broadcast.
+ * For each userId, picks the right title/body based on profiles.language.
+ *  - Falls back to FR when EN is empty or absent.
+ *  - Persists a notifications row and pushes via FCM.
+ *
+ * Returns { sent, perLang: { fr: n, en: m }, skipped }.
+ */
+async function sendMultilingualBroadcast(userIds, {
+  titleFr, bodyFr, titleEn, bodyEn,
+  type = NOTIFICATION_TYPES.SYSTEM,
+  data = {},
+  scheduledNotificationId = null,
+}) {
+  const stats = { sent: 0, perLang: { fr: 0, en: 0 }, skipped: 0 };
+  if (!Array.isArray(userIds) || userIds.length === 0) return stats;
+
+  // Fetch language for the whole batch in one query.
+  const { data: profileRows } = await supabaseAdmin
+    .from('profiles')
+    .select('id, language')
+    .in('id', userIds);
+  const langMap = new Map();
+  for (const p of (profileRows || [])) {
+    langMap.set(p.id, (p.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr');
+  }
+
+  for (const userId of userIds) {
+    const lang = langMap.get(userId) || 'fr';
+    const title = lang === 'en' && titleEn ? titleEn : titleFr;
+    const body  = lang === 'en' && bodyEn  ? bodyEn  : bodyFr;
+    if (!title || !body) { stats.skipped++; continue; }
+    try {
+      const result = await sendToUser(userId, { type, title, body, data });
+      // Tag the DB row with the scheduled broadcast id for analytics, if applicable.
+      if (scheduledNotificationId && result?.db?.id) {
+        await supabaseAdmin
+          .from('notifications')
+          .update({ scheduled_notification_id: scheduledNotificationId })
+          .eq('id', result.db.id);
+      }
+      stats.sent++;
+      stats.perLang[lang]++;
+    } catch (err) {
+      stats.skipped++;
+    }
+  }
+
+  return stats;
 }
 
 /**
@@ -617,6 +674,7 @@ module.exports = {
   notifyNewContent,
   notifyNewContentSmart,
   notifyPromo,
+  sendMultilingualBroadcast,
   // Engagement
   notifyReadingReminder,
   notifyReadingStreak,

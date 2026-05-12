@@ -15,7 +15,7 @@ import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-d
 import theme from './src/theme/theme';
 import * as authService from './src/services/auth.service';
 import { deviceService } from './src/services/device.service';
-import { registerForPushNotifications } from './src/services/notifications.service';
+import { registerForPushNotifications, attachNotificationTapHandler } from './src/services/notifications.service';
 import { AudioProvider } from './src/context/AudioContext';
 import { ProfileProvider } from './src/context/ProfileContext';
 import GlobalMiniPlayer from './src/components/GlobalMiniPlayer';
@@ -104,6 +104,12 @@ export default function App() {
       }
     });
     return () => sub.remove();
+  }, [navigationRef]);
+
+  // Push notification tap handler — analytics ping + deep-link navigation.
+  useEffect(() => {
+    const sub = attachNotificationTapHandler(navigationRef);
+    return () => sub?.remove?.();
   }, [navigationRef]);
 
   // Defensive auth check whenever the app comes back to foreground.

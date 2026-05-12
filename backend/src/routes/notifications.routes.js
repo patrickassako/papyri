@@ -18,6 +18,7 @@ router.put('/preferences', authenticate, notificationsController.updatePreferenc
 // ── Historique in-app ─────────────────────────────────────────
 router.get('/', authenticate, notificationsController.getNotifications);
 router.patch('/:id/read', authenticate, notificationsController.markRead);
+router.patch('/:id/clicked', authenticate, notificationsController.markClicked);
 router.post('/read-all', authenticate, notificationsController.markAllRead);
 
 module.exports = router;

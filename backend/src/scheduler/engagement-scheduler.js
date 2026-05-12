@@ -9,6 +9,7 @@
 const cron = require('node-cron');
 const { supabaseAdmin } = require('../config/database');
 const notif = require('../services/notifications.service');
+const audienceService = require('../services/audience.service');
 
 const DAY_MS = 86400000;
 
@@ -434,6 +435,69 @@ async function runCreditExpiringNudge() {
   }
 }
 
+// ── 9. SCHEDULED NOTIFICATIONS CONSUMER (every 5 min) ───────────
+// Picks any scheduled_notifications row with status='pending' and
+// scheduled_for <= now, resolves the audience, broadcasts, marks sent.
+async function runScheduledNotifications() {
+  const job = 'scheduledNotifications';
+  try {
+    const { data: rows, error } = await supabaseAdmin
+      .from('scheduled_notifications')
+      .select('*')
+      .eq('status', 'pending')
+      .lte('scheduled_for', new Date().toISOString())
+      .order('scheduled_for', { ascending: true })
+      .limit(20);
+    if (error) { console.error(`[scheduler] ${job} query error:`, error.message); return; }
+    if (!rows?.length) return;
+
+    console.log(`[scheduler] ${job}: ${rows.length} broadcast(s) to dispatch`);
+    for (const row of rows) {
+      try {
+        // Resolve audience.
+        const userIds = await audienceService.resolveAudience(row.target, row.target_criteria || {});
+        if (!userIds.length) {
+          await supabaseAdmin
+            .from('scheduled_notifications')
+            .update({ status: 'sent', sent_at: new Date().toISOString(), sent_count: 0, updated_at: new Date().toISOString() })
+            .eq('id', row.id);
+          continue;
+        }
+        // Multilingual broadcast.
+        const stats = await notif.sendMultilingualBroadcast(userIds, {
+          titleFr: row.title_fr, bodyFr: row.body_fr,
+          titleEn: row.title_en, bodyEn: row.body_en,
+          type: row.type,
+          data: row.data || {},
+          scheduledNotificationId: row.id,
+        });
+        await supabaseAdmin
+          .from('scheduled_notifications')
+          .update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            sent_count: stats.sent,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.id);
+        console.log(`[scheduler] ${job}: broadcast ${row.id} → ${stats.sent} sent (FR ${stats.perLang.fr} / EN ${stats.perLang.en})`);
+      } catch (err) {
+        console.error(`[scheduler] ${job} broadcast ${row.id} failed:`, err.message);
+        await supabaseAdmin
+          .from('scheduled_notifications')
+          .update({
+            status: 'failed',
+            error_message: err.message.slice(0, 500),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.id);
+      }
+    }
+  } catch (err) {
+    console.error(`[scheduler] ${job} fatal:`, err.message);
+  }
+}
+
 // ── start ────────────────────────────────────────────────────────
 
 function startEngagementScheduler() {
@@ -447,8 +511,9 @@ function startEngagementScheduler() {
   cron.schedule('30 9 * * *', runCreditExpiringNudge);   // daily 09:30 UTC
   cron.schedule('0 21 * * *', runFirstReadDoneNudge);    // daily 21:00 UTC
   cron.schedule('0 14 * * *', runPostExpiryPromo);       // daily 14:00 UTC
+  cron.schedule('*/5 * * * *', runScheduledNotifications); // every 5 min
 
-  console.log('✅ Engagement scheduler started (10 jobs)');
+  console.log('✅ Engagement scheduler started (11 jobs)');
 }
 
 module.exports = {
@@ -464,4 +529,5 @@ module.exports = {
   runCreditExpiringNudge,
   runFirstReadDoneNudge,
   runPostExpiryPromo,
+  runScheduledNotifications,
 };
