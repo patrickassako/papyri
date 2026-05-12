@@ -10,6 +10,43 @@ const { sendPaymentConfirmationEmail, sendSubscriptionConfirmationEmail, sendInv
 const { generateInvoicePDFBuffer, buildInvoiceNumber } = require('../services/invoice.service');
 const { getSettings } = require('../services/settings.service');
 const { supabaseAdmin } = require('../config/database');
+const notificationsService = require('../services/notifications.service');
+
+/**
+ * Fire purchase-related push notifications after a successful content unlock.
+ * Called once per unlock, AFTER the content_unlocks row is committed.
+ * Sends:
+ *  - first_purchase if this is the user's first ever paid unlock,
+ *  - purchase_confirmed otherwise.
+ * All localized via notifications.service helpers.
+ */
+async function notifyPurchaseHooks(userId, contentId) {
+  try {
+    // Resolve title for the message body.
+    const { data: content } = await supabaseAdmin
+      .from('contents')
+      .select('title')
+      .eq('id', contentId)
+      .maybeSingle();
+    const contentTitle = content?.title || '';
+
+    // Count prior paid unlocks for this user.
+    const { count } = await supabaseAdmin
+      .from('content_unlocks')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('source', 'paid');
+
+    if ((count || 0) <= 1) {
+      // This is the first paid unlock ever for the user.
+      await notificationsService.notifyFirstPurchase(userId, { contentId, contentTitle });
+    } else {
+      await notificationsService.notifyPurchaseConfirmed(userId, { contentId, contentTitle });
+    }
+  } catch (err) {
+    console.error('[notifyPurchaseHooks] error:', err.message);
+  }
+}
 
 async function ensureStripeContentUnlockFromPayment(session, payment) {
   const userId = session.metadata?.user_id || payment.user_id;
@@ -59,6 +96,7 @@ async function ensureStripeContentUnlockFromPayment(session, payment) {
       .single();
 
     if (unlockError) throw unlockError;
+    notifyPurchaseHooks(userId, contentId).catch(() => {});
     return unlock;
   } catch (error) {
     if (error?.code === '23505') {
@@ -278,6 +316,7 @@ async function handleChargeCompleted(data, eventId) {
           console.error('[webhook.flutterwave] content_unlock insert error:', insertResult.error);
         } else {
           console.log(`✅ content_unlocks row created for content ${contentId} (user ${payment.user_id})`);
+          notifyPurchaseHooks(payment.user_id, contentId).catch(() => {});
         }
       } else {
         console.log(`ℹ️  content_unlocks row already exists for ${contentId} — no-op`);

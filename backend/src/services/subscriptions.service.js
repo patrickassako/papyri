@@ -769,6 +769,22 @@ async function grantCreditsForCycle(subscription) {
     console.error('grantCreditsForCycle insert error:', error);
     return null;
   }
+
+  // Notify each owner of the new credits (non-blocking).
+  try {
+    const notifications = require('./notifications.service');
+    const perUser = {};
+    for (const row of (data || [])) {
+      if (!row.user_id) continue;
+      perUser[row.user_id] = (perUser[row.user_id] || 0) + Number(row.quantity_total || 0);
+    }
+    for (const [userId, creditCount] of Object.entries(perUser)) {
+      if (creditCount > 0) {
+        notifications.notifyCreditGranted(userId, { creditCount }).catch(() => {});
+      }
+    }
+  } catch (_) { /* swallow */ }
+
   return data;
 }
 

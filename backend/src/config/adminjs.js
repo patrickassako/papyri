@@ -769,14 +769,7 @@ async function contentAfterNew(response, request, context) {
   // Notify users when content is published immediately on creation
   if (record.params?.is_published === true || record.params?.is_published === 'true') {
     try {
-      const { data: profiles } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .eq('is_active', true);
-      const userIds = (profiles || []).map((p) => p.id);
-      if (userIds.length > 0) {
-        await notificationsService.notifyNewContent(userIds, record.params);
-      }
+      await notificationsService.notifyNewContentSmart(record.params);
     } catch (notifErr) {
       console.error('New content notification error (non-blocking):', notifErr.message);
     }
@@ -811,14 +804,7 @@ async function contentAfterEdit(response, request, context) {
     && request?.payload?.is_published === 'true';
   if (justPublished) {
     try {
-      const { data: profiles } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .eq('is_active', true);
-      const userIds = (profiles || []).map((p) => p.id);
-      if (userIds.length > 0) {
-        await notificationsService.notifyNewContent(userIds, record.params);
-      }
+      await notificationsService.notifyNewContentSmart(record.params);
     } catch (notifErr) {
       console.error('Publish notification error (non-blocking):', notifErr.message);
     }

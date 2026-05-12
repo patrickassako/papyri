@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const setupAdminJS = require('./routes/admin.routes');
 const { startScheduler } = require('./scheduler/subscription-scheduler');
+const { startEngagementScheduler } = require('./scheduler/engagement-scheduler');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -214,6 +215,9 @@ async function startServer() {
 
     // Start subscription lifecycle scheduler
     startScheduler();
+
+    // Start engagement / lifecycle / discovery / monetization scheduler
+    startEngagementScheduler();
 
     // Initialize Meilisearch index (non-blocking)
     try {

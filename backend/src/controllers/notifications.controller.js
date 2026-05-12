@@ -21,7 +21,29 @@ async function registerToken(req, res) {
       return res.status(400).json({ success: false, error: 'Token FCM requis.' });
     }
 
+    // Detect "first time we ever see this user's token" → trigger welcome push.
+    const { data: existing } = await supabaseAdmin
+      .from('notification_preferences')
+      .select('fcm_token')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const isFirstRegistration = !existing?.fcm_token;
+
     await notificationsService.registerFcmToken(userId, token);
+
+    if (isFirstRegistration) {
+      // Avoid double-welcome if user reinstalls the app weeks later.
+      const already = await notificationsService.hasRecentNotification(
+        userId,
+        notificationsService.NOTIFICATION_TYPES.WELCOME,
+        365,
+      );
+      if (!already) {
+        notificationsService.notifyWelcome(userId).catch((e) =>
+          console.error('[welcome] send error:', e.message),
+        );
+      }
+    }
 
     return res.status(200).json({ success: true, message: 'Token FCM enregistré.' });
   } catch (error) {
