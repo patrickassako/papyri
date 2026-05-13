@@ -27,18 +27,18 @@ const config = require('../config/env');
 // charge dispatcher below. `flwType` is the value injected into the URL
 // query string. Numeric `dialingCode` is used to normalise phone numbers.
 const COUNTRIES = [
-  // CEMAC — Cameroun MoMo is only available via the Standard hosted checkout
-  // (Flutterwave doesn't expose Direct Charge for CM publicly).
+  // CEMAC — Cameroun uses the `mobile_money_franco` endpoint with country=CM
+  // and currency=XAF (confirmed working in production, even though docs only
+  // list "franco" for BCEAO).
   {
     country: 'CM', label: 'Cameroun', dialingCode: '237', currency: 'XAF',
-    flwType: null, fxKey: 'fx_rate_xaf',
-    hostedPaymentOptions: 'mobilemoneycameroon,card',
+    flwType: 'mobile_money_franco', fxKey: 'fx_rate_xaf',
     operators: [
       { code: 'MTN',    label: 'MTN MoMo' },
       { code: 'ORANGE', label: 'Orange Money' },
     ],
     requiresNetwork: false,
-    directCharge: false,
+    directCharge: true,
   },
 
   // BCEAO — single endpoint for all francophone West Africa
