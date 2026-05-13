@@ -153,8 +153,24 @@ export default function MobileMoneyChargeDialog({
     }
   }
 
+  // While we're waiting for the USSD confirmation (step 5) the dialog must
+  // not be dismissible by backdrop click / Escape — only the "Annuler le
+  // paiement" button can leave that screen, otherwise the user thinks the
+  // payment was cancelled while it's still pending on Flutterwave's side.
+  const isLockedStep = step === 5;
+  const handleDialogClose = (_event, reason) => {
+    if (isLockedStep && (reason === 'backdropClick' || reason === 'escapeKeyDown')) return;
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      maxWidth="xs"
+      fullWidth
+      disableEscapeKeyDown={isLockedStep}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {step > 1 && step < 5 && (
@@ -171,7 +187,9 @@ export default function MobileMoneyChargeDialog({
             {step === 7 && t('mmModal.failedTitle')}
           </Typography>
         </Box>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        {!isLockedStep && (
+          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        )}
       </DialogTitle>
 
       <Divider />
