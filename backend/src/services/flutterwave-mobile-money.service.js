@@ -27,15 +27,18 @@ const config = require('../config/env');
 // charge dispatcher below. `flwType` is the value injected into the URL
 // query string. Numeric `dialingCode` is used to normalise phone numbers.
 const COUNTRIES = [
-  // CEMAC — only Cameroon has Flutterwave MM today
+  // CEMAC — Cameroun MoMo is only available via the Standard hosted checkout
+  // (Flutterwave doesn't expose Direct Charge for CM publicly).
   {
     country: 'CM', label: 'Cameroun', dialingCode: '237', currency: 'XAF',
-    flwType: 'mobile_money_cameroon', fxKey: 'fx_rate_xaf',
+    flwType: null, fxKey: 'fx_rate_xaf',
+    hostedPaymentOptions: 'mobilemoneycameroon,card',
     operators: [
       { code: 'MTN',    label: 'MTN MoMo' },
       { code: 'ORANGE', label: 'Orange Money' },
     ],
     requiresNetwork: false,
+    directCharge: false,
   },
 
   // BCEAO — single endpoint for all francophone West Africa
@@ -52,7 +55,7 @@ const COUNTRIES = [
       operators: [{ code: 'TMONEY', label: 'T-Money' }, { code: 'MOOV', label: 'Moov Money' }] },
     { country: 'BJ', label: 'Bénin', dialingCode: '229',
       operators: [{ code: 'MTN', label: 'MTN MoMo' }, { code: 'MOOV', label: 'Moov Money' }] },
-  ].map(c => ({ ...c, currency: 'XOF', flwType: 'mobile_money_franco', fxKey: 'fx_rate_xof', requiresNetwork: false })),
+  ].map(c => ({ ...c, currency: 'XOF', flwType: 'mobile_money_franco', fxKey: 'fx_rate_xof', requiresNetwork: false, directCharge: true })),
 
   // Ghana
   {
@@ -64,6 +67,7 @@ const COUNTRIES = [
       { code: 'TIGO',     label: 'AirtelTigo Money' },
     ],
     requiresNetwork: true,
+    directCharge: true,
   },
 
   // M-Pesa
@@ -72,12 +76,14 @@ const COUNTRIES = [
     flwType: 'mpesa', fxKey: 'fx_rate_kes',
     operators: [{ code: 'MPESA', label: 'M-Pesa' }],
     requiresNetwork: false,
+    directCharge: true,
   },
   {
     country: 'TZ', label: 'Tanzanie', dialingCode: '255', currency: 'TZS',
     flwType: 'mpesa', fxKey: 'fx_rate_tzs',
     operators: [{ code: 'MPESA', label: 'M-Pesa' }],
     requiresNetwork: false,
+    directCharge: true,
   },
 
   // Rwanda / Uganda / Zambia
@@ -89,6 +95,7 @@ const COUNTRIES = [
       { code: 'AIRTEL', label: 'Airtel Money' },
     ],
     requiresNetwork: false,
+    directCharge: true,
   },
   {
     country: 'UG', label: 'Ouganda', dialingCode: '256', currency: 'UGX',

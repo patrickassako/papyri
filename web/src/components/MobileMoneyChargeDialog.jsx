@@ -98,6 +98,11 @@ export default function MobileMoneyChargeDialog({
       const d = await r.json();
       if (!r.ok || !d?.success) throw new Error(d?.error || 'Échec du paiement');
       setChargeResp(d);
+      // Hosted page mode (e.g. Cameroun MoMo): full redirect.
+      if (d.mode === 'hosted' && d.paymentLink) {
+        window.location.href = d.paymentLink;
+        return;
+      }
       setStep(5);
       if (d.mode === 'redirect' && d.redirectUrl) {
         window.open(d.redirectUrl, '_blank');

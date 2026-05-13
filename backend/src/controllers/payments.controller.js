@@ -8,6 +8,7 @@
  */
 
 const fwMm = require('../services/flutterwave-mobile-money.service');
+const flutterwaveService = require('../services/flutterwave.service');
 const paymentLocale = require('../services/payment-locale.service');
 const subscriptionsService = require('../services/subscriptions.service');
 const { supabaseAdmin } = require('../config/database');
@@ -23,6 +24,7 @@ async function getMobileMoneyOptions(req, res) {
       currency: c.currency,
       operators: c.operators,
       requiresNetwork: !!c.requiresNetwork,
+      directCharge: c.directCharge !== false,
     })),
   });
 }
@@ -185,7 +187,52 @@ async function chargeMobileMoney(req, res) {
       return res.status(500).json({ success: false, error: 'Impossible de créer le paiement' });
     }
 
-    // Fire the Direct Charge
+    // ── Two paths depending on whether Flutterwave exposes Direct Charge ──
+    if (cfg.directCharge === false) {
+      // Standard hosted checkout (Cameroun). We still want the user to stay
+      // in-app so we return a paymentLink the client opens in a WebView.
+      let hosted;
+      try {
+        hosted = await flutterwaveService.initiateCheckout({
+          amount: intentInfo.cadAmount, // initiateCheckout localizes from CAD
+          currency: 'CAD',
+          email: req.user.email,
+          name: fullname,
+          userId,
+          country,
+          txPrefix: 'MMHOST',
+          redirectPath: '/subscription/callback',
+          title: intent === 'content_unlock' ? 'Papyri — Déblocage' : 'Papyri — Abonnement',
+          description: intent === 'content_unlock' ? 'Déblocage contenu' : 'Abonnement Papyri',
+          meta: { user_id: userId, intent, hosted_in_app: true, ...intentInfo.metadata },
+        });
+        // Re-key the payment row to the new tx_ref (initiateCheckout generated its own).
+        await supabaseAdmin
+          .from('payments')
+          .update({
+            provider_payment_id: hosted.reference,
+            metadata: { ...paymentRow.metadata, tx_ref: hosted.reference, hosted: true },
+          })
+          .eq('id', paymentRow.id);
+      } catch (err) {
+        await supabaseAdmin
+          .from('payments')
+          .update({ status: 'failed', failure_reason: err.message })
+          .eq('id', paymentRow.id);
+        return res.status(400).json({ success: false, error: err.message });
+      }
+      return res.status(200).json({
+        success: true,
+        mode: 'hosted',
+        reference: hosted.reference,
+        paymentLink: hosted.link,
+        amount: hosted.amount,
+        currency: hosted.currency,
+        cadAmount: intentInfo.cadAmount,
+      });
+    }
+
+    // Direct Charge path
     let charge;
     try {
       charge = await fwMm.initiateCharge({

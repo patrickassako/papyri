@@ -25,6 +25,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../config/supabase';
 import API_BASE_URL from '../config/api';
@@ -131,6 +132,12 @@ export default function MobileMoneyChargeModal({
       const d = await r.json();
       if (!r.ok || !d?.success) throw new Error(d?.error || 'Échec du paiement');
       setChargeResp(d);
+      // ── Hosted page mode (e.g. Cameroun MoMo): open in WebView, keep polling ──
+      if (d.mode === 'hosted' && d.paymentLink) {
+        setStep(8);
+        setTimeout(() => pollStatus(d.reference, 0), 5000);
+        return;
+      }
       setStep(5);
       // If the gateway gives us a redirect URL (e.g. Wave), open it
       if (d.mode === 'redirect' && d.redirectUrl) {
@@ -275,6 +282,40 @@ export default function MobileMoneyChargeModal({
                 </Text>
               </View>
             </>
+          )}
+
+          {/* Step 8 — hosted WebView (Cameroun MoMo etc.) */}
+          {step === 8 && chargeResp?.paymentLink && (
+            <View style={{ height: '85%', backgroundColor: '#fff' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.card }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>
+                  {t('mmModal.hostedTitle', 'Paiement Flutterwave')}
+                </Text>
+                <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+                  <MaterialCommunityIcons name="close" size={22} color={C.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <WebView
+                source={{ uri: chargeResp.paymentLink }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                startInLoadingState
+                onNavigationStateChange={(navState) => {
+                  // Flutterwave appends ?status=successful (or cancelled / failed)
+                  // when redirecting back. Intercept and short-circuit.
+                  const url = navState.url || '';
+                  if (url.includes('status=successful') || url.includes('status=completed')) {
+                    setStep(5); // show "checking" while we wait for the webhook + poll
+                    return;
+                  }
+                  if (url.includes('status=cancelled') || url.includes('status=failed')) {
+                    setStatusMessage(t('mmModal.userCancelled', 'Paiement annulé.'));
+                    setStep(7);
+                  }
+                }}
+              />
+            </View>
           )}
 
           {/* Step 5 — polling */}
