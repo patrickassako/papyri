@@ -21,6 +21,7 @@ import { subscriptionService } from '../services/subscription.service';
 import { paymentService } from '../services/payment.service';
 import { useStripe } from '@stripe/stripe-react-native';
 import OwnerProfileGuard from '../components/OwnerProfileGuard';
+import MobileMoneyChargeModal from '../components/MobileMoneyChargeModal';
 
 const tokens = require('../config/tokens');
 const PENDING_KEY = '@papyri_pending_payment';
@@ -182,6 +183,7 @@ function SubscriptionScreenInner({ navigation }) {
   const [promoResult, setPromoResult] = useState(null);
   const [promoError, setPromoError] = useState('');
   const [checkoutBusy, setCheckoutBusy] = useState(''); // provider being loaded
+  const [mmModal, setMmModal] = useState({ open: false, planId: null, planName: null, usersLimit: null });
 
   // Pending payment resume (AppState)
   const appStateRef = useRef(AppState.currentState);
@@ -301,32 +303,15 @@ function SubscriptionScreenInner({ navigation }) {
         return;
       }
 
-      // Flutterwave → keep browser redirect (mobile money not in PaymentSheet).
-      const response = await subscriptionService.checkout({
-        planId: selectedPlan.id,
-        usersLimit: Math.max(profilesCount, Number(selectedPlan.includedUsers || 1)),
-        provider,
-        promoCode: promoResult ? promoCode.trim().toUpperCase() : undefined,
-      });
-
-      if (!response.paymentLink) throw new Error(t('subscription.paymentLinkMissing'));
-
-      const pending = {
-        provider,
-        reference: response.reference || null,
+      // Flutterwave Mobile Money → in-app modal (no browser redirect).
+      setModalVisible(false);
+      setMmModal({
+        open: true,
         planId: selectedPlan.id,
         planName: selectedPlan.name,
-        kind: 'subscription',
-        origin: { screen: 'Subscription', params: {} },
-      };
-      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-
-      setModalVisible(false);
-      setPromoCode('');
-      setPromoResult(null);
-      setPromoError('');
-
-      await Linking.openURL(response.paymentLink);
+        usersLimit: Math.max(profilesCount, Number(selectedPlan.includedUsers || 1)),
+      });
+      return;
     } catch (err) {
       setError(err.message || t('subscription.paymentRetry'));
     } finally {
@@ -626,6 +611,21 @@ function SubscriptionScreenInner({ navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <MobileMoneyChargeModal
+        visible={mmModal.open}
+        onClose={() => setMmModal({ open: false })}
+        onSuccess={async () => {
+          setMmModal({ open: false });
+          setPromoCode('');
+          setPromoResult(null);
+          setPromoError('');
+          await load();
+        }}
+        intent="subscription"
+        payload={{ planId: mmModal.planId, usersLimit: mmModal.usersLimit }}
+        defaultFullname=""
+      />
     </SafeAreaView>
   );
 }

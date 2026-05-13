@@ -42,6 +42,7 @@ import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import papyriLogo from '../assets/papyri-wordmark-150x50.png';
 import { useCurrency } from '../hooks/useCurrency';
 import { formatMinorUnits } from '../services/currency.service';
+import MobileMoneyChargeDialog from '../components/MobileMoneyChargeDialog';
 
 const primary = '#f4a825';
 const background = '#f8f7f5';
@@ -341,6 +342,7 @@ export default function PricingPage() {
   const showSnack = (message, severity = 'info') => setSnack({ open: true, message, severity });
   // Payment method dialog state
   const [paymentDialog, setPaymentDialog] = useState({ open: false, plan: null, membersCount: null, providerBusy: '' });
+  const [mmDialog, setMmDialog] = useState({ open: false, planId: null, usersLimit: null });
   const closePaymentDialog = () => {
     if (paymentDialog.providerBusy) return; // prevent close while loading
     setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
@@ -541,6 +543,12 @@ export default function PricingPage() {
   // Called when user picks a payment provider in the dialog
   const doCheckout = async (provider) => {
     const { plan, membersCount } = paymentDialog;
+    // Flutterwave Mobile Money → in-app dialog (no redirect)
+    if (provider === 'flutterwave') {
+      setPaymentDialog({ open: false, plan: null, membersCount: null, providerBusy: '' });
+      setMmDialog({ open: true, planId: plan.id, usersLimit: membersCount });
+      return;
+    }
     setPaymentDialog((d) => ({ ...d, providerBusy: provider }));
     setLoadingCheckoutSlug(plan.slug);
     try {
@@ -556,6 +564,10 @@ export default function PricingPage() {
       setPromoError('');
       if (response.paymentLink) {
         window.location.href = response.paymentLink;
+        return;
+      }
+      if (response.sessionUrl) {
+        window.location.href = response.sessionUrl;
         return;
       }
       showSnack(t('pricing.paymentLinkUnavailable'), 'warning');
@@ -993,6 +1005,20 @@ export default function PricingPage() {
           {snack.message}
         </Alert>
       </Snackbar>
+
+      <MobileMoneyChargeDialog
+        open={mmDialog.open}
+        onClose={() => setMmDialog({ open: false })}
+        onSuccess={() => {
+          setMmDialog({ open: false });
+          setPromoCode('');
+          setPromoResult(null);
+          setPromoError('');
+          navigate('/subscription');
+        }}
+        intent="subscription"
+        payload={{ planId: mmDialog.planId, usersLimit: mmDialog.usersLimit }}
+      />
     </Box>
   );
 }

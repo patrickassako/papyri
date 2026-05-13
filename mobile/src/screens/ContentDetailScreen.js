@@ -35,6 +35,7 @@ import {
   formatBytes,
 } from '../services/offline.service';
 import { readingService } from '../services/reading.service';
+import MobileMoneyChargeModal from '../components/MobileMoneyChargeModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_WIDTH = Math.min(SCREEN_WIDTH * 0.58, 260);
@@ -96,6 +97,7 @@ export default function ContentDetailScreen({ route, navigation }) {
 
   // Modal de choix : crédit / Stripe / Flutterwave
   const [paymentModal, setPaymentModal] = useState({ open: false, busy: '' });
+  const [mmModal, setMmModal] = useState({ open: false });
 
   // Détecter la devise de l'utilisateur au montage (ipapi.co → fuseau → locale → EUR)
   useEffect(() => {
@@ -455,37 +457,10 @@ export default function ContentDetailScreen({ route, navigation }) {
         return;
       }
 
-      // Flutterwave → browser redirect (mobile money not supported by PaymentSheet)
-      const result = await contentsService.unlockContent(content.id || contentId, {
-        provider,
-        useCredit: false,
-      });
-      if (result?.paymentRequired) {
-        const paymentLink = result?.data?.payment?.payment_link;
-        if (paymentLink) {
-          // Remember the pending payment so the AppState listener can verify
-          // it when the user comes back, even if the deep link redirect fails.
-          const reference = result?.data?.payment?.reference || result?.data?.reference || null;
-          try {
-            await AsyncStorage.setItem('@papyri_pending_payment', JSON.stringify({
-              provider,
-              reference,
-              tx_ref: reference,
-              transaction_id: reference,
-              contentId: content.id || contentId,
-              kind: 'content_unlock',
-              origin: { screen: 'ContentDetail', params: { contentId: content.id || contentId } },
-            }));
-          } catch (_) {}
-          setPaymentModal({ open: false, busy: '' });
-          await Linking.openURL(paymentLink);
-        } else {
-          throw new Error(t('contentDetail.paymentLinkUnavailable'));
-        }
-      } else if (result?.success) {
-        setPaymentModal({ open: false, busy: '' });
-        await refreshAccessAndUsage();
-      }
+      // Flutterwave Mobile Money → in-app modal (no browser redirect)
+      setPaymentModal({ open: false, busy: '' });
+      setMmModal({ open: true });
+      return;
     } catch (err) {
       setPaymentModal((s) => ({ ...s, busy: '' }));
       Alert.alert(t('contentDetail.paymentError'), err?.message || t('contentDetail.paymentInitFailed'));
@@ -1277,6 +1252,18 @@ export default function ContentDetailScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
+
+      <MobileMoneyChargeModal
+        visible={mmModal.open}
+        onClose={() => setMmModal({ open: false })}
+        onSuccess={async () => {
+          setMmModal({ open: false });
+          await refreshAccessAndUsage();
+        }}
+        intent="content_unlock"
+        payload={{ contentId: content?.id || contentId }}
+        defaultFullname=""
+      />
     </SafeAreaView>
   );
 }

@@ -37,6 +37,7 @@ import PublicHeader from '../components/PublicHeader';
 import CurrencyFloatingSelector from '../components/CurrencyFloatingSelector';
 import { useCurrency } from '../hooks/useCurrency';
 import { useTranslation } from 'react-i18next';
+import MobileMoneyChargeDialog from '../components/MobileMoneyChargeDialog';
 
 function formatDuration(seconds) {
   if (!seconds || Number.isNaN(Number(seconds))) return '-';
@@ -103,6 +104,7 @@ export default function ContentDetailPage() {
   const [accessActionError, setAccessActionError] = useState('');
   const [callbackNotice, setCallbackNotice] = useState('');
   const [paymentDialog, setPaymentDialog] = useState({ open: false, providerBusy: '' });
+  const [mmDialog, setMmDialog] = useState({ open: false });
   const [availableCredits, setAvailableCredits] = useState(0);
   const [creditsLifetime, setCreditsLifetime] = useState(false);
   const [lockLostNoticeOpen, setLockLostNoticeOpen] = useState(false);
@@ -403,6 +405,12 @@ export default function ContentDetailPage() {
   }, [scenario, isPaidBook, isAudiobook, inEbookList, t]);
 
   const doUnlock = async (provider, options = {}) => {
+    // Flutterwave Mobile Money → in-app dialog (no redirect)
+    if (provider === 'flutterwave') {
+      setPaymentDialog({ open: false, providerBusy: '' });
+      setMmDialog({ open: true });
+      return;
+    }
     setAccessActionLoading(true);
     try {
       const result = await contentsService.unlockContent(id, { provider, ...options });
@@ -412,6 +420,11 @@ export default function ContentDetailPage() {
         if (paymentLink) {
           setPaymentDialog({ open: false, providerBusy: '' });
           window.location.href = paymentLink;
+          return;
+        }
+        if (result?.data?.payment?.sessionUrl) {
+          setPaymentDialog({ open: false, providerBusy: '' });
+          window.location.href = result.data.payment.sessionUrl;
           return;
         }
         throw new Error(t('content.paymentLinkUnavailable'));
@@ -1334,6 +1347,17 @@ export default function ContentDetailPage() {
           </Typography>
         </Container>
       </Box>
+
+      <MobileMoneyChargeDialog
+        open={mmDialog.open}
+        onClose={() => setMmDialog({ open: false })}
+        onSuccess={() => {
+          setMmDialog({ open: false });
+          setAccessInfo((prev) => ({ ...(prev || {}), unlocked: true, can_read: true }));
+        }}
+        intent="content_unlock"
+        payload={{ contentId: id }}
+      />
     </Box>
   );
 }
