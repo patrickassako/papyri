@@ -6,8 +6,13 @@ const router = express.Router();
 const ctrl = require('../controllers/payments.controller');
 const { authenticate } = require('../middleware/auth');
 
+const { requirePermission } = require('../middleware/auth');
+
 // Public catalogue (no auth needed)
 router.get('/mobile-money/options', ctrl.getMobileMoneyOptions);
+
+// Admin — list all transactions
+router.get('/admin/list', authenticate, requirePermission('subscriptions.read'), ctrl.adminListPayments);
 
 // Initiate + poll (auth required)
 router.post('/mobile-money/charge', authenticate, ctrl.chargeMobileMoney);

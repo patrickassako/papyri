@@ -399,9 +399,67 @@ async function cancelPayment(req, res) {
   }
 }
 
+// ── GET /api/admin/payments ──────────────────────────────────────────────
+// List all payments with filters + pagination + stats.
+async function adminListPayments(req, res) {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit  = Math.min(100, Math.max(5, parseInt(req.query.limit || '25', 10)));
+    const status = req.query.status || null;
+    const provider = req.query.provider || null;
+    const method = req.query.method || null;
+    const search = (req.query.search || '').trim();
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+
+    let q = supabaseAdmin
+      .from('payments')
+      .select('id, user_id, subscription_id, amount, currency, status, provider, provider_payment_id, payment_method, metadata, paid_at, created_at, failure_reason, profiles:user_id(email, full_name)', { count: 'exact' })
+      .order('created_at', { ascending: false });
+
+    if (status)   q = q.eq('status', status);
+    if (provider) q = q.eq('provider', provider);
+    if (method)   q = q.eq('payment_method', method);
+    if (from)     q = q.gte('created_at', from);
+    if (to)       q = q.lte('created_at', to);
+    if (search) {
+      // match by provider_payment_id (tx_ref) prefix — full uuid lookup is fine too
+      q = q.or(`provider_payment_id.ilike.%${search}%`);
+    }
+
+    const offset = (page - 1) * limit;
+    q = q.range(offset, offset + limit - 1);
+
+    const { data: payments, error, count } = await q;
+    if (error) return res.status(500).json({ success: false, error: error.message });
+
+    // Stats: count by status (independent of pagination)
+    const { data: statsRows } = await supabaseAdmin
+      .from('payments')
+      .select('status, amount, currency');
+    const stats = { total: 0, totalCadAmount: 0, byStatus: {} };
+    for (const p of statsRows || []) {
+      stats.total++;
+      if (p.status === 'succeeded') stats.totalCadAmount += Number(p.amount || 0);
+      stats.byStatus[p.status] = (stats.byStatus[p.status] || 0) + 1;
+    }
+
+    return res.status(200).json({
+      success: true,
+      payments: payments || [],
+      pagination: { page, limit, total: count || 0, pages: Math.ceil((count || 0) / limit) },
+      stats,
+    });
+  } catch (err) {
+    console.error('[adminListPayments] error', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 module.exports = {
   getMobileMoneyOptions,
   chargeMobileMoney,
   getPaymentStatus,
   cancelPayment,
+  adminListPayments,
 };

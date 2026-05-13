@@ -8,6 +8,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
@@ -56,9 +57,10 @@ const SECTIONS = [
   {
     title: 'Monétisation',
     items: [
-      { label: 'Abonnements', icon: CreditCardOutlinedIcon, route: '/admin/subscriptions',      permission: 'subscriptions.read' },
-      { label: 'Codes promo', icon: LocalOfferOutlinedIcon, route: '/admin/promo-codes',        permission: 'promo_codes.read' },
-      { label: 'Revenus',     icon: TrendingUpIcon,         route: '/admin/analytics/revenue',  permission: 'analytics.read' },
+      { label: 'Abonnements',  icon: CreditCardOutlinedIcon,  route: '/admin/subscriptions',      permission: 'subscriptions.read' },
+      { label: 'Transactions', icon: ReceiptLongOutlinedIcon, route: '/admin/transactions',       permission: 'subscriptions.read' },
+      { label: 'Codes promo',  icon: LocalOfferOutlinedIcon,  route: '/admin/promo-codes',        permission: 'promo_codes.read' },
+      { label: 'Revenus',      icon: TrendingUpIcon,          route: '/admin/analytics/revenue',  permission: 'analytics.read' },
     ],
   },
   {
