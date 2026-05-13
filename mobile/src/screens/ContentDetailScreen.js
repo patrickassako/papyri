@@ -474,6 +474,7 @@ export default function ContentDetailScreen({ route, navigation }) {
               transaction_id: reference,
               contentId: content.id || contentId,
               kind: 'content_unlock',
+              origin: { screen: 'ContentDetail', params: { contentId: content.id || contentId } },
             }));
           } catch (_) {}
           setPaymentModal({ open: false, busy: '' });

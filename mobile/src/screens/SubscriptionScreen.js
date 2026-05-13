@@ -316,6 +316,8 @@ function SubscriptionScreenInner({ navigation }) {
         reference: response.reference || null,
         planId: selectedPlan.id,
         planName: selectedPlan.name,
+        kind: 'subscription',
+        origin: { screen: 'Subscription', params: {} },
       };
       await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(pending));
 

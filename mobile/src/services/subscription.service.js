@@ -274,6 +274,12 @@ export const subscriptionService = {
     }, 30000);
 
     const data = await response.json().catch(() => ({}));
+    // Mobile Money LIVE: Flutterwave returns success=false + status='pending'
+    // while the user confirms by USSD. We pass that through so the callback
+    // screen can poll instead of erroring out.
+    if (data?.status === 'pending') {
+      return { ...data, success: false };
+    }
     if (!response.ok || !data?.success) {
       throw new Error(data?.message || data?.error || 'Vérification échouée.');
     }

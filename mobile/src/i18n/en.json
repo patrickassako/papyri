@@ -71,7 +71,11 @@
     "back": "Back",
     "missingSession": "session_id missing",
     "missingParams": "Payment parameters missing",
-    "verifyFailed": "Verification failed."
+    "verifyFailed": "Verification failed.",
+    "ussdTitle": "Confirm on your phone",
+    "ussdBody": "Dial the USSD code you received by SMS and validate with your Mobile Money PIN. The payment will confirm automatically.",
+    "ussdPolling": "Checking…",
+    "ussdTimeout": "Payment is still processing. You will be notified upon confirmation."
   },
   "legal": {
     "title": "Legal",
@@ -416,7 +420,7 @@
     "premiumCatalog": "Premium catalog",
     "unlimited": "Unlimited",
     "paidBooksDiscount": "Discount on paid books",
-    "creditHintLifetime": "Each used credit grants lifetime access to the chosen book.",
+    "creditHintLifetime": "Each used credit grants access to one book.",
     "creditHintBound": "Each used credit grants access to the book while your subscription is active.",
     "changePlan": "Change plan",
     "choosePlan": "Choose a plan",
@@ -544,7 +548,7 @@
     "skip": "Skip",
     "getStarted": "Get started",
     "slide1Title": "Welcome to Papyri",
-    "slide1Text": "The African digital library. Thousands of works at your fingertips.",
+    "slide1Text": "The digital library dedicated to history. Thousands of works at your fingertips.",
     "slide2Title": "Read & Listen",
     "slide2Text": "Quality e-books and audiobooks, wherever you are.",
     "slide3Title": "Even offline",
