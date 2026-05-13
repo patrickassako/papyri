@@ -27,6 +27,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
 import { authFetch } from '../services/auth.service';
+import { useTranslation } from 'react-i18next';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL_MS = 5000;
@@ -35,6 +36,7 @@ const POLL_MAX_ATTEMPTS = 24;
 export default function MobileMoneyChargeDialog({
   open, onClose, onSuccess, intent, payload = {}, defaultFullname = '',
 }) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [countries, setCountries] = useState([]);
   const [country, setCountry] = useState(null);
@@ -75,8 +77,8 @@ export default function MobileMoneyChargeDialog({
   }
 
   async function submitCharge() {
-    if (!fullname.trim()) { setError('Nom complet requis'); return; }
-    if (!phone.trim()) { setError('Numéro requis'); return; }
+    if (!fullname.trim()) { setError(t('mmModal.errFullname')); return; }
+    if (!phone.trim()) { setError(t('mmModal.errPhone')); return; }
     setError(''); setBusy(true);
     try {
       const body = {
@@ -96,7 +98,7 @@ export default function MobileMoneyChargeDialog({
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      if (!r.ok || !d?.success) throw new Error(d?.error || 'Échec du paiement');
+      if (!r.ok || !d?.success) throw new Error(d?.error || t('mmModal.errPay'));
       setChargeResp(d);
       // Hosted page mode (e.g. Cameroun MoMo): full redirect.
       if (d.mode === 'hosted' && d.paymentLink) {
@@ -109,7 +111,7 @@ export default function MobileMoneyChargeDialog({
       }
       setTimeout(() => pollStatus(d.reference, 0), 4000);
     } catch (e) {
-      setError(e.message || 'Erreur');
+      setError(e.message || t('mmModal.errPay'));
     } finally { setBusy(false); }
   }
 
@@ -139,7 +141,7 @@ export default function MobileMoneyChargeDialog({
         setStep(7); return;
       }
       if (attempt + 1 >= POLL_MAX_ATTEMPTS) {
-        setStatusMessage('Le paiement est toujours en cours. Vous serez notifié dès la confirmation.');
+        setStatusMessage(t('mmModal.timeoutBody'));
         setStep(7); return;
       }
       setPollAttempt(attempt + 1);
@@ -161,12 +163,12 @@ export default function MobileMoneyChargeDialog({
             </IconButton>
           )}
           <Typography variant="subtitle1" fontWeight={800}>
-            {step === 1 && 'Choisissez votre pays'}
-            {step === 2 && 'Choisissez votre opérateur'}
-            {step === 3 && 'Vos informations'}
-            {step === 5 && 'Confirmez sur votre téléphone'}
-            {step === 6 && 'Paiement confirmé'}
-            {step === 7 && 'Paiement non confirmé'}
+            {step === 1 && t('mmModal.country')}
+            {step === 2 && t('mmModal.operator')}
+            {step === 3 && t('mmModal.info')}
+            {step === 5 && t('mmModal.waitingTitle')}
+            {step === 6 && t('mmModal.successTitle')}
+            {step === 7 && t('mmModal.failedTitle')}
           </Typography>
         </Box>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
@@ -200,10 +202,10 @@ export default function MobileMoneyChargeDialog({
             <Typography variant="caption" color="text.secondary">
               {country.label}{operator ? ` · ${operator.label}` : ''}
             </Typography>
-            <TextField label="Nom complet" value={fullname} onChange={(e) => setFullname(e.target.value)}
+            <TextField label={t('mmModal.fullname')} value={fullname} onChange={(e) => setFullname(e.target.value)}
               size="small" fullWidth />
             <TextField
-              label="Numéro de téléphone"
+              label={t('mmModal.phone')}
               value={phone} onChange={(e) => setPhone(e.target.value)}
               size="small" fullWidth
               InputProps={{ startAdornment: <Box sx={{ pr: 1, color: 'text.secondary', fontWeight: 700 }}>+{country.dialingCode}</Box> }}
@@ -211,10 +213,10 @@ export default function MobileMoneyChargeDialog({
             />
             {error && <Alert severity="error">{error}</Alert>}
             <Button variant="contained" onClick={submitCharge} disabled={busy} sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, py: 1.2 }}>
-              {busy ? <CircularProgress size={20} color="inherit" /> : 'Payer maintenant'}
+              {busy ? <CircularProgress size={20} color="inherit" /> : t('mmModal.pay')}
             </Button>
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-              Vous serez débité directement via votre opérateur. Aucune carte requise.
+              {t('mmModal.noteSecure')}
             </Typography>
           </Box>
         )}
@@ -223,11 +225,10 @@ export default function MobileMoneyChargeDialog({
           <Box sx={{ p: 4, textAlign: 'center' }}>
             <PhoneIphoneIcon sx={{ fontSize: 56, color: 'primary.main' }} />
             <Typography variant="h6" fontWeight={800} sx={{ mt: 1 }}>
-              Confirmez sur votre téléphone
+              {t('mmModal.waitingTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-              {chargeResp?.instructions ||
-                'Un code USSD vient d\'être envoyé sur votre téléphone. Validez avec votre code PIN Mobile Money pour finaliser le paiement.'}
+              {chargeResp?.instructions || t('mmModal.waitingBody')}
             </Typography>
             {chargeResp?.ussdCode && (
               <Typography variant="h4" color="primary" fontWeight={800} sx={{ my: 1 }}>
@@ -237,7 +238,7 @@ export default function MobileMoneyChargeDialog({
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1, mt: 2 }}>
               <CircularProgress size={16} />
               <Typography variant="caption" color="text.secondary">
-                Vérification… {pollAttempt}/{POLL_MAX_ATTEMPTS}
+                {t('mmModal.checking')} {pollAttempt}/{POLL_MAX_ATTEMPTS}
               </Typography>
             </Box>
             {chargeResp?.amount && chargeResp?.currency && (
@@ -246,7 +247,7 @@ export default function MobileMoneyChargeDialog({
               </Typography>
             )}
             <Button onClick={cancelCurrentCharge} sx={{ mt: 3, textTransform: 'none' }} color="inherit">
-              Annuler le paiement
+              {t('mmModal.cancel')}
             </Button>
           </Box>
         )}
@@ -255,10 +256,10 @@ export default function MobileMoneyChargeDialog({
           <Box sx={{ p: 4, textAlign: 'center' }}>
             <CheckCircleIcon sx={{ fontSize: 72, color: 'success.main' }} />
             <Typography variant="h6" fontWeight={800} sx={{ mt: 1, color: 'success.main' }}>
-              Paiement confirmé !
+              {t('mmModal.successTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Votre achat est validé.
+              {t('mmModal.successBody')}
             </Typography>
           </Box>
         )}
@@ -267,13 +268,13 @@ export default function MobileMoneyChargeDialog({
           <Box sx={{ p: 4, textAlign: 'center' }}>
             <ErrorOutlineIcon sx={{ fontSize: 64, color: 'error.main' }} />
             <Typography variant="h6" fontWeight={800} sx={{ mt: 1, color: 'error.main' }}>
-              Paiement non confirmé
+              {t('mmModal.failedTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-              {statusMessage || 'Nous n\'avons pas pu confirmer votre paiement. Réessayez ou choisissez un autre moyen.'}
+              {statusMessage || t('mmModal.failedBody')}
             </Typography>
             <Button onClick={() => setStep(3)} variant="outlined" sx={{ borderRadius: 2, textTransform: 'none' }}>
-              Réessayer
+              {t('mmModal.retry')}
             </Button>
           </Box>
         )}
@@ -281,7 +282,7 @@ export default function MobileMoneyChargeDialog({
 
       {(step === 6 || step === 7) && (
         <DialogActions>
-          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Fermer</Button>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>{t('mmModal.close')}</Button>
         </DialogActions>
       )}
     </Dialog>
