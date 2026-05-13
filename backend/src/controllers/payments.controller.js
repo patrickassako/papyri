@@ -367,8 +367,41 @@ async function getPaymentStatus(req, res) {
   }
 }
 
+// ── POST /api/payments/:reference/cancel ─────────────────────────────────
+async function cancelPayment(req, res) {
+  try {
+    const userId = req.user.id;
+    const { reference } = req.params;
+    if (!reference) return res.status(400).json({ success: false, error: 'reference requise' });
+
+    const { data: payment, error } = await supabaseAdmin
+      .from('payments')
+      .select('id, status')
+      .eq('provider_payment_id', reference)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error || !payment) return res.status(404).json({ success: false, error: 'Paiement introuvable' });
+
+    if (payment.status !== 'pending') {
+      // Already finalised — nothing to cancel.
+      return res.status(200).json({ success: true, status: payment.status, alreadyFinal: true });
+    }
+
+    await supabaseAdmin
+      .from('payments')
+      .update({ status: 'failed', failure_reason: 'user_cancelled' })
+      .eq('id', payment.id)
+      .eq('status', 'pending'); // atomic guard against webhook race
+    return res.status(200).json({ success: true, status: 'cancelled' });
+  } catch (err) {
+    console.error('[mm.cancel] error', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 module.exports = {
   getMobileMoneyOptions,
   chargeMobileMoney,
   getPaymentStatus,
+  cancelPayment,
 };

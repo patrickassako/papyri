@@ -30,7 +30,7 @@ import { authFetch } from '../services/auth.service';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL_MS = 5000;
-const POLL_MAX_ATTEMPTS = 36;
+const POLL_MAX_ATTEMPTS = 24;
 
 export default function MobileMoneyChargeDialog({
   open, onClose, onSuccess, intent, payload = {}, defaultFullname = '',
@@ -111,6 +111,17 @@ export default function MobileMoneyChargeDialog({
     } catch (e) {
       setError(e.message || 'Erreur');
     } finally { setBusy(false); }
+  }
+
+  async function cancelCurrentCharge() {
+    if (pollTimer.current) { clearTimeout(pollTimer.current); pollTimer.current = null; }
+    const reference = chargeResp?.reference;
+    if (reference) {
+      try {
+        await authFetch(`${API}/api/payments/${reference}/cancel`, { method: 'POST' });
+      } catch (_) {}
+    }
+    onClose();
   }
 
   async function pollStatus(reference, attempt) {
@@ -234,6 +245,9 @@ export default function MobileMoneyChargeDialog({
                 {chargeResp.amount} {chargeResp.currency}
               </Typography>
             )}
+            <Button onClick={cancelCurrentCharge} sx={{ mt: 3, textTransform: 'none' }} color="inherit">
+              Annuler le paiement
+            </Button>
           </Box>
         )}
 

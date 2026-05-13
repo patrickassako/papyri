@@ -42,7 +42,7 @@ const C = {
 };
 
 const POLL_INTERVAL_MS = 5000;
-const POLL_MAX_ATTEMPTS = 36; // 3 minutes
+const POLL_MAX_ATTEMPTS = 24; // 2 minutes — assez pour confirmer USSD, pas trop pour les annulations
 
 export default function MobileMoneyChargeModal({
   visible,
@@ -139,6 +139,23 @@ export default function MobileMoneyChargeModal({
     } catch (e) {
       setError(e.message || 'Erreur');
     } finally { setBusy(false); }
+  }
+
+  async function cancelCurrentCharge() {
+    if (pollTimer.current) { clearTimeout(pollTimer.current); pollTimer.current = null; }
+    const reference = chargeResp?.reference;
+    if (reference) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch(`${API_BASE_URL}/api/payments/${reference}/cancel`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          }).catch(() => {});
+        }
+      } catch (_) {}
+    }
+    onClose();
   }
 
   async function pollStatus(reference, attempt) {
@@ -297,6 +314,15 @@ export default function MobileMoneyChargeModal({
                   {chargeResp.amount} {chargeResp.currency}
                 </Text>
               ) : null}
+              <TouchableOpacity
+                style={[styles.cta, { backgroundColor: '#EDE8E2', marginTop: 24, paddingVertical: 12 }]}
+                onPress={cancelCurrentCharge}
+                disabled={busy}
+              >
+                <Text style={[styles.ctaText, { color: C.text }]}>
+                  {t('mmModal.cancel', 'Annuler le paiement')}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
