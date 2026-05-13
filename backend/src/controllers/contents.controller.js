@@ -548,12 +548,15 @@ async function unlockContent(req, res) {
         });
       }
 
+      const { getGeoFromRequest: getUnlockGeo } = require('../services/geo.service');
+      const unlockGeo = getUnlockGeo(req);
       const checkout = await flutterwaveService.initiateCheckout({
         amount: finalPriceCents / 100,
         currency: 'CAD',
         email: req.user.email,
         name: req.user.full_name || req.user.email,
         userId,
+        country: unlockGeo?.country || null,
         txPrefix: 'CNT',
         redirectPath: `/catalogue/${content.id}`,
         redirectBaseUrl,

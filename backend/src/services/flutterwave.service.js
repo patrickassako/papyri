@@ -6,6 +6,7 @@
 const Flutterwave = require('flutterwave-node-v3');
 const crypto = require('crypto');
 const config = require('../config/env');
+const paymentLocale = require('./payment-locale.service');
 
 // Initialize Flutterwave client
 let flw = null;
@@ -52,6 +53,7 @@ async function initiatePayment({
   planName,
   usersLimit,
   userId,
+  country,
   redirectBaseUrl,
   overrideRedirectUrl,
 }) {
@@ -61,6 +63,7 @@ async function initiatePayment({
     email,
     name,
     userId,
+    country,
     redirectBaseUrl,
     overrideRedirectUrl,
     txPrefix: 'SUB',
@@ -85,6 +88,7 @@ async function initiateCheckout({
   email,
   name,
   userId,
+  country, // ISO-3166 country code from geo detection — drives Mobile Money routing
   redirectBaseUrl = config.frontendUrl,
   txPrefix = 'PAY',
   redirectPath = '/subscription/callback',
@@ -100,10 +104,22 @@ async function initiateCheckout({
   }
 
   try {
+    // ── Localize amount + payment_options for African countries ────
+    // The amount we receive is always in CAD (our base currency).
+    // For African countries with Mobile Money, we convert it to the local
+    // currency and tell Flutterwave to show the right MM provider.
+    const localized = await paymentLocale.localizePayment({ cadAmount: amount, country });
+    console.log('[flutterwave] checkout', {
+      country, cadAmount: amount,
+      localAmount: localized.amount, localCurrency: localized.currency,
+      payment_options: localized.payment_options, fxRate: localized.fxRate, source: localized.source,
+    });
+
     const payload = {
       tx_ref: `${txPrefix}-${Date.now()}-${userId.substring(0, 8)}`,
-      amount: amount,
-      currency,
+      amount: localized.amount,
+      currency: localized.currency,
+      payment_options: localized.payment_options,
       redirect_url: overrideRedirectUrl || `${String(redirectBaseUrl || config.frontendUrl).replace(/\/$/, '')}${redirectPath}`,
       customer: {
         email: email,
@@ -116,6 +132,9 @@ async function initiateCheckout({
       },
       meta: {
         user_id: userId,
+        country: country || null,
+        base_cad_amount: Number(amount),
+        fx_rate: localized.fxRate,
         ...meta,
       },
     };
@@ -135,6 +154,9 @@ async function initiateCheckout({
       return {
         link: body.data.link,
         reference: payload.tx_ref,
+        currency: localized.currency,
+        amount: localized.amount,
+        country: country || null,
       };
     }
 

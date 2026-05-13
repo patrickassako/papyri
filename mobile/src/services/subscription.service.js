@@ -231,12 +231,24 @@ export const subscriptionService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Non authentifié');
 
+    // Forward the device country code so the backend can route Mobile Money
+    // to the right local-currency provider (XAF/XOF/GHS/KES…).
+    let countryCode = null;
+    try {
+      const locale = Intl.DateTimeFormat().resolvedOptions().locale || '';
+      const parts = locale.split(/[-_]/);
+      if (parts.length > 1) countryCode = parts[parts.length - 1].toUpperCase();
+    } catch (_) {}
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    };
+    if (countryCode && /^[A-Z]{2}$/.test(countryCode)) headers['x-country-code'] = countryCode;
+
     const response = await fetch(`${API_BASE_URL}/api/subscriptions/checkout`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
+      headers,
       body: JSON.stringify({
         planId,
         planCode,

@@ -82,10 +82,12 @@ export const contentsService = {
    * @returns {Promise<Object>}
    */
   async unlockContent(id, { provider, useCredit } = {}) {
+    const geoHeaders = DEVICE_COUNTRY ? { 'X-Country-Code': DEVICE_COUNTRY } : {};
     const response = await authFetch(`${API_BASE_URL}/api/contents/${id}/unlock`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...geoHeaders,
       },
       body: JSON.stringify({
         ...(provider ? { provider } : {}),

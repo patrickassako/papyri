@@ -161,6 +161,16 @@ const TABLE_SCHEMAS = {
     { path: 'invoice_accent_color',  type: 'string' },
     { path: 'invoice_logo_url',      type: 'string' },
     { path: 'invoice_notes',         type: 'textarea' },
+    // FX rates: 1 CAD = X local currency (used by Flutterwave Mobile Money)
+    { path: 'fx_rate_xaf', type: 'number' },
+    { path: 'fx_rate_xof', type: 'number' },
+    { path: 'fx_rate_ghs', type: 'number' },
+    { path: 'fx_rate_kes', type: 'number' },
+    { path: 'fx_rate_tzs', type: 'number' },
+    { path: 'fx_rate_rwf', type: 'number' },
+    { path: 'fx_rate_ugx', type: 'number' },
+    { path: 'fx_rate_zmw', type: 'number' },
+    { path: 'fx_rate_ngn', type: 'number' },
     // Meta
     { path: 'updated_by', type: 'reference', reference: 'profiles', isEditable: false },
     { path: 'updated_at', type: 'datetime',  isEditable: false },

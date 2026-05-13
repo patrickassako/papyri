@@ -256,6 +256,11 @@ async function initiateCheckout(req, res) {
 
     // ---- Flutterwave path ----
     if (resolvedProvider === 'flutterwave') {
+      // Detect user country (via X-Country-Code header or IP geo) so the
+      // checkout can route to Mobile Money in the right currency.
+      const { getGeoFromRequest: getGeo } = require('../services/geo.service');
+      const checkoutGeo = getGeo(req);
+
       const payment = await flutterwaveService.initiatePayment({
         amount: subscription.amount,
         currency: subscription.currency,
@@ -265,6 +270,7 @@ async function initiateCheckout(req, res) {
         planName: plan.name,
         usersLimit: subscription.users_limit,
         userId,
+        country: checkoutGeo?.country || null,
         redirectBaseUrl,
         overrideRedirectUrl: mobileCallbackBase,
       });
@@ -878,6 +884,9 @@ async function initiateRenewalCheckout(req, res) {
       ? requestOrigin
       : undefined;
 
+    const { getGeoFromRequest: getRenewGeo } = require('../services/geo.service');
+    const renewGeo = getRenewGeo(req);
+
     const payment = await flutterwaveService.initiatePayment({
       amount: pricing.amount,
       currency: pricing.currency,
@@ -887,6 +896,7 @@ async function initiateRenewalCheckout(req, res) {
       planName: pricing.plan.name,
       usersLimit: subscription.users_limit,
       userId,
+      country: renewGeo?.country || null,
       redirectBaseUrl,
     });
 
@@ -1689,12 +1699,15 @@ async function buyExtraSeat(req, res) {
     if (!flutterwaveService.isConfigured()) {
       return res.status(503).json({ success: false, error: 'FLUTTERWAVE_NOT_CONFIGURED', message: 'Flutterwave is not configured.' });
     }
+    const { getGeoFromRequest: getSeatGeo } = require('../services/geo.service');
+    const seatGeo = getSeatGeo(req);
     const payment = await flutterwaveService.initiateCheckout({
       amount: extraUserPriceCents / 100,
       currency: subscription.currency,
       email: payerEmail,
       name: payerName,
       userId,
+      country: seatGeo?.country || null,
       redirectBaseUrl,
       txPrefix: 'SEAT',
       redirectPath: '/subscription/callback',
