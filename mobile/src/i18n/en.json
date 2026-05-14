@@ -548,15 +548,10 @@
     "wrongPin": "Wrong PIN",
     "continueAs": "Continue as {{name}}"
   },
-  "history": {
-    "title": "History",
+  "historyLegacy": {
     "empty": "Your reading history is empty",
     "emptyDesc": "Books and audiobooks you read will appear here",
-    "completed": "Completed",
-    "inProgress": "In progress",
-    "startExploring": "Explore catalog",
-    "progress": "{{percent}}% completed",
-    "lastRead": "Last read"
+    "startExploring": "Explore catalog"
   },
   "downloads": {
     "title": "Downloads",
@@ -726,6 +721,10 @@
   },
   "history": {
     "title": "My History",
+    "completed": "Completed",
+    "inProgress": "In progress",
+    "progress": "{{percent}}% completed",
+    "lastRead": "Last read",
     "subtitleEmpty": "Your recent reads and listens",
     "subtitleCountOne": "{{n}} title read",
     "subtitleCountMany": "{{n}} titles read",

@@ -548,15 +548,10 @@
     "wrongPin": "PIN incorrect",
     "continueAs": "Continuer en tant que {{name}}"
   },
-  "history": {
-    "title": "Historique",
+  "historyLegacy": {
     "empty": "Votre historique de lecture est vide",
     "emptyDesc": "Les livres et audiobooks que vous lisez apparaîtront ici",
-    "completed": "Terminé",
-    "inProgress": "En cours",
-    "startExploring": "Explorer le catalogue",
-    "progress": "{{percent}}% terminé",
-    "lastRead": "Dernière lecture"
+    "startExploring": "Explorer le catalogue"
   },
   "downloads": {
     "title": "Téléchargements",
@@ -726,6 +721,10 @@
   },
   "history": {
     "title": "Mon Historique",
+    "completed": "Terminé",
+    "inProgress": "En cours",
+    "progress": "{{percent}}% terminé",
+    "lastRead": "Dernière lecture",
     "subtitleEmpty": "Vos lectures et écoutes récentes",
     "subtitleCountOne": "{{n}} contenu lu",
     "subtitleCountMany": "{{n}} contenus lus",
