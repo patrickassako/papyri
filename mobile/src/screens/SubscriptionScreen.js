@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,7 +8,6 @@ import {
   Modal,
   TextInput,
   Linking,
-  AppState,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
@@ -185,9 +184,6 @@ function SubscriptionScreenInner({ navigation }) {
   const [checkoutBusy, setCheckoutBusy] = useState(''); // provider being loaded
   const [mmModal, setMmModal] = useState({ open: false, planId: null, planName: null, usersLimit: null });
 
-  // Pending payment resume (AppState)
-  const appStateRef = useRef(AppState.currentState);
-  const pendingPaymentRef = useRef(null);
 
   /* ── Data loading ── */
   const load = useCallback(async () => {
@@ -219,26 +215,15 @@ function SubscriptionScreenInner({ navigation }) {
     load();
   }, [load]);
 
-  /* ── AppState: detect return from browser → navigate to callback screen ── */
+  /* ── Cleanup stale pending-payment keys ─────────────────────────────
+   * The legacy browser-redirect flow wrote PENDING_KEY before opening
+   * Flutterwave, and an AppState listener here resumed verification on
+   * return. The in-app MobileMoneyChargeModal now owns the full flow,
+   * so any leftover key is stale and must be cleared.
+   */
   useEffect(() => {
-    const sub = AppState.addEventListener('change', async (nextState) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
-
-      // App came back to foreground from background/inactive
-      if (nextState === 'active' && (prev === 'background' || prev === 'inactive')) {
-        try {
-          const raw = await AsyncStorage.getItem(PENDING_KEY);
-          if (!raw) return;
-          const pending = JSON.parse(raw);
-          pendingPaymentRef.current = pending;
-          // Navigate to callback screen which will verify + show result
-          navigation.navigate('PaymentCallback', pending);
-        } catch (_) {}
-      }
-    });
-    return () => sub.remove();
-  }, [navigation]);
+    AsyncStorage.removeItem(PENDING_KEY).catch(() => {});
+  }, []);
 
   /* ── Promo validation ── */
   const handleValidatePromo = async () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,7 +10,6 @@ import {
   Linking,
   Share,
   Modal,
-  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text, ActivityIndicator, ProgressBar } from 'react-native-paper';
@@ -320,32 +319,17 @@ export default function ContentDetailScreen({ route, navigation }) {
     }
   };
 
-  /* ── AppState: detect return from Flutterwave browser checkout ──
-   * If a pending content_unlock payment exists, hop to PaymentCallback which
-   * runs verify-payment + redirects back to this screen on success. Also fires
-   * if the OS swallowed the deep-link redirect for any reason.
+  /* ── Cleanup stale pending-payment keys ─────────────────────────────
+   * Previous versions used a browser redirect flow that wrote
+   * @papyri_pending_payment before opening Flutterwave, and an AppState
+   * listener here re-opened PaymentCallback on return-to-foreground.
+   * The new in-app modal (MobileMoneyChargeModal) handles the full
+   * payment lifecycle itself, so any leftover key in AsyncStorage is
+   * stale and must be cleared to avoid spurious verification attempts.
    */
-  const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', async (nextState) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
-      if (nextState !== 'active' || (prev !== 'background' && prev !== 'inactive')) return;
-      try {
-        const raw = await AsyncStorage.getItem('@papyri_pending_payment');
-        if (!raw) return;
-        const pending = JSON.parse(raw);
-        if (pending?.kind !== 'content_unlock') return;
-        navigation.navigate('PaymentCallback', {
-          provider: pending.provider,
-          tx_ref: pending.tx_ref,
-          transaction_id: pending.transaction_id,
-          status: 'successful',
-        });
-      } catch (_) {}
-    });
-    return () => sub.remove();
-  }, [navigation]);
+    AsyncStorage.removeItem('@papyri_pending_payment').catch(() => {});
+  }, []);
 
   const handleUnlockedAction = () => {
     if (isAudiobook) {
