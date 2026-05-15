@@ -136,9 +136,17 @@ export async function logout() {
     await revokePushToken();
   } catch (_) {}
 
-  // Clear family profile so a stale X-Profile-Id isn't sent after re-login
+  // Wipe every account-scoped key from AsyncStorage so the next account
+  // (or a fresh signup) doesn't inherit the previous user's state:
+  //  - @papyri_active_profile : family profile → stale X-Profile-Id header
+  //  - @papyri_pending_payment: a half-finished checkout from the old user
+  //  - onboarding_complete    : would skip onboarding for the new account
   try {
-    await AsyncStorage.removeItem('@papyri_active_profile');
+    await AsyncStorage.multiRemove([
+      '@papyri_active_profile',
+      '@papyri_pending_payment',
+      'onboarding_complete',
+    ]);
   } catch (_) {}
 
   const { error } = await supabase.auth.signOut();

@@ -7,9 +7,10 @@ import TrackPlayer, {
   usePlaybackState,
   useTrackPlayerEvents,
 } from 'react-native-track-player';
-import { AppState } from 'react-native';
+import { AppState, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readingService } from '../services/reading.service';
+import { AUTH_LOST_EVENT } from '../services/auth.service';
 import {
   getLocalFilePath,
   getLocalChapterPath,
@@ -440,6 +441,17 @@ export function AudioProvider({ children }) {
       dismiss();
     }
   }, [activeProfile?.id, dismiss]);
+
+  // Tear down the player on logout. The profile-change effect above only
+  // covers family accounts (where activeProfile.id changes); a solo account
+  // has activeProfile=null throughout, so logging out wouldn't trigger it
+  // and the mini-player would keep the previous user's audiobook.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(AUTH_LOST_EVENT, () => {
+      dismiss();
+    });
+    return () => sub.remove();
+  }, [dismiss]);
 
   const movePlaylistItem = useCallback(async (fromIndex, toIndex) => {
     if (toIndex < 0 || toIndex >= playlist.length || fromIndex === toIndex) return;

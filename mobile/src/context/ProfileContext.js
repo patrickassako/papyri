@@ -9,11 +9,13 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import {
   getActiveProfile,
   saveActiveProfile,
   clearActiveProfile,
 } from '../services/family.service';
+import { AUTH_LOST_EVENT } from '../services/auth.service';
 
 const ProfileContext = createContext(null);
 
@@ -26,6 +28,17 @@ export function ProfileProvider({ children }) {
     getActiveProfile()
       .then((profile) => setActiveProfileState(profile || null))
       .finally(() => setProfileLoaded(true));
+  }, []);
+
+  // The provider sits above the navigator, so it survives the navigation
+  // reset that happens on logout. Without this listener the in-memory
+  // activeProfile (name, avatar…) would leak into the next account that
+  // signs in. Reset it whenever the session is lost.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(AUTH_LOST_EVENT, () => {
+      setActiveProfileState(null);
+    });
+    return () => sub.remove();
   }, []);
 
   /**
