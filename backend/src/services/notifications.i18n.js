@@ -25,8 +25,8 @@ const dictionaries = {
       body: () => 'Découvre les nouveautés ajoutées récemment dans Papyri.',
     },
     welcome: {
-      title: () => 'Bienvenue sur Papyri 👋',
-      body: () => 'Explore notre catalogue et trouve ta prochaine lecture.',
+      title: ({ name }) => (name ? `Bienvenue sur Papyri, ${name} 👋` : 'Bienvenue sur Papyri 👋'),
+      body: () => 'Des milliers de livres et audiolivres vous attendent — trouvez votre prochaine lecture dès maintenant.',
     },
     welcome_day1: {
       title: () => 'Prêt à plonger dans un livre ?',
@@ -99,8 +99,8 @@ const dictionaries = {
       body: () => 'Discover the latest titles added to Papyri.',
     },
     welcome: {
-      title: () => 'Welcome to Papyri 👋',
-      body: () => 'Explore the catalog and find your next read.',
+      title: ({ name }) => (name ? `Welcome to Papyri, ${name} 👋` : 'Welcome to Papyri 👋'),
+      body: () => 'Thousands of books and audiobooks are waiting — find your next read right now.',
     },
     welcome_day1: {
       title: () => 'Ready to dive into a book?',

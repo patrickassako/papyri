@@ -540,7 +540,14 @@ async function notifyInactivity(userId) {
 // ── Lifecycle helpers ──────────────────────────────────────────
 
 async function notifyWelcome(userId) {
-  return sendLocalized(userId, 'welcome', {}, NOTIFICATION_TYPES.WELCOME, { screen: 'Home' });
+  // Personalise the welcome with the user's first name.
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
+  const firstName = String(profile?.full_name || '').trim().split(/\s+/)[0] || '';
+  return sendLocalized(userId, 'welcome', { name: firstName }, NOTIFICATION_TYPES.WELCOME, { screen: 'Home' });
 }
 
 async function notifyWelcomeDay1NoSub(userId) {

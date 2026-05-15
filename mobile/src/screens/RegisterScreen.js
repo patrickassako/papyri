@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import LanguageToggle from '../components/LanguageToggle';
 
 export default function RegisterScreen({ navigation }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [fullName, setFullName]           = useState('');
   const [email, setEmail]                 = useState('');
@@ -60,18 +60,34 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
+      // Account language follows the app's active language, not a hardcoded
+      // 'fr'. It drives localized emails and push notifications (welcome…).
+      const lang = String(i18n.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
+      const trimmedName = fullName.trim();
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
           data: {
-            full_name: fullName.trim(),
-            language: 'fr',
+            full_name: trimmedName,
+            language: lang,
           },
         },
       });
 
       if (signUpError) throw signUpError;
+
+      // Persist name + language into the profiles row right away so the
+      // welcome push (fired when the FCM token registers, just after this)
+      // already sees the correct values instead of the trigger defaults.
+      if (data.user) {
+        await supabase.rpc('update_user_profile', {
+          user_id: data.user.id,
+          new_full_name: trimmedName,
+          new_language: lang,
+        }).catch((e) => console.warn('[register] profile update:', e?.message));
+      }
 
       if (data.session) {
         navigation.replace('ProfileSelector');
