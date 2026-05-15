@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -28,8 +28,19 @@ const AVANTAGES_CONFIG = [
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const [firstName, setFirstName] = useState('');
+  const formatPromoPrice = useCallback((eurCents, cadCents) => {
+    if (currency === 'CAD') {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'CAD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(cadCents / 100);
+    }
+    return formatPrice(eurCents);
+  }, [currency, formatPrice]);
   const AVANTAGES = AVANTAGES_CONFIG.map((a) => ({ ...a, title: t(a.titleKey), description: t(a.descKey) }));
 
   useEffect(() => {
@@ -139,11 +150,11 @@ export default function OnboardingPage() {
             {t('onboarding_page.individualPlan')}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.5, my: 1, flexWrap: 'wrap' }}>
-            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent, fontSize: { xs: '2rem', sm: '3rem' }, overflowWrap: 'anywhere' }}>{formatPrice(500)}</Typography>
+            <Typography variant="h3" sx={{ fontWeight: 800, color: tokens.colors.accent, fontSize: { xs: '2rem', sm: '3rem' }, overflowWrap: 'anywhere' }}>{formatPromoPrice(500, 999)}</Typography>
             <Typography variant="body1" color="text.secondary">{t('onboarding_page.perMonth')}</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, overflowWrap: 'anywhere' }}>
-            {t('onboarding_page.orAnnual', { price: formatPrice(5000) })}
+            {t('onboarding_page.orAnnual', { price: formatPromoPrice(5000, 11029) })}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {t('onboarding_page.fullAccess')}
