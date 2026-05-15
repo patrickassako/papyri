@@ -718,26 +718,22 @@ export default function ContentDetailScreen({ route, navigation }) {
               color={isFavorite ? '#B5651D' : '#171412'}
             />
           </TouchableOpacity>
-          {!isLocked && (
-            <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
-              <MaterialCommunityIcons name="share-variant-outline" size={22} color="#171412" />
-            </TouchableOpacity>
-          )}
-          {!isLocked && (
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => Alert.alert(
-                t('contentDetail.options'),
-                null,
-                [
-                  { text: t('contentDetail.reportProblem'), onPress: handleReport },
-                  { text: t('common.cancel'), style: 'cancel' },
-                ]
-              )}
-            >
-              <MaterialCommunityIcons name="dots-horizontal" size={22} color="#171412" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
+            <MaterialCommunityIcons name="share-variant-outline" size={22} color="#171412" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => Alert.alert(
+              t('contentDetail.options'),
+              null,
+              [
+                { text: t('contentDetail.reportProblem'), onPress: handleReport },
+                { text: t('common.cancel'), style: 'cancel' },
+              ]
+            )}
+          >
+            <MaterialCommunityIcons name="dots-horizontal" size={22} color="#171412" />
+          </TouchableOpacity>
         </View>
       </View>
 
