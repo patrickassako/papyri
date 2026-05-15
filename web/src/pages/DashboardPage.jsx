@@ -267,9 +267,21 @@ function HScrollSection({ title, viewAllPath, items, loading, scrollRef, onNavig
 }
 
 export default function DashboardPage() {
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const formatPromoPrice = useCallback((eurCents, cadCents) => {
+    if (currency === 'CAD') {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'CAD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(cadCents / 100);
+    }
+
+    return formatPrice(eurCents);
+  }, [currency, formatPrice]);
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(emptyStats);
   const [continueReading, setContinueReading] = useState([]);
@@ -474,7 +486,7 @@ export default function DashboardPage() {
                   {t('dashboard.upgradeNow')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                  Ebooks + Audio · {formatPrice(500)}{t('common.per_month')} {t('common.or')} {formatPrice(5000)}{t('common.per_year')}
+                  Ebooks + Audio · {formatPromoPrice(500, 999)}{t('common.per_month')} {t('common.or')} {formatPromoPrice(5000, 11029)}{t('common.per_year')}
                 </Typography>
               </Box>
             </Box>

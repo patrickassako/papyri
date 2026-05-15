@@ -183,11 +183,23 @@ function SectionHeader({ icon, title, subtitle, onViewAll }) {
 
 /* ═══ MAIN COMPONENT ══════════════════════════════════════════ */
 export default function LandingPage() {
-  const { formatPrice } = useCurrency();
+  const { currency, formatPrice } = useCurrency();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const formatCtaPrice = useCallback((eurCents, cadCents) => {
+    if (currency === 'CAD') {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'CAD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(cadCents / 100);
+    }
+
+    return formatPrice(eurCents);
+  }, [currency, formatPrice]);
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [categories, setCategories] = useState([{ id: 'tous', label: t('common.all') }]);
@@ -668,10 +680,10 @@ export default function LandingPage() {
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5, mb: 4, flexWrap: 'wrap' }}>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(500)} {t('common.per_month')}</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatCtaPrice(500, 999)} {t('common.per_month')}</Typography>
                   </Box>
                   <Box sx={{ px: 2, py: 0.7, borderRadius: 99, bgcolor: 'rgba(212,160,23,0.2)', border: '1px solid rgba(212,160,23,0.3)', maxWidth: '100%' }}>
-                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatPrice(5000)} {t('common.per_year')}</Typography>
+                    <Typography sx={{ color: tokens.colors.secondary, fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.05rem' }, textAlign: 'center', overflowWrap: 'anywhere' }}>{formatCtaPrice(5000, 11029)} {t('common.per_year')}</Typography>
                   </Box>
                 </Box>
                 <Button variant="contained" size="large"
@@ -775,7 +787,6 @@ export default function LandingPage() {
           </Grid>
           <Box sx={{ pt: 4, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
             <Typography sx={{ fontSize: '0.8rem' }}>{t('landing.footerCopyright')}</Typography>
-            <Typography sx={{ fontSize: '0.8rem' }}>{t('landing.footerLocation')}</Typography>
           </Box>
         </Container>
       </Box>
