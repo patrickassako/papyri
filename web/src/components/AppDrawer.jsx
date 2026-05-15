@@ -104,9 +104,9 @@ export default function AppDrawer({ open, onClose, isAuthenticated, user }) {
       if (activeProfile?.is_kid) {
         return ['dashboard', 'library', 'catalogue', 'history'].includes(item.key);
       }
-      // Non-owner family profiles : pas d'abonnement
+      // Non-owner family profiles : ni abonnement ni sécurité
       if (activeProfile && activeProfile.is_owner_profile === false) {
-        return item.key !== 'subscription';
+        return !['subscription', 'security'].includes(item.key);
       }
       return true;
     });

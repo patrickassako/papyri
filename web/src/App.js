@@ -10,7 +10,7 @@ import MiniPlayer from './components/MiniPlayer';
 import * as authService from './services/auth.service';
 import * as familyService from './services/family.service';
 import CookieConsent from './components/CookieConsent';
-import { getActiveProfile, getActiveProfileId } from './config/profileStorage';
+import { getActiveProfile, getActiveProfileId, isOwnerContext } from './config/profileStorage';
 import PendingDeletionGate from './components/PendingDeletionGate';
 
 const Register = lazy(() => import('./pages/Register'));
@@ -127,7 +127,7 @@ function useAuth() {
   return { loading, user };
 }
 
-function ProtectedRoute({ children, allowKid = true }) {
+function ProtectedRoute({ children, allowKid = true, ownerOnly = false }) {
   const { loading, user } = useAuth();
   const location = useLocation();
   const [profileCheck, setProfileCheck] = useState({ loading: true, redirect: false });
@@ -171,6 +171,13 @@ function ProtectedRoute({ children, allowKid = true }) {
   }
 
   if (!allowKid && getActiveProfile()?.is_kid) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Owner-only pages (security, family management…): secondary family
+  // profiles must not access them. Admins/publishers bypass the profile
+  // model entirely so they are never blocked here.
+  if (ownerOnly && user?.role !== 'admin' && user?.role !== 'publisher' && !isOwnerContext()) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -324,7 +331,7 @@ function App() {
             <Route
               path="/security"
               element={
-                <ProtectedRoute allowKid={false}>
+                <ProtectedRoute allowKid={false} ownerOnly>
                   <SecurityPage />
                 </ProtectedRoute>
               }

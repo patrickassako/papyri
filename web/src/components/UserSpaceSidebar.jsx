@@ -49,10 +49,10 @@ export default function UserSpaceSidebar({
     if (activeProfile?.is_kid) {
       return !['preferences', 'subscription', 'devices', 'security'].includes(item.key);
     }
-    // Non-owner family profiles: hide subscription only (preferences and security
-    // are accessible but with sensitive actions disabled inside).
+    // Non-owner family profiles: hide subscription and security (those belong
+    // to the account owner only). Preferences stay accessible.
     if (activeProfile && activeProfile.is_owner_profile === false) {
-      return item.key !== 'subscription';
+      return !['subscription', 'security'].includes(item.key);
     }
     return true;
   });
