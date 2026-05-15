@@ -90,14 +90,22 @@ async function sendFcmNotification(token, { title, body, data = {} }) {
   const messaging = getFirebaseMessaging();
   if (!messaging) throw new Error('Firebase non configuré');
 
-  const stringifiedData = {};
+  const safeTitle = String(title || '');
+  const safeBody = String(body || '');
+
+  // Mirror title/body into the data payload. When the app is in the
+  // foreground, expo-notifications builds the displayed notification from
+  // the data block (the FCM `notification` block is only auto-rendered by
+  // Android when the app is backgrounded). Without this mirror, foreground
+  // pushes (e.g. the welcome push fired right after signup) show up empty.
+  const stringifiedData = { title: safeTitle, body: safeBody };
   for (const [k, v] of Object.entries(data || {})) {
     stringifiedData[k] = String(v);
   }
 
   const message = {
     token,
-    notification: { title, body },
+    notification: { title: safeTitle, body: safeBody },
     data: stringifiedData,
     android: {
       priority: 'high',
@@ -173,16 +181,18 @@ async function sendToTopic(topic, payload) {
   if (!messaging) throw new Error('Firebase non configuré');
 
   const { title, body, data = {} } = payload;
-  const stringifiedData = {};
+  const safeTitle = String(title || '');
+  const safeBody = String(body || '');
+  const stringifiedData = { title: safeTitle, body: safeBody };
   for (const [k, v] of Object.entries(data)) {
     stringifiedData[k] = String(v);
   }
 
   return await messaging.send({
     topic,
-    notification: { title, body },
+    notification: { title: safeTitle, body: safeBody },
     data: stringifiedData,
-    android: { priority: 'high', notification: { sound: 'default' } },
+    android: { priority: 'high', notification: { sound: 'default', channelId: 'default' } },
     apns: { payload: { aps: { sound: 'default' } } },
   });
 }

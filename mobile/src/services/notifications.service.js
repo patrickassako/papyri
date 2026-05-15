@@ -20,12 +20,41 @@ function getProjectId() {
 }
 
 // ── Configuration du handler foreground ──────────────────────
+// When a push is received while the app is foregrounded, expo-notifications
+// builds the displayed content from the FCM `notification` block. On some
+// Android builds that block is not parsed into request.content, leaving the
+// banner empty. The backend mirrors title/body into the data payload, so
+// when the parsed content is empty we suppress the blank banner and present
+// a local notification rebuilt from data.title / data.body instead.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    try {
+      const content = notification?.request?.content || {};
+      const data = content.data || {};
+      const hasContent = Boolean(content.title || content.body);
+      const hasDataFallback = Boolean(data.title || data.body);
+
+      if (!hasContent && hasDataFallback) {
+        // Suppress the empty banner and re-present with the data fallback.
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: data.title || '',
+            body: data.body || '',
+            data,
+            sound: 'default',
+          },
+          trigger: null,
+        });
+        return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
+    } catch (_) { /* fall through to default display */ }
+
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    };
+  },
 });
 
 /**
