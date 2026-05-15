@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -17,6 +17,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { readingService } from '../services/reading.service';
+import { contentsService } from '../services/contents.service';
 import { authFetch } from '../services/auth.service';
 import API_URL from '../config/api';
 import ContentCardWithProgress from '../components/ContentCardWithProgress';
@@ -32,6 +33,9 @@ function buildFilters(t) {
     { key: 'ebook', label: t('history.filters.ebooks') },
     { key: 'audiobook', label: t('history.filters.audiobooks') },
     { key: 'completed', label: t('history.filters.completed') },
+    { key: 'purchased', label: t('history.filters.purchased') },
+    { key: 'credit', label: t('history.filters.credit') },
+    { key: 'subscription', label: t('history.filters.subscription') },
   ];
 }
 
@@ -110,6 +114,16 @@ export default function HistoryScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [unlocks, setUnlocks] = useState([]);
+
+  const fetchUnlocks = useCallback(async () => {
+    try {
+      const data = await contentsService.getMyUnlocks();
+      setUnlocks(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setUnlocks([]);
+    }
+  }, []);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -156,13 +170,15 @@ export default function HistoryScreen({ navigation }) {
   useEffect(() => {
     fetchHistory(1);
     fetchStats();
+    fetchUnlocks();
   }, [activeProfile?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchHistory(1);
     fetchStats();
-  }, [fetchHistory, fetchStats]);
+    fetchUnlocks();
+  }, [fetchHistory, fetchStats, fetchUnlocks]);
 
   const handleLoadMore = () => {
     if (!loadingMore && pagination.page < pagination.total_pages) {
@@ -179,10 +195,57 @@ export default function HistoryScreen({ navigation }) {
     }
   };
 
-  const filtered = items.filter((item) => {
+  // Merge reading history with content unlocks so that books that were
+  // purchased / unlocked but never opened still show up in the library.
+  // Each item is tagged with its unlock `source` (paid | subscription | bonus)
+  // so the source filters can work.
+  const displayItems = useMemo(() => {
+    const sourceByContent = new Map();
+    for (const u of unlocks) {
+      if (u?.content_id) sourceByContent.set(u.content_id, u.source);
+    }
+
+    // 1. Reading-history items, enriched with their unlock source.
+    const merged = items.map((item) => ({
+      ...item,
+      source: sourceByContent.get(item.content_id) || item.source || null,
+    }));
+
+    // 2. Unlocked books not present in the reading history → "not started" yet.
+    const historyIds = new Set(items.map((i) => i.content_id));
+    for (const u of unlocks) {
+      if (!u?.content_id || historyIds.has(u.content_id)) continue;
+      const c = u.contents || {};
+      merged.push({
+        id: `unlock-${u.id}`,
+        content_id: u.content_id,
+        title: c.title,
+        author: c.author,
+        content_type: c.content_type,
+        cover_url: c.cover_url,
+        progress_percent: 0,
+        last_read_at: u.unlocked_at,
+        is_completed: false,
+        last_position: null,
+        source: u.source || null,
+      });
+    }
+
+    // 3. Sort by most recent activity (last read, else unlock date).
+    return merged.sort((a, b) => {
+      const da = new Date(a.last_read_at || 0).getTime();
+      const db = new Date(b.last_read_at || 0).getTime();
+      return db - da;
+    });
+  }, [items, unlocks]);
+
+  const filtered = displayItems.filter((item) => {
     if (filter === 'ebook') return item.content_type === 'ebook';
     if (filter === 'audiobook') return item.content_type === 'audiobook';
     if (filter === 'completed') return item.is_completed;
+    if (filter === 'purchased') return item.source === 'paid';
+    if (filter === 'credit') return item.source === 'bonus';
+    if (filter === 'subscription') return item.source === 'subscription';
     return true;
   });
 

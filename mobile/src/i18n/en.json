@@ -739,7 +739,10 @@
       "all": "All",
       "ebooks": "Ebooks",
       "audiobooks": "Audio",
-      "completed": "Completed"
+      "completed": "Completed",
+      "purchased": "Purchased",
+      "credit": "Credit",
+      "subscription": "Subscription"
     },
     "emptyAll": "No content in your history",
     "emptyFiltered": "No \"{{filter}}\" content found",
