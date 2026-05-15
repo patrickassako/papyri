@@ -12,6 +12,12 @@ const logger = require('./utils/logger');
 
 const app = express();
 
+// Render (and most PaaS) put the app behind a reverse proxy. Without this,
+// req.ip resolves to the proxy address for every request, which makes the
+// per-IP rate limiter bucket the whole platform together. Trust the first
+// proxy hop so express-rate-limit sees the real client IP via X-Forwarded-For.
+app.set('trust proxy', 1);
+
 // Security middleware (AdminJS needs relaxed CSP in dev)
 app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,

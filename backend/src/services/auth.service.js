@@ -15,61 +15,55 @@ function makeError(code, message = code) {
 
 const EMAIL_MFA_TTL_MS = 10 * 60 * 1000;
 const EMAIL_MFA_MAX_ATTEMPTS = 5;
-const pendingEmailMfaChallenges = new Map();
-const verifiedEmailActionTokens = new Map();
 
 function hashCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
 }
 
+// Cryptographically secure 6-digit code (Math.random is predictable).
 function generateEmailCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 }
 
-function cleanupExpiredEmailMfaChallenges() {
-  const now = Date.now();
-  for (const [challengeId, challenge] of pendingEmailMfaChallenges.entries()) {
-    if (challenge.expiresAt <= now) {
-      pendingEmailMfaChallenges.delete(challengeId);
-    }
-  }
-
-  for (const [token, payload] of verifiedEmailActionTokens.entries()) {
-    if (payload.expiresAt <= now) {
-      verifiedEmailActionTokens.delete(token);
-    }
-  }
+// Best-effort purge of expired rows. Not strictly required since every
+// read also filters on expires_at, but keeps the tables small.
+async function cleanupExpiredEmailMfaChallenges() {
+  const nowIso = new Date().toISOString();
+  try {
+    await supabaseAdmin.from('email_mfa_challenges').delete().lte('expires_at', nowIso);
+    await supabaseAdmin.from('email_action_tokens').delete().lte('expires_at', nowIso);
+  } catch (_) { /* non-fatal */ }
 }
 
 async function createEmailMfaChallenge({ user, profile, session }) {
-  cleanupExpiredEmailMfaChallenges();
-
-  for (const [existingId, existing] of pendingEmailMfaChallenges.entries()) {
-    if (existing.userId === user.id) {
-      pendingEmailMfaChallenges.delete(existingId);
-    }
-  }
+  cleanupExpiredEmailMfaChallenges().catch(() => {}); // best-effort purge
+  // Drop any previous login challenge for this user.
+  await supabaseAdmin
+    .from('email_mfa_challenges')
+    .delete()
+    .eq('user_id', user.id)
+    .is('purpose', null);
 
   const code = generateEmailCode();
   const challengeId = crypto.randomUUID();
-  pendingEmailMfaChallenges.set(challengeId, {
-    challengeId,
-    userId: user.id,
+  const { error } = await supabaseAdmin.from('email_mfa_challenges').insert({
+    id: challengeId,
+    user_id: user.id,
+    purpose: null,
     email: user.email,
-    fullName: profile?.full_name || user.email,
-    codeHash: hashCode(code),
+    full_name: profile?.full_name || user.email,
+    code_hash: hashCode(code),
     attempts: 0,
-    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
     session,
+    expires_at: new Date(Date.now() + EMAIL_MFA_TTL_MS).toISOString(),
   });
+  if (error) throw error;
 
   await sendEmailVerificationCodeEmail(user.email, profile?.full_name || user.email, code);
   return challengeId;
 }
 
 async function createEmailActionChallenge({ userId, purpose }) {
-  cleanupExpiredEmailMfaChallenges();
-
   const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
   const user = authUserData?.user || null;
   if (authUserError || !user?.email) {
@@ -82,25 +76,27 @@ async function createEmailActionChallenge({ userId, purpose }) {
     .eq('id', userId)
     .single();
 
-  for (const [existingId, existing] of pendingEmailMfaChallenges.entries()) {
-    if (existing.userId === userId && existing.purpose === purpose) {
-      pendingEmailMfaChallenges.delete(existingId);
-    }
-  }
+  // Drop any previous challenge for this user + purpose.
+  await supabaseAdmin
+    .from('email_mfa_challenges')
+    .delete()
+    .eq('user_id', userId)
+    .eq('purpose', purpose);
 
   const code = generateEmailCode();
   const challengeId = crypto.randomUUID();
-  pendingEmailMfaChallenges.set(challengeId, {
-    challengeId,
-    userId,
+  const { error } = await supabaseAdmin.from('email_mfa_challenges').insert({
+    id: challengeId,
+    user_id: userId,
     purpose,
     email: user.email,
-    fullName: profile?.full_name || user.email,
-    codeHash: hashCode(code),
+    full_name: profile?.full_name || user.email,
+    code_hash: hashCode(code),
     attempts: 0,
-    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
     session: null,
+    expires_at: new Date(Date.now() + EMAIL_MFA_TTL_MS).toISOString(),
   });
+  if (error) throw error;
 
   await sendEmailVerificationCodeEmail(user.email, profile?.full_name || user.email, code);
   return {
@@ -211,7 +207,7 @@ async function login(email, password) {
         id: data.user.id,
         email: data.user.email,
         full_name: profile?.full_name,
-        role: data.user.user_metadata?.role || 'user',
+        role: profile?.role || 'user',
       },
       requires_mfa: true,
       mfa_method: 'email',
@@ -231,38 +227,53 @@ async function login(email, password) {
   };
 }
 
-async function verifyEmailMfa(challengeId, code) {
-  cleanupExpiredEmailMfaChallenges();
-  const challenge = pendingEmailMfaChallenges.get(challengeId);
+async function fetchChallenge(challengeId) {
+  const { data } = await supabaseAdmin
+    .from('email_mfa_challenges')
+    .select('*')
+    .eq('id', challengeId)
+    .maybeSingle();
+  return data || null;
+}
 
-  if (!challenge) {
+async function deleteChallenge(challengeId) {
+  await supabaseAdmin.from('email_mfa_challenges').delete().eq('id', challengeId);
+}
+
+async function verifyEmailMfa(challengeId, code) {
+  const challenge = await fetchChallenge(challengeId);
+
+  if (!challenge || challenge.purpose !== null) {
     throw makeError('MFA_CHALLENGE_INVALID');
   }
-  if (challenge.expiresAt <= Date.now()) {
-    pendingEmailMfaChallenges.delete(challengeId);
+  if (new Date(challenge.expires_at).getTime() <= Date.now()) {
+    await deleteChallenge(challengeId);
     throw makeError('MFA_CHALLENGE_EXPIRED');
   }
   if (challenge.attempts >= EMAIL_MFA_MAX_ATTEMPTS) {
-    pendingEmailMfaChallenges.delete(challengeId);
+    await deleteChallenge(challengeId);
     throw makeError('MFA_TOO_MANY_ATTEMPTS');
   }
 
-  challenge.attempts += 1;
-  if (hashCode(code) !== challenge.codeHash) {
+  if (hashCode(code) !== challenge.code_hash) {
+    await supabaseAdmin
+      .from('email_mfa_challenges')
+      .update({ attempts: challenge.attempts + 1 })
+      .eq('id', challengeId);
     throw makeError('INVALID_MFA_CODE');
   }
 
-  pendingEmailMfaChallenges.delete(challengeId);
+  await deleteChallenge(challengeId);
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('*')
-    .eq('id', challenge.userId)
+    .eq('id', challenge.user_id)
     .single();
 
   return {
     user: {
-      id: challenge.userId,
+      id: challenge.user_id,
       email: challenge.email,
       full_name: profile?.full_name,
       role: profile?.role || 'user',
@@ -272,33 +283,38 @@ async function verifyEmailMfa(challengeId, code) {
 }
 
 async function verifyEmailActionChallenge(userId, challengeId, code, purpose) {
-  cleanupExpiredEmailMfaChallenges();
-  const challenge = pendingEmailMfaChallenges.get(challengeId);
+  const challenge = await fetchChallenge(challengeId);
 
-  if (!challenge || challenge.userId !== userId || challenge.purpose !== purpose) {
+  if (!challenge || challenge.user_id !== userId || challenge.purpose !== purpose) {
     throw makeError('MFA_CHALLENGE_INVALID');
   }
-  if (challenge.expiresAt <= Date.now()) {
-    pendingEmailMfaChallenges.delete(challengeId);
+  if (new Date(challenge.expires_at).getTime() <= Date.now()) {
+    await deleteChallenge(challengeId);
     throw makeError('MFA_CHALLENGE_EXPIRED');
   }
   if (challenge.attempts >= EMAIL_MFA_MAX_ATTEMPTS) {
-    pendingEmailMfaChallenges.delete(challengeId);
+    await deleteChallenge(challengeId);
     throw makeError('MFA_TOO_MANY_ATTEMPTS');
   }
 
-  challenge.attempts += 1;
-  if (hashCode(code) !== challenge.codeHash) {
+  if (hashCode(code) !== challenge.code_hash) {
+    await supabaseAdmin
+      .from('email_mfa_challenges')
+      .update({ attempts: challenge.attempts + 1 })
+      .eq('id', challengeId);
     throw makeError('INVALID_MFA_CODE');
   }
 
-  pendingEmailMfaChallenges.delete(challengeId);
+  await deleteChallenge(challengeId);
+
   const verificationToken = crypto.randomUUID();
-  verifiedEmailActionTokens.set(verificationToken, {
-    userId,
+  const { error } = await supabaseAdmin.from('email_action_tokens').insert({
+    token: verificationToken,
+    user_id: userId,
     purpose,
-    expiresAt: Date.now() + EMAIL_MFA_TTL_MS,
+    expires_at: new Date(Date.now() + EMAIL_MFA_TTL_MS).toISOString(),
   });
+  if (error) throw error;
 
   return {
     verification_token: verificationToken,
@@ -306,33 +322,45 @@ async function verifyEmailActionChallenge(userId, challengeId, code, purpose) {
   };
 }
 
-function consumeVerifiedEmailActionToken(userId, token, purpose) {
-  cleanupExpiredEmailMfaChallenges();
-  const payload = verifiedEmailActionTokens.get(token);
-  if (!payload || payload.userId !== userId || payload.purpose !== purpose) {
+async function consumeVerifiedEmailActionToken(userId, token, purpose) {
+  const { data: payload } = await supabaseAdmin
+    .from('email_action_tokens')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle();
+
+  if (!payload
+    || payload.user_id !== userId
+    || payload.purpose !== purpose
+    || new Date(payload.expires_at).getTime() <= Date.now()) {
     throw makeError('EMAIL_ACTION_VERIFICATION_REQUIRED');
   }
-  verifiedEmailActionTokens.delete(token);
+
+  await supabaseAdmin.from('email_action_tokens').delete().eq('token', token);
   return true;
 }
 
 async function resendEmailMfa(challengeId) {
-  cleanupExpiredEmailMfaChallenges();
-  const challenge = pendingEmailMfaChallenges.get(challengeId);
+  const challenge = await fetchChallenge(challengeId);
   if (!challenge) throw makeError('MFA_CHALLENGE_INVALID');
-  if (challenge.expiresAt <= Date.now()) {
-    pendingEmailMfaChallenges.delete(challengeId);
+  if (new Date(challenge.expires_at).getTime() <= Date.now()) {
+    await deleteChallenge(challengeId);
     throw makeError('MFA_CHALLENGE_EXPIRED');
   }
 
   const code = generateEmailCode();
-  challenge.codeHash = hashCode(code);
-  challenge.attempts = 0;
-  challenge.expiresAt = Date.now() + EMAIL_MFA_TTL_MS;
-  await sendEmailVerificationCodeEmail(challenge.email, challenge.fullName, code);
+  await supabaseAdmin
+    .from('email_mfa_challenges')
+    .update({
+      code_hash: hashCode(code),
+      attempts: 0,
+      expires_at: new Date(Date.now() + EMAIL_MFA_TTL_MS).toISOString(),
+    })
+    .eq('id', challengeId);
+  await sendEmailVerificationCodeEmail(challenge.email, challenge.full_name, code);
 
   return {
-    challenge_id: challenge.challengeId,
+    challenge_id: challengeId,
     challenge_expires_in: Math.floor(EMAIL_MFA_TTL_MS / 1000),
   };
 }
@@ -404,7 +432,7 @@ async function getUserFromToken(accessToken) {
       language: profile?.language,
       avatar_url: profile?.avatar_url,
       onboarding_completed: profile?.onboarding_completed,
-      role: data.user.user_metadata?.role || 'user',
+      role: profile?.role || 'user',
       created_at: profile?.created_at,
       updated_at: profile?.updated_at,
     },

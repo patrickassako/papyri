@@ -87,7 +87,10 @@ async function verifyJWT(req, res, next) {
       language: profile?.language,
       avatar_url: profile?.avatar_url,
       onboarding_completed: profile?.onboarding_completed,
-      role: profile?.role || data.user.user_metadata?.role || 'user'
+      // Role comes ONLY from the profiles table. user_metadata is editable
+      // by the user themselves via the Supabase Auth API, so trusting it
+      // would allow privilege escalation.
+      role: profile?.role || 'user'
     };
 
     next();

@@ -82,7 +82,9 @@ async function authenticate(email, password, req) {
       .eq('id', data.user.id)
       .single();
 
-    const role = data.user.user_metadata?.role || profile?.role || 'user';
+    // Role from the profiles table only — user_metadata is user-editable
+    // and must never grant admin access.
+    const role = profile?.role || 'user';
 
     if (role !== 'admin') {
       console.log(`❌ Admin login rejected (not admin): ${email}`);

@@ -289,7 +289,7 @@ async function deleteProfile(userId, profileId, options = {}) {
   if (profile.is_owner_profile) {
     throw new Error('OWNER_PROFILE_CANNOT_BE_DELETED');
   }
-  authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
+  await authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
 
   const { data, error } = await supabaseAdmin
     .from('family_profiles')
@@ -309,7 +309,7 @@ async function deleteProfile(userId, profileId, options = {}) {
 async function setProfilePin(userId, profileId, pin, options = {}) {
   const { profile } = await getProfileForOwner(userId, profileId);
   if (profile.is_owner_profile) {
-    authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
+    await authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
   }
   const normalizedPin = validatePin(pin);
   const pinHash = await bcrypt.hash(normalizedPin, 10);
@@ -332,7 +332,7 @@ async function setProfilePin(userId, profileId, pin, options = {}) {
 async function removeProfilePin(userId, profileId, options = {}) {
   const { profile } = await getProfileForOwner(userId, profileId);
   if (profile.is_owner_profile) {
-    authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
+    await authService.consumeVerifiedEmailActionToken(userId, options.verificationToken, 'profile_pin_owner');
   }
 
   const { data, error } = await supabaseAdmin
