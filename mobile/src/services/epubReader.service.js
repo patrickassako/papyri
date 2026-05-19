@@ -417,6 +417,37 @@ export async function getAllChaptersHtml(zip, basePath, spine, onProgress, lang 
 }
 
 /**
+ * Count the words of every spine chapter — used to estimate page numbers.
+ * Lightweight: reads the raw XHTML and strips tags, never inlines images.
+ * Returns an array of word counts aligned with `spine`.
+ */
+export async function computeChapterWordCounts(zip, basePath, spine) {
+  const counts = [];
+  for (let i = 0; i < spine.length; i++) {
+    let words = 0;
+    try {
+      const filePath = resolveHref(basePath, spine[i]);
+      const file = zip.file(filePath) || zip.file(spine[i]);
+      if (file) {
+        const raw = await file.async('string');
+        const bodyMatch = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        const body = bodyMatch ? bodyMatch[1] : raw;
+        const text = body
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&[a-z#0-9]+;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        words = text ? text.split(' ').filter(Boolean).length : 0;
+      }
+    } catch (_) { /* ignore unreadable chapter */ }
+    counts.push(words);
+  }
+  return counts;
+}
+
+/**
  * Get the HTML content of a specific spine chapter (0-indexed).
  * Images are inlined as base64 data URIs so they render without a base URL.
  */

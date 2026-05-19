@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { getLocalFilePath, getOfflineEntry } from '../services/offline.service';
 import { getAccessToken } from '../services/auth.service';
 import API_BASE_URL from '../config/api';
-import { loadEpub, getChapterHtml, getAllChaptersHtml } from '../services/epubReader.service';
+import { loadEpub, getChapterHtml, getAllChaptersHtml, computeChapterWordCounts } from '../services/epubReader.service';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 
 let WebViewComponent = null;
@@ -116,6 +116,10 @@ export default function BookReaderScreen({ route, navigation }) {
   // PDF state
   const [localFileUrl, setLocalFileUrl] = useState(null);
 
+  // Estimated pagination — { startPages: number[], totalPages } computed in
+  // the background once the EPUB is loaded.
+  const [pageInfo, setPageInfo] = useState(null);
+
   const [chapters, setChapters] = useState([]);
   const [progress, setProgress] = useState(0);
   const [viewerReady, setViewerReady] = useState(false);
@@ -129,6 +133,10 @@ export default function BookReaderScreen({ route, navigation }) {
   const [highlights, setHighlights] = useState([]);
   const [pendingSelection, setPendingSelection] = useState(null);
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
+
+  // Jump-back history: set when the user jumps via TOC / bookmark, so a
+  // banner can offer to return to where they were. { chapterIdx, page }
+  const [jumpReturn, setJumpReturn] = useState(null);
 
   // Panels
   const [showChapters, setShowChapters] = useState(false);
@@ -382,6 +390,38 @@ export default function BookReaderScreen({ route, navigation }) {
   // Keep chapter idx ref in sync
   useEffect(() => { currentChapterIdxRef.current = currentChapterIdx; }, [currentChapterIdx]);
 
+  // ── Estimated pagination (background) ─────────────────────────────────────
+  // Counts words per chapter once the EPUB is loaded, off the critical path,
+  // so the footer can show "page X / Y" instead of "Ch. x / y".
+  const WORDS_PER_PAGE = 280;
+  useEffect(() => {
+    if (!epubData) { setPageInfo(null); return; }
+    let active = true;
+    (async () => {
+      try {
+        const counts = await computeChapterWordCounts(epubData.zip, epubData.basePath, epubData.spine);
+        if (!active) return;
+        const startPages = [];
+        let cumul = 0;
+        for (let i = 0; i < counts.length; i++) {
+          startPages.push(cumul + 1);
+          cumul += Math.max(1, Math.round((counts[i] || 0) / WORDS_PER_PAGE));
+        }
+        if (active) setPageInfo({ startPages, totalPages: Math.max(1, cumul) });
+      } catch (_) { /* keep chapter counter fallback */ }
+    })();
+    return () => { active = false; };
+  }, [epubData]);
+
+  // Current estimated page number for the footer.
+  const currentPage = useMemo(() => {
+    if (!pageInfo) return null;
+    if (readMode === 'scroll') {
+      return Math.min(pageInfo.totalPages, Math.max(1, Math.round((progress / 100) * pageInfo.totalPages)));
+    }
+    return pageInfo.startPages[currentChapterIdx] || 1;
+  }, [pageInfo, readMode, progress, currentChapterIdx]);
+
   // ── Stable save function (ref pattern — no stale closures) ────────────────
   const getReadingTimeSeconds = useCallback(() => {
     const sessionSec = readingStartRef.current
@@ -488,18 +528,27 @@ export default function BookReaderScreen({ route, navigation }) {
     setCurrentChapterIdx((i) => Math.min(epubData.spine.length - 1, i + 1));
   }, [epubData]);
 
+  // Jump to a chapter while remembering the origin, so the jump-back banner
+  // can offer a return. Used by TOC + bookmark navigation (not by the plain
+  // prev/next chapter buttons).
+  const jumpToChapter = useCallback((targetIdx) => {
+    if (targetIdx == null || targetIdx < 0 || targetIdx === currentChapterIdx) return;
+    setJumpReturn({ chapterIdx: currentChapterIdx, page: currentPage });
+    setCurrentChapterIdx(targetIdx);
+  }, [currentChapterIdx, currentPage]);
+
   const goToChapterByHref = useCallback((href) => {
     if (!epubData || !href) return;
     // Find spine index matching this href
     const idx = epubData.spine.findIndex((s) => s === href || s.endsWith('/' + href) || href.endsWith('/' + s));
     if (idx >= 0) {
-      setCurrentChapterIdx(idx);
+      jumpToChapter(idx);
     } else {
       // Fallback: try matching by toc entry index
       const tocIdx = epubData.toc.findIndex((t) => t.href === href || t.href.startsWith(href) || href.startsWith(t.href));
-      if (tocIdx >= 0 && tocIdx < epubData.spine.length) setCurrentChapterIdx(tocIdx);
+      if (tocIdx >= 0 && tocIdx < epubData.spine.length) jumpToChapter(tocIdx);
     }
-  }, [epubData]);
+  }, [epubData, jumpToChapter]);
 
   // ── TTS ───────────────────────────────────────────────────────────────────
   // Extract plain text from the current chapter HTML
@@ -995,6 +1044,28 @@ export default function BookReaderScreen({ route, navigation }) {
         </View>
       </View>
 
+      {/* Jump-back banner — appears after a TOC / bookmark jump */}
+      {isEpub && jumpReturn && (
+        <View style={[styles.jumpBar, { backgroundColor: t.header, borderTopColor: t.border }]}>
+          <TouchableOpacity
+            style={styles.jumpBarMain}
+            onPress={() => { setCurrentChapterIdx(jumpReturn.chapterIdx); setJumpReturn(null); }}
+          >
+            <MaterialCommunityIcons name="undo-variant" size={16} color={t.accent} />
+            <Text style={[styles.jumpBarText, { color: t.accent }]} numberOfLines={1}>
+              {tr('reader.jumpBack', {
+                target: jumpReturn.page
+                  ? tr('reader.jumpBackPage', { page: jumpReturn.page })
+                  : tr('reader.jumpBackChapter', { n: jumpReturn.chapterIdx + 1 }),
+              })}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setJumpReturn(null)} style={styles.jumpBarClearBtn}>
+            <Text style={[styles.jumpBarClear, { color: t.subtle }]}>{tr('reader.jumpClear')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={[styles.footer, { backgroundColor: t.footer, borderTopColor: t.border }]}>
         {/* Font size controls */}
         {isEpub && (
@@ -1016,15 +1087,16 @@ export default function BookReaderScreen({ route, navigation }) {
         )}
         <View style={{ alignItems: 'center', flex: 1 }}>
           <Text style={[styles.progressText, { color: t.accent }]}>{progress.toFixed(0)}%</Text>
-          {isEpub && epubData && readMode === 'chapter' && (
-            <Text style={[styles.chapterCounter, { color: t.subtle }]}>
-              Ch. {currentChapterIdx + 1} / {epubData.spine.length}
-            </Text>
-          )}
-          {isEpub && epubData && readMode === 'scroll' && (
-            <Text style={[styles.chapterCounter, { color: t.subtle }]}>
-              p. ~{Math.round((progress / 100) * epubData.spine.length * 8)} / ~{epubData.spine.length * 8}
-            </Text>
+          {isEpub && epubData && (
+            pageInfo && currentPage ? (
+              <Text style={[styles.chapterCounter, { color: t.subtle }]}>
+                {tr('reader.pageOf', { current: currentPage, total: pageInfo.totalPages })}
+              </Text>
+            ) : (
+              <Text style={[styles.chapterCounter, { color: t.subtle }]}>
+                Ch. {currentChapterIdx + 1} / {epubData.spine.length}
+              </Text>
+            )
           )}
         </View>
         {readMode === 'chapter' && (
@@ -1121,7 +1193,7 @@ export default function BookReaderScreen({ route, navigation }) {
                       onPress={() => {
                         setShowBookmarks(false);
                         const chIdx = bm.position?.chapterIdx;
-                        if (typeof chIdx === 'number') setCurrentChapterIdx(chIdx);
+                        if (typeof chIdx === 'number') jumpToChapter(chIdx);
                       }}
                     >
                       <Text style={[styles.chapterTitle, { color: t.text }]} numberOfLines={1}>
@@ -1377,6 +1449,16 @@ const styles = StyleSheet.create({
   chapterItem: { paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, marginBottom: 4 },
   chapterTitle: { fontSize: 14, fontWeight: '600' },
   emptyText: { paddingVertical: 12, textAlign: 'center', fontSize: 13 },
+
+  // Jump-back banner
+  jumpBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 7, borderTopWidth: 1,
+  },
+  jumpBarMain: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
+  jumpBarText: { fontSize: 12, fontWeight: '600', flex: 1 },
+  jumpBarClearBtn: { paddingHorizontal: 8, paddingVertical: 2 },
+  jumpBarClear: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   // TTS
   ttsBar: {

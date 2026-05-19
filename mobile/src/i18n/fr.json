@@ -264,7 +264,11 @@
     "highlight": "Surligner",
     "swipeHint": "Swipez pour changer de page",
     "ttsVoice": "Voix",
-    "ttsVoiceDefault": "Voix par défaut"
+    "ttsVoiceDefault": "Voix par défaut",
+    "jumpBack": "‹ Revenir à {{target}}",
+    "jumpBackPage": "la page {{page}}",
+    "jumpBackChapter": "au chapitre {{n}}",
+    "jumpClear": "EFFACER"
   },
   "profile": {
     "title": "Mon profil",
