@@ -84,18 +84,19 @@ const READER_STYLES = `
     --text: #2a2a2a;
     --heading: #1a1a1a;
     --link: #f4a825;
-    --pad: 24px 20px 80px;
+    --reader-margin: 20px;
     --line-height: 1.8;
     --text-indent: 1.2em;
     --text-align: justify;
+    --font-family: Lora, Georgia, 'Times New Roman', serif;
   }
   html, body { margin: 0; padding: 0; background: var(--bg); }
-  body { font-family: Lora, Georgia, 'Times New Roman', serif;
+  body { font-family: var(--font-family);
          font-size: 17px; line-height: var(--line-height);
-         padding: var(--pad); color: var(--text);
+         padding: 24px var(--reader-margin) 80px; color: var(--text);
          max-width: 100%; word-wrap: break-word;
          -webkit-hyphens: auto; hyphens: auto; }
-  h1,h2,h3,h4,h5,h6 { font-family: Lora, Georgia, serif; color: var(--heading);
+  h1,h2,h3,h4,h5,h6 { font-family: var(--font-family); color: var(--heading);
                        margin: 1.3em 0 0.5em; line-height: 1.3;
                        -webkit-hyphens: none; hyphens: none; text-indent: 0; }
   p { margin: 0 0 0.35em; text-align: var(--text-align); text-indent: var(--text-indent); }
@@ -159,6 +160,14 @@ const SELECTION_SCRIPT = `
       if (d.type === 'setLineHeight') { document.documentElement.style.setProperty('--line-height', String(d.value)); }
       if (d.type === 'setTextIndent') { document.documentElement.style.setProperty('--text-indent', (d.value || 0) + 'em'); }
       if (d.type === 'setJustify') { document.documentElement.style.setProperty('--text-align', d.value ? 'justify' : 'left'); }
+      if (d.type === 'setFontFamily') { document.documentElement.style.setProperty('--font-family', d.value); }
+      if (d.type === 'setMargin') { document.documentElement.style.setProperty('--reader-margin', (d.value || 20) + 'px'); }
+      if (d.type === 'scrollToPercent') {
+        var el = document.documentElement;
+        var scrollable = el.scrollHeight - el.clientHeight;
+        var p = Math.max(0, Math.min(100, Number(d.value) || 0));
+        if (scrollable > 0) window.scrollTo(0, scrollable * (p / 100));
+      }
     } catch(_) {}
   }
   window.addEventListener('message', handleMsg);

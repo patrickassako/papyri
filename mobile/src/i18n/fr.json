@@ -268,7 +268,15 @@
     "jumpBack": "‹ Revenir à {{target}}",
     "jumpBackPage": "la page {{page}}",
     "jumpBackChapter": "au chapitre {{n}}",
-    "jumpClear": "EFFACER"
+    "jumpClear": "EFFACER",
+    "lineSpacing": "Interligne",
+    "margins": "Marges",
+    "compact": "Compact",
+    "normal": "Normal",
+    "relaxed": "Aéré",
+    "narrow": "Étroites",
+    "wide": "Larges",
+    "justify": "Texte justifié"
   },
   "profile": {
     "title": "Mon profil",

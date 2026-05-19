@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Slider from '@react-native-community/slider';
 import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
 import { useTranslation } from 'react-i18next';
@@ -80,6 +81,13 @@ const THEMES = [
 
 const THEME_ICONS = ['white-balance-sunny', 'coffee', 'moon-waning-crescent'];
 
+// Font stacks for the typography settings panel.
+const FONT_STACKS = {
+  serif: "Lora, Georgia, 'Times New Roman', serif",
+  sans:  "-apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+};
+const READER_PREFS_KEY = '@papyri_reader_prefs';
+
 const HIGHLIGHT_COLORS = {
   yellow: 'rgba(255,235,59,0.45)',
   green:  'rgba(76,175,80,0.45)',
@@ -142,6 +150,14 @@ export default function BookReaderScreen({ route, navigation }) {
   const [showChapters, setShowChapters] = useState(false);
   const [themeIdx, setThemeIdx] = useState(0); // 0=clair 1=sépia 2=nuit
   const [fontSize, setFontSize] = useState(17);
+  // Typography settings (panel ⚙️) — persisted in AsyncStorage.
+  const [fontFamily, setFontFamily] = useState('serif'); // 'serif' | 'sans'
+  const [lineHeight, setLineHeight] = useState(1.8);
+  const [justify, setJustify] = useState(true);
+  const [readerMargin, setReaderMargin] = useState(20);
+  const [brightness, setBrightness] = useState(1); // 1 = full, 0.15 = darkest
+  const [showSettings, setShowSettings] = useState(false);
+  const prefsLoadedRef = useRef(false);
   // Mode lecture : 'chapter' (défaut) | 'scroll' (document entier)
   const [readMode, setReadMode] = useState('chapter');
   const [scrollFileUri, setScrollFileUri] = useState(null);
@@ -485,6 +501,52 @@ export default function BookReaderScreen({ route, navigation }) {
     if (!viewerReady) return;
     sendToWeb({ type: 'setFontSize', size: fontSize });
   }, [fontSize, viewerReady, sendToWeb]);
+
+  // ── Typography prefs: load once, persist on change, sync to WebView ──────
+  useEffect(() => {
+    AsyncStorage.getItem(READER_PREFS_KEY)
+      .then((raw) => {
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p.fontSize) setFontSize(p.fontSize);
+          if (p.fontFamily) setFontFamily(p.fontFamily);
+          if (p.lineHeight) setLineHeight(p.lineHeight);
+          if (typeof p.justify === 'boolean') setJustify(p.justify);
+          if (p.readerMargin) setReaderMargin(p.readerMargin);
+          if (typeof p.brightness === 'number') setBrightness(p.brightness);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { prefsLoadedRef.current = true; });
+  }, []);
+
+  useEffect(() => {
+    if (!prefsLoadedRef.current) return; // don't overwrite stored prefs before they load
+    AsyncStorage.setItem(
+      READER_PREFS_KEY,
+      JSON.stringify({ fontSize, fontFamily, lineHeight, justify, readerMargin, brightness }),
+    ).catch(() => {});
+  }, [fontSize, fontFamily, lineHeight, justify, readerMargin, brightness]);
+
+  useEffect(() => {
+    if (!viewerReady) return;
+    sendToWeb({ type: 'setFontFamily', value: FONT_STACKS[fontFamily] || FONT_STACKS.serif });
+  }, [fontFamily, viewerReady, sendToWeb]);
+
+  useEffect(() => {
+    if (!viewerReady) return;
+    sendToWeb({ type: 'setLineHeight', value: lineHeight });
+  }, [lineHeight, viewerReady, sendToWeb]);
+
+  useEffect(() => {
+    if (!viewerReady) return;
+    sendToWeb({ type: 'setJustify', value: justify });
+  }, [justify, viewerReady, sendToWeb]);
+
+  useEffect(() => {
+    if (!viewerReady) return;
+    sendToWeb({ type: 'setMargin', value: readerMargin });
+  }, [readerMargin, viewerReady, sendToWeb]);
 
   // ── WebView message handler ───────────────────────────────────────────────
   const onWebMessage = useCallback((event) => {
@@ -909,6 +971,11 @@ export default function BookReaderScreen({ route, navigation }) {
               />
             </TouchableOpacity>
           )}
+          {isEpub && (
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setShowSettings(true)}>
+              <MaterialCommunityIcons name="cog-outline" size={20} color={t.icon} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowChapters(true)}>
             <MaterialCommunityIcons name="format-list-bulleted" size={22} color={t.icon} />
           </TouchableOpacity>
@@ -974,6 +1041,10 @@ export default function BookReaderScreen({ route, navigation }) {
               onLoadEnd={() => {
                 sendToWeb({ type: 'setTheme', dark: nightMode, bg: t.pageBg, textColor: t.pageText });
                 if (fontSize !== 17) sendToWeb({ type: 'setFontSize', size: fontSize });
+                sendToWeb({ type: 'setFontFamily', value: FONT_STACKS[fontFamily] || FONT_STACKS.serif });
+                sendToWeb({ type: 'setLineHeight', value: lineHeight });
+                sendToWeb({ type: 'setJustify', value: justify });
+                sendToWeb({ type: 'setMargin', value: readerMargin });
               }}
             />
           )}
@@ -1041,6 +1112,14 @@ export default function BookReaderScreen({ route, navigation }) {
               </Text>
             </View>
           )}
+
+          {/* Dimming overlay — software brightness control (can only darken) */}
+          {brightness < 1 && (
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000', opacity: Math.min(0.85, 1 - brightness) }]}
+            />
+          )}
         </View>
       </View>
 
@@ -1063,6 +1142,32 @@ export default function BookReaderScreen({ route, navigation }) {
           <TouchableOpacity onPress={() => setJumpReturn(null)} style={styles.jumpBarClearBtn}>
             <Text style={[styles.jumpBarClear, { color: t.subtle }]}>{tr('reader.jumpClear')}</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Progress slider — quick jump within the book */}
+      {isEpub && epubData && epubData.spine.length > 1 && (
+        <View style={[styles.progressSliderRow, { backgroundColor: t.footer }]}>
+          <Slider
+            style={styles.progressSlider}
+            minimumValue={0}
+            maximumValue={readMode === 'scroll' ? 100 : epubData.spine.length - 1}
+            step={1}
+            value={readMode === 'scroll' ? progress : currentChapterIdx}
+            onSlidingComplete={(v) => {
+              const val = Math.round(v);
+              if (readMode === 'scroll') {
+                setProgress(val);
+                progressRef.current = val;
+                sendToWeb({ type: 'scrollToPercent', value: val });
+              } else {
+                setCurrentChapterIdx(val);
+              }
+            }}
+            minimumTrackTintColor={t.accent}
+            maximumTrackTintColor={t.border}
+            thumbTintColor={t.accent}
+          />
         </View>
       )}
 
@@ -1333,6 +1438,102 @@ export default function BookReaderScreen({ route, navigation }) {
         </View>
       </Modal>
 
+      {/* Réglages d'affichage (typographie) */}
+      <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowSettings(false)} />
+          <View style={[styles.modalSheet, { backgroundColor: t.sidebar }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
+              <Text style={[styles.modalTitle, { color: t.text }]}>{tr('reader.settings')}</Text>
+              <TouchableOpacity onPress={() => setShowSettings(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={t.subtle} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Luminosité */}
+            <Text style={[styles.ttsLabel, { color: t.subtle, marginTop: 12 }]}>{tr('reader.brightness')}</Text>
+            <View style={styles.brightnessRow}>
+              <MaterialCommunityIcons name="brightness-5" size={18} color={t.subtle} />
+              <Slider
+                style={styles.brightnessSlider}
+                minimumValue={0.15}
+                maximumValue={1}
+                value={brightness}
+                onValueChange={setBrightness}
+                minimumTrackTintColor={t.subtle}
+                maximumTrackTintColor={t.accent}
+                thumbTintColor={t.accent}
+              />
+              <MaterialCommunityIcons name="brightness-7" size={21} color={t.accent} />
+            </View>
+
+            {/* Police */}
+            <Text style={[styles.ttsLabel, { color: t.subtle }]}>{tr('reader.fontFamily')}</Text>
+            <View style={styles.settingsRow}>
+              {[['serif', 'Serif'], ['sans', 'Sans']].map(([key, label]) => {
+                const active = fontFamily === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.segBtn, { borderColor: t.border }, active && { backgroundColor: t.accent, borderColor: t.accent }]}
+                    onPress={() => setFontFamily(key)}
+                  >
+                    <Text style={[styles.segBtnText, { color: active ? '#111' : t.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Interligne */}
+            <Text style={[styles.ttsLabel, { color: t.subtle }]}>{tr('reader.lineSpacing')}</Text>
+            <View style={styles.settingsRow}>
+              {[[1.5, tr('reader.compact')], [1.8, tr('reader.normal')], [2.1, tr('reader.relaxed')]].map(([val, label]) => {
+                const active = Math.abs(lineHeight - val) < 0.01;
+                return (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.segBtn, { borderColor: t.border }, active && { backgroundColor: t.accent, borderColor: t.accent }]}
+                    onPress={() => setLineHeight(val)}
+                  >
+                    <Text style={[styles.segBtnText, { color: active ? '#111' : t.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Marges */}
+            <Text style={[styles.ttsLabel, { color: t.subtle }]}>{tr('reader.margins')}</Text>
+            <View style={styles.settingsRow}>
+              {[[12, tr('reader.narrow')], [20, tr('reader.normal')], [32, tr('reader.wide')]].map(([val, label]) => {
+                const active = readerMargin === val;
+                return (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.segBtn, { borderColor: t.border }, active && { backgroundColor: t.accent, borderColor: t.accent }]}
+                    onPress={() => setReaderMargin(val)}
+                  >
+                    <Text style={[styles.segBtnText, { color: active ? '#111' : t.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Justification */}
+            <TouchableOpacity
+              style={[styles.settingsToggle, { borderColor: t.border }]}
+              onPress={() => setJustify((j) => !j)}
+            >
+              <Text style={[styles.segBtnText, { color: t.text }]}>{tr('reader.justify')}</Text>
+              <MaterialCommunityIcons
+                name={justify ? 'toggle-switch' : 'toggle-switch-off-outline'}
+                size={34}
+                color={justify ? t.accent : t.subtle}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Highlight color picker */}
       <Modal
         visible={showHighlightPicker}
@@ -1449,6 +1650,23 @@ const styles = StyleSheet.create({
   chapterItem: { paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8, marginBottom: 4 },
   chapterTitle: { fontSize: 14, fontWeight: '600' },
   emptyText: { paddingVertical: 12, textAlign: 'center', fontSize: 13 },
+
+  // Settings panel (typography)
+  brightnessRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  brightnessSlider: { flex: 1, height: 36 },
+  settingsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  segBtn: {
+    flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center',
+  },
+  segBtnText: { fontSize: 13, fontWeight: '700' },
+  settingsToggle: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginTop: 4,
+  },
+
+  // Progress slider row (above footer)
+  progressSliderRow: { paddingHorizontal: 10, height: 30, justifyContent: 'center' },
+  progressSlider: { width: '100%', height: 30 },
 
   // Jump-back banner
   jumpBar: {
