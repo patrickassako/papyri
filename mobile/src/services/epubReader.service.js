@@ -50,7 +50,11 @@ function parseOpf(opfXml, opfPath) {
   const navItem = opfXml.match(navItemRe)?.[0];
   if (navItem) navHref = getAttr(navItem, 'href');
 
-  return { basePath, spine, manifest, ncxHref, navHref };
+  // Book language (dc:language) — drives CSS hyphenation. Default: fr.
+  const langMatch = opfXml.match(/<dc:language[^>]*>\s*([^<\s]+)/i);
+  const language = langMatch ? langMatch[1].trim().toLowerCase().split(/[-_]/)[0] : 'fr';
+
+  return { basePath, spine, manifest, ncxHref, navHref, language };
 }
 
 function parseTocNcx(ncxXml) {
@@ -81,15 +85,23 @@ const READER_STYLES = `
     --heading: #1a1a1a;
     --link: #f4a825;
     --pad: 24px 20px 80px;
+    --line-height: 1.8;
+    --text-indent: 1.2em;
+    --text-align: justify;
   }
   html, body { margin: 0; padding: 0; background: var(--bg); }
   body { font-family: Lora, Georgia, 'Times New Roman', serif;
-         font-size: 17px; line-height: 1.8;
+         font-size: 17px; line-height: var(--line-height);
          padding: var(--pad); color: var(--text);
-         max-width: 100%; word-wrap: break-word; }
+         max-width: 100%; word-wrap: break-word;
+         -webkit-hyphens: auto; hyphens: auto; }
   h1,h2,h3,h4,h5,h6 { font-family: Lora, Georgia, serif; color: var(--heading);
-                       margin: 1.3em 0 0.5em; line-height: 1.3; }
-  p { margin: 0 0 1.1em; }
+                       margin: 1.3em 0 0.5em; line-height: 1.3;
+                       -webkit-hyphens: none; hyphens: none; text-indent: 0; }
+  p { margin: 0 0 0.35em; text-align: var(--text-align); text-indent: var(--text-indent); }
+  /* No first-line indent right after a heading or inside quotes/lists/tables */
+  h1 + p, h2 + p, h3 + p, h4 + p, h5 + p, h6 + p,
+  blockquote p, li > p, td p, hr + p { text-indent: 0; }
   img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
   a { color: var(--link); text-decoration: none; }
   blockquote { border-left: 3px solid var(--link); margin: 1em 0 1em 0;
@@ -144,6 +156,9 @@ const SELECTION_SCRIPT = `
       if (d.type === 'clearSelection') { if (window.getSelection) window.getSelection().removeAllRanges(); }
       if (d.type === 'setTheme') { applyTheme(d.bg, d.textColor); }
       if (d.type === 'setFontSize') { document.body.style.fontSize = d.size + 'px'; }
+      if (d.type === 'setLineHeight') { document.documentElement.style.setProperty('--line-height', String(d.value)); }
+      if (d.type === 'setTextIndent') { document.documentElement.style.setProperty('--text-indent', (d.value || 0) + 'em'); }
+      if (d.type === 'setJustify') { document.documentElement.style.setProperty('--text-align', d.value ? 'justify' : 'left'); }
     } catch(_) {}
   }
   window.addEventListener('message', handleMsg);
@@ -151,7 +166,7 @@ const SELECTION_SCRIPT = `
 })();
 </script>`;
 
-function wrapChapterHtml(rawHtml) {
+function wrapChapterHtml(rawHtml, lang = 'fr') {
   // Remove scripts
   let html = rawHtml.replace(/<script[\s\S]*?<\/script>/gi, '');
   // Strip existing style/link to avoid font-size conflicts
@@ -161,7 +176,11 @@ function wrapChapterHtml(rawHtml) {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   const bodyContent = bodyMatch ? bodyMatch[1] : html;
 
-  return `<!doctype html><html>
+  // The lang attribute is required for CSS `hyphens: auto` to actually
+  // hyphenate words in the WebView.
+  const safeLang = /^[a-z]{2}$/i.test(String(lang || '')) ? String(lang).toLowerCase() : 'fr';
+
+  return `<!doctype html><html lang="${safeLang}">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=3"/>
@@ -195,7 +214,7 @@ export async function loadEpub(fileUri) {
   if (!opfFile) throw new Error(`EPUB invalide: OPF introuvable à ${opfPath}`);
   const opfXml = await opfFile.async('string');
 
-  const { basePath, spine, ncxHref, navHref } = parseOpf(opfXml, opfPath);
+  const { basePath, spine, ncxHref, navHref, language } = parseOpf(opfXml, opfPath);
 
   if (spine.length === 0) throw new Error('EPUB invalide: spine vide');
 
@@ -216,7 +235,7 @@ export async function loadEpub(fileUri) {
     toc = spine.map((href, i) => ({ label: `Chapitre ${i + 1}`, href }));
   }
 
-  return { zip, spine, basePath, toc };
+  return { zip, spine, basePath, toc, language: language || 'fr' };
 }
 
 function getMimeType(href) {
@@ -371,7 +390,7 @@ const SCROLL_TRACK_SCRIPT = `
  * Concatenate all spine chapters into one scrollable HTML document.
  * Uses a thin separator between chapters.
  */
-export async function getAllChaptersHtml(zip, basePath, spine, onProgress) {
+export async function getAllChaptersHtml(zip, basePath, spine, onProgress, lang = 'fr') {
   const parts = [];
   for (let i = 0; i < spine.length; i++) {
     const spineHref = spine[i];
@@ -386,7 +405,8 @@ export async function getAllChaptersHtml(zip, basePath, spine, onProgress) {
     if (onProgress) onProgress(Math.round(((i + 1) / spine.length) * 100));
   }
   const body = parts.join(`<hr style="border:none;border-top:1px solid rgba(0,0,0,0.08);margin:32px 0;"/>`);
-  return `<!doctype html><html>
+  const safeLang = /^[a-z]{2}$/i.test(String(lang || '')) ? String(lang).toLowerCase() : 'fr';
+  return `<!doctype html><html lang="${safeLang}">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=3"/>
@@ -400,7 +420,7 @@ export async function getAllChaptersHtml(zip, basePath, spine, onProgress) {
  * Get the HTML content of a specific spine chapter (0-indexed).
  * Images are inlined as base64 data URIs so they render without a base URL.
  */
-export async function getChapterHtml(zip, basePath, spineHref) {
+export async function getChapterHtml(zip, basePath, spineHref, lang = 'fr') {
   const filePath = resolveHref(basePath, spineHref);
   let file = zip.file(filePath);
   let resolvedPath = filePath;
@@ -408,7 +428,7 @@ export async function getChapterHtml(zip, basePath, spineHref) {
   if (!file) {
     file = zip.file(spineHref);
     resolvedPath = spineHref;
-    if (!file) return wrapChapterHtml('<p style="color:red">Chapitre introuvable.</p>');
+    if (!file) return wrapChapterHtml('<p style="color:red">Chapitre introuvable.</p>', lang);
   }
 
   let raw = await file.async('string');
@@ -420,5 +440,5 @@ export async function getChapterHtml(zip, basePath, spineHref) {
   }
   // Inline images before wrapping so paths are resolved relative to chapter location
   raw = await inlineImages(raw, zip, resolvedPath);
-  return wrapChapterHtml(raw);
+  return wrapChapterHtml(raw, lang);
 }

@@ -5,6 +5,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Speech from 'expo-speech';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readingService } from '../services/reading.service';
 import { useReadingLock } from '../hooks/useReadingLock';
 import { useTranslation } from 'react-i18next';
@@ -143,9 +144,12 @@ export default function BookReaderScreen({ route, navigation }) {
   const [ttsPaused, setTtsPaused] = useState(false);
   const [ttsRate, setTtsRate] = useState(1.0);
   const [showTtsPanel, setShowTtsPanel] = useState(false);
+  const [ttsVoices, setTtsVoices] = useState([]);   // available device voices
+  const [ttsVoice, setTtsVoice] = useState(null);   // chosen voice identifier
   const ttsStopRef = useRef(false);
   const ttsChunksRef = useRef([]);
   const ttsIndexRef = useRef(0);
+  const ttsOptsRef = useRef({});  // { voice?, language } — kept for resume
 
   const isPdf = useMemo(
     () => String(session?.content?.format || '').toLowerCase() === 'pdf',
@@ -329,7 +333,7 @@ export default function BookReaderScreen({ route, navigation }) {
       setScrollLoading(true);
       setScrollFileUri(null);
       try {
-        const html = await getAllChaptersHtml(epubData.zip, epubData.basePath, epubData.spine);
+        const html = await getAllChaptersHtml(epubData.zip, epubData.basePath, epubData.spine, null, epubData.language);
         if (!active) return;
         const uri = `${FileSystem.cacheDirectory}scroll_${contentId}.html`;
         await FileSystem.writeAsStringAsync(uri, html, { encoding: FileSystem.EncodingType.UTF8 });
@@ -355,7 +359,7 @@ export default function BookReaderScreen({ route, navigation }) {
       setViewerReady(false);
       try {
         const spineHref = epubData.spine[currentChapterIdx];
-        const html = await getChapterHtml(epubData.zip, epubData.basePath, spineHref);
+        const html = await getChapterHtml(epubData.zip, epubData.basePath, spineHref, epubData.language);
         if (!active) return;
         setChapterHtml(html);
         setViewerReady(true);
@@ -548,7 +552,7 @@ export default function BookReaderScreen({ route, navigation }) {
     setTtsPaused(false);
   }, []);
 
-  const speakChunk = useCallback((index, chunks, rate) => {
+  const speakChunk = useCallback((index, chunks, rate, opts) => {
     if (ttsStopRef.current) return;
     const text = chunks[index];
     if (!text) {
@@ -557,15 +561,18 @@ export default function BookReaderScreen({ route, navigation }) {
       return;
     }
     ttsIndexRef.current = index;
+    const o = opts || ttsOptsRef.current || {};
     Speech.speak(text, {
-      language: 'fr-FR',
+      // An explicit voice wins; otherwise fall back to the book's language.
+      ...(o.voice ? { voice: o.voice } : {}),
+      language: o.language || 'fr-FR',
       rate: rate,
       pitch: 1.0,
       onDone: () => {
         if (ttsStopRef.current) return;
         const next = index + 1;
         if (next < chunks.length) {
-          speakChunk(next, chunks, rate);
+          speakChunk(next, chunks, rate, o);
         } else {
           setTtsSpeaking(false);
           setTtsPaused(false);
@@ -574,7 +581,7 @@ export default function BookReaderScreen({ route, navigation }) {
       onError: () => {
         if (ttsStopRef.current) return;
         const next = index + 1;
-        if (next < chunks.length) speakChunk(next, chunks, rate);
+        if (next < chunks.length) speakChunk(next, chunks, rate, o);
         else { setTtsSpeaking(false); setTtsPaused(false); }
       },
       onStopped: () => {
@@ -591,10 +598,12 @@ export default function BookReaderScreen({ route, navigation }) {
     const chunks = splitTextForTts(text);
     ttsChunksRef.current = chunks;
     ttsIndexRef.current = 0;
+    const opts = { voice: ttsVoice || undefined, language: bookSpeechLang };
+    ttsOptsRef.current = opts;
     setTtsSpeaking(true);
     setTtsPaused(false);
-    speakChunk(0, chunks, ttsRate);
-  }, [extractChapterText, speakChunk, ttsRate]);
+    speakChunk(0, chunks, ttsRate, opts);
+  }, [extractChapterText, speakChunk, ttsRate, ttsVoice, bookSpeechLang]);
 
   const pauseResumeTts = useCallback(async () => {
     if (!ttsSpeaking && !ttsPaused) {
@@ -608,7 +617,7 @@ export default function BookReaderScreen({ route, navigation }) {
       const idx = ttsIndexRef.current;
       setTtsSpeaking(true);
       setTtsPaused(false);
-      speakChunk(idx, chunks, ttsRate);
+      speakChunk(idx, chunks, ttsRate, ttsOptsRef.current);
     } else {
       // Pause = stop + remember position
       await Speech.stop();
@@ -625,6 +634,37 @@ export default function BookReaderScreen({ route, navigation }) {
 
   // Stop TTS on unmount
   useEffect(() => () => { Speech.stop().catch(() => {}); }, []);
+
+  // Load available device voices + the user's saved choice.
+  useEffect(() => {
+    let active = true;
+    Speech.getAvailableVoicesAsync()
+      .then((voices) => { if (active) setTtsVoices(Array.isArray(voices) ? voices : []); })
+      .catch(() => {});
+    AsyncStorage.getItem('@papyri_tts_voice')
+      .then((v) => { if (active && v) setTtsVoice(v); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  // Reading language → BCP-47 tag for the TTS engine (fallback when no
+  // explicit voice is chosen).
+  const bookSpeechLang = useMemo(
+    () => (String(epubData?.language || 'fr').toLowerCase().startsWith('en') ? 'en-US' : 'fr-FR'),
+    [epubData?.language]
+  );
+
+  // Voices relevant to this book's language, shown first in the picker.
+  const relevantVoices = useMemo(() => {
+    const prefix = bookSpeechLang.slice(0, 2);
+    const match = ttsVoices.filter((v) => String(v.language || '').toLowerCase().startsWith(prefix));
+    return match.length > 0 ? match : ttsVoices;
+  }, [ttsVoices, bookSpeechLang]);
+
+  const selectTtsVoice = useCallback((identifier) => {
+    setTtsVoice(identifier);
+    AsyncStorage.setItem('@papyri_tts_voice', identifier || '').catch(() => {});
+  }, []);
 
   // Fermer le mini player audio quand on ouvre un livre texte
   useEffect(() => {
@@ -1169,6 +1209,44 @@ export default function BookReaderScreen({ route, navigation }) {
               ))}
             </View>
 
+            {/* Voix */}
+            {ttsVoices.length > 0 && (
+              <>
+                <Text style={[styles.ttsLabel, { color: t.subtle }]}>
+                  {tr('reader.ttsVoice', 'Voix')}
+                </Text>
+                <ScrollView style={styles.ttsVoiceList} nestedScrollEnabled>
+                  <TouchableOpacity
+                    style={[styles.ttsVoiceItem, { borderColor: t.border },
+                      !ttsVoice && { backgroundColor: t.accent, borderColor: t.accent }]}
+                    onPress={() => selectTtsVoice(null)}
+                  >
+                    <Text style={[styles.ttsVoiceText, { color: !ttsVoice ? '#111' : t.text }]}>
+                      {tr('reader.ttsVoiceDefault', 'Voix par défaut')}
+                    </Text>
+                  </TouchableOpacity>
+                  {relevantVoices.map((v) => {
+                    const selected = ttsVoice === v.identifier;
+                    return (
+                      <TouchableOpacity
+                        key={v.identifier}
+                        style={[styles.ttsVoiceItem, { borderColor: t.border },
+                          selected && { backgroundColor: t.accent, borderColor: t.accent }]}
+                        onPress={() => selectTtsVoice(v.identifier)}
+                      >
+                        <Text style={[styles.ttsVoiceText, { color: selected ? '#111' : t.text }]} numberOfLines={1}>
+                          {v.name || v.identifier}
+                        </Text>
+                        <Text style={[styles.ttsVoiceMeta, { color: selected ? '#111' : t.subtle }]}>
+                          {v.language}{v.quality === 'Enhanced' ? ' · HD' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+
             {/* Boutons play/stop */}
             <View style={styles.ttsControls}>
               <TouchableOpacity
@@ -1312,6 +1390,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
   },
   ttsRateBtnText: { fontSize: 13, fontWeight: '600' },
+  ttsVoiceList: { maxHeight: 180, marginBottom: 16 },
+  ttsVoiceItem: {
+    borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 6,
+  },
+  ttsVoiceText: { fontSize: 13, fontWeight: '600' },
+  ttsVoiceMeta: { fontSize: 11, marginTop: 2 },
   ttsControls: { gap: 10 },
   ttsPlayBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
